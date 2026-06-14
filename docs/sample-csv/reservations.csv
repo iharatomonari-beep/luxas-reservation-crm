@@ -1,0 +1,3 @@
+customerName,phone,serviceName,staffName,roomName,date,startTime,endTime,status,memo
+坂本 花,090-1234-5678,ボディケア 90分,中村,ブース A,2026-05-13,10:30,12:00,booked,初回カウンセリングあり
+山口 直,080-2345-6789,フェイシャル 60分,中村,個室 1,2026-05-13,13:00,14:00,completed,保湿重点

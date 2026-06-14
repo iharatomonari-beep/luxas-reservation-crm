@@ -1,0 +1,162 @@
+export type StaffRole = "owner" | "manager" | "therapist" | "reception";
+
+export type StaffMember = {
+  id: string;
+  fullName: string;
+  displayName: string;
+  role: StaffRole;
+  sortOrder: number;
+  serviceMenuIds: string[];
+  isActive: boolean;
+};
+
+export type ServiceMenu = {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  price: number;
+  category: string;
+  sortOrder: number;
+  isActive: boolean;
+  /**
+   * 個室必須メニューかどうか。true=個室枠、false/未設定=施術ブース枠で空きを判定する（T010）。
+   * 任意フィールド: 既存のメニュー生成箇所（service-manager 等・本タスクでは変更不可）を壊さないため optional。
+   */
+  requiresPrivateRoom?: boolean;
+};
+
+export type RoomKind = "treatment" | "private" | "counseling" | "other";
+
+export type ServiceRoom = {
+  id: string;
+  name: string;
+  kind: RoomKind;
+  memo: string;
+  isActive: boolean;
+};
+
+export type StaffShift = {
+  id: string;
+  staffId: string;
+  workDate: string;
+  startTime: string;
+  endTime: string;
+  breakStart: string;
+  breakEnd: string;
+  memo: string;
+  isActive: boolean;
+};
+
+export const staffRoleLabels: Record<StaffRole, string> = {
+  owner: "責任者",
+  manager: "店長",
+  therapist: "施術スタッフ",
+  reception: "受付"
+};
+
+export const roomKindLabels: Record<RoomKind, string> = {
+  treatment: "施術ブース",
+  private: "個室",
+  counseling: "カウンセリング",
+  other: "その他"
+};
+
+// メニューカテゴリマスタ（T024）。既存の service.category(文字列) と並存（name で対応）。
+export type MenuCategory = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  color: string;
+  isActive: boolean;
+};
+
+// オプション商品マスタ（T024）
+export type OptionKind = "extension" | "discount" | "other";
+
+export type ServiceOption = {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  sortOrder: number;
+  onlineBookable: boolean;
+  kind: OptionKind;
+  /** kind=extension のときの延長分数 */
+  extensionMinutes?: number;
+  /** kind=discount のときの割引率(%) */
+  discountPercent?: number;
+  isActive: boolean;
+};
+
+export const optionKindLabels: Record<OptionKind, string> = {
+  extension: "延長",
+  discount: "割引",
+  other: "その他"
+};
+
+// タグマスタ（T025）。種別=顧客タグ/予約ルートタグ/施術カルテタグ。
+export type TagKind = "customer" | "route" | "karte";
+
+export type MasterTag = {
+  id: string;
+  name: string;
+  code: string;
+  sortOrder: number;
+  kind: TagKind;
+  isActive: boolean;
+};
+
+export const tagKindLabels: Record<TagKind, string> = {
+  customer: "顧客タグ",
+  route: "予約ルートタグ",
+  karte: "施術カルテタグ"
+};
+
+// 決済マスタ（T029）。会計の支払種類の選択肢に使う想定。
+export type CreditCardCompany = {
+  id: string;
+  name: string;
+  feePercent: number;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type EmoneyBrand = {
+  id: string;
+  name: string;
+  feePercent: number;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+// 物販マスタ（T032）。物販カテゴリ／物販商品。
+export type RetailCategory = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type RetailItem = {
+  id: string;
+  name: string;
+  /** 物販カテゴリ名（RetailCategory.name と対応。既存マスタと同様に文字列で並存） */
+  category: string;
+  /** 単価（円・税込） */
+  price: number;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+// 物販販売（T032）。会計(T022)との結合は将来。まずは物販単体で記録する。
+export type RetailSale = {
+  id: string;
+  /** 販売日（"YYYY-MM-DD"） */
+  saleDate: string;
+  /** 顧客名（任意・空文字可） */
+  customerName: string;
+  retailItemId: string;
+  quantity: number;
+  /** 販売時点の単価（マスタ変更の影響を受けないようスナップショット） */
+  unitPrice: number;
+};

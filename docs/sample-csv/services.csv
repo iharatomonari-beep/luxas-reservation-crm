@@ -1,0 +1,4 @@
+name,durationMinutes,price,category,isActive
+ボディケア 90分,90,12800,ボディケア,true
+フェイシャル 60分,60,11000,フェイシャル,true
+ヘッドケア 30分,30,5500,オプション,true

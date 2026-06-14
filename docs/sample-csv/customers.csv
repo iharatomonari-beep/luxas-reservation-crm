@@ -1,0 +1,3 @@
+name,nameKana,phone,email,birthDate,gender,address,firstVisitDate,lastVisitDate,caution,chartMemo,tags,isActive
+坂本 花,サカモト ハナ,090-1234-5678,hana.sakamoto@example.jp,1994-03-10,female,東京都港区南青山1-2-3,2026-05-12,2026-05-12,強い刺激は避ける,会話メモを丁寧に残す,"初回,肩,保湿",true
+山口 直,ヤマグチ ナオ,080-2345-6789,nao.yamaguchi@example.jp,1989-11-22,male,東京都渋谷区神南2-4-1,2026-05-12,2026-05-12,乾燥しやすい,次回はフェイシャル提案,"再来,乾燥",true
