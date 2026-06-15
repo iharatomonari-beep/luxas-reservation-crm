@@ -76,12 +76,16 @@
 | 59 | T059 | `tasks/T059-remaining-new-screens.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／5画面追加: 本日のオンライン設定(/online-blocks)・シフトひな型(/shift-templates)・シフトパターン(/shift-patterns・スプリット)・データ不備(/data-errors・スプリット)・ユーザマスタ(/users・表示のみ・認証非接触)。menu導線追加。lint/build OK(53頁)】【残り新規画面】本日のオンライン設定/シフトひな型/シフトパターン/データ不備/ユーザマスタ(表示のみ)（1画面ずつ） | 認証/権限実装STOP／1画面ずつ／実機確認 |
 | 60 | T060 | `tasks/T060-top-menu-complete-pm.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／上部メニューをPM8グループ構成に最終調整。データ不備を予約台帳グループへ・ユーザ情報を店舗情報へ・月間目標入力を日次管理へ。全46リンクが実在ルートに対応＝死にリンク0（スクリプト検証済）。lint/build OK】【ナビ最終化】上部メニューをPM店舗8グループ全項目に（各ページ完成後）。死にリンク禁止。top-menu.tsx | 未実装へのリンクは載せず報告／指定外STOP／実機確認 |
 | 61 | T061 | `tasks/T061-org-hierarchy-types-seed.md` | 完了 | CAUTION | 【完了 2026-06-15・既存画面不変・lint/build OK（UIなしのため実機確認不要）】【外販SaaS土台】tenant→area→store 階層の型・初期データを最小・非破壊で追加（features/org/ 新規。既存型/データ/画面は不変、強制FK追加なし）。株式会社東邦→東京→LUXAS渋谷 1件＋currentStoreId="store-shibuya" | 既存型/キー/画面の変更が要れば停止／依存追加STOP／lint・build失敗で停止 |
+| 62 | T062 | `tasks/T062-org-admin-and-store-switcher.md` | 完了 | CAUTION | 【完了（実機確認OK 2026-06-15）／組織管理画面 /dashboard/org(テナント/エリア/店舗の3タブCRUD・スプリット)＋上部バー店舗切替セレクタ(use-current-store・localStorage luxas-current-store-id)＋店舗情報メニューに組織管理リンク。既存データは未scope(非破壊)・死にリンク0・lint/build OK(54頁)】【org管理＋店舗切替】tenant/area/store の管理画面 `/dashboard/org`＋上部バーに店舗切替セレクタ＋現在店舗をlocalStorage保持。T061依存。既存データのscopeは変えない（非破壊）。死にリンク禁止 | T061未実装なら停止／予約・顧客・会計の型/データ変更が要ればSTOP(=T063)／lint・build失敗で停止／実機確認 |
+| 63 | T063 | `tasks/T063-reservation-store-scope.md` | 未実行 | CAUTION | 【予約を店舗scope・非破壊】Reservationに storeId?(任意)＋新規作成で現在店舗を付与＋台帳/一覧/返客/支払レジ/予約集計を安全フィルタ(storeId一致 or 未設定は既定店舗のみ)で絞る。既存データは消さない。設計メモ: LUXAS_docs/multi-store-scope-design.md。T061/T062依存 | データが消える挙動なら即停止／顧客・マスタscopeは停止(=T064以降)／会計構造変更は停止／lint・build失敗で停止／実機確認 |
 
 > 【現況 2026-06-15 再更新】
 > - 完了: T001〜T047, T051, T053, T061（実機OK or UIなし）。
 > - 実行中（実装済・lint/build OK・実機確認待ち）: **T048 / T049 / T050 / T052 / T054 / T055 / T056 / T057 / T058 / T059 / T060**。
-> - 未実行タスクはありません（T046〜T061 すべて実装完了）。残るはユーザーの一括実機確認のみ→確認後に上記を「完了」化。
-> - 全体ビルド: 53ページ・lint/build エラー0・上部メニュー死にリンク0。reservation-ledger.tsx を触るのはT046/T047のみ（完了済）。
+> - T062 完了（実機確認OK 2026-06-15）。
+> - 未実行タスクなし（T046〜T062 すべて実装完了）。次段階の候補は T063（新規データへのstoreId付与・現在店舗でscope／未登録）。
+> - T061/T062 は完了。T046〜T062 は実装完了。T048/T049/T050/T052/T054〜T060 は実機確認待ち（残るはユーザーの一括実機確認→確認後に「完了」化）。
+> - 全体ビルド: 54ページ・lint/build エラー0・上部メニュー死にリンク0。reservation-ledger.tsx を触るのはT046/T047のみ（完了済）。
 > 各タスクは安全レベル（ほぼCAUTION）に従い、完了条件・検証（lint/build＋実機確認）を満たしてから「完了」にする。STOP対象（削除/DB/認証/env/依存追加/実送信/外部決済/PMデータ変更）は止めて報告。
 > 全体方針: PMに忠実に寄せる。設計の正本は `~/Desktop/pm_スクリーンショット/LUXAS_docs/pm-screen-structure-reference.md` と `pm-match-build-roadmap.md`。
 > PM配置寄せの予定（台帳）: Step1=T042【完了】。続き（番号は作成時に採番）= 表示切替の5タブ化（基本/全体/シフト/ブース/両方）＋ドラッグ用横長バー＋シフト追加ボタン＋予約集計バーをタイムライン下へ／上部バー仕上げ（`<今日>`コンパクト・再読込・天気・すべて絞り込み・店舗セレクタ・時計）。これらはユーザーの優先順に応じてCoworkが順次作成。

@@ -52,6 +52,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "ブース", href: "/dashboard/rooms" },
       { label: "クレカ会社", href: "/dashboard/creditcards" },
       { label: "電子マネー", href: "/dashboard/emoney" },
+      { label: "組織管理", href: "/dashboard/org" },
       { label: "ユーザ情報", href: "/dashboard/users" }
     ]
   },

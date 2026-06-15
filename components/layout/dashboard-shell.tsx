@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { LogOut, Menu, X } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { TopMenu } from "@/components/layout/top-menu";
+import { StoreSwitcher } from "@/components/layout/store-switcher";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function DashboardShell({
@@ -51,6 +52,8 @@ export function DashboardShell({
           <div className="min-w-0 flex-1">
             <TopMenu mobileOpen={false} onNavigate={() => setIsSidebarOpen(false)} />
           </div>
+
+          <StoreSwitcher />
 
           <p className="hidden truncate text-xs text-stone-500 lg:block">{userEmail}</p>
           <button
