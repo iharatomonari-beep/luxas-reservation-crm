@@ -18,6 +18,7 @@ type ServiceForm = {
   sortOrder: string;
   isActive: boolean;
   requiresPrivateRoom: boolean;
+  onlineBooking: boolean;
 };
 
 const emptyForm: ServiceForm = {
@@ -27,7 +28,8 @@ const emptyForm: ServiceForm = {
   category: "ボディケア",
   sortOrder: "10",
   isActive: true,
-  requiresPrivateRoom: false
+  requiresPrivateRoom: false,
+  onlineBooking: false
 };
 
 const categories = ["ボディケア", "フェイシャル", "カウンセリング", "オプション", "その他"];
@@ -87,7 +89,8 @@ export function ServiceManager() {
       category: normalizeText(form.category),
       sortOrder: Number(form.sortOrder),
       isActive: form.isActive,
-      requiresPrivateRoom: form.requiresPrivateRoom
+      requiresPrivateRoom: form.requiresPrivateRoom,
+      onlineBooking: form.onlineBooking
     };
 
     if (editingId) {
@@ -110,7 +113,8 @@ export function ServiceManager() {
       category: item.category,
       sortOrder: String(item.sortOrder ?? 10),
       isActive: item.isActive,
-      requiresPrivateRoom: item.requiresPrivateRoom ?? false
+      requiresPrivateRoom: item.requiresPrivateRoom ?? false,
+      onlineBooking: item.onlineBooking ?? false
     });
     setMessage(null);
   }
@@ -200,6 +204,11 @@ export function ServiceManager() {
               onChange={(value) => setForm((current) => ({ ...current, requiresPrivateRoom: value }))}
             />
             <ToggleField
+              label="オンライン予約に掲載"
+              checked={form.onlineBooking}
+              onChange={(value) => setForm((current) => ({ ...current, onlineBooking: value }))}
+            />
+            <ToggleField
               label="有効にする"
               checked={form.isActive}
               onChange={(value) => setForm((current) => ({ ...current, isActive: value }))}
@@ -230,6 +239,7 @@ export function ServiceManager() {
                   <th className="px-5 py-3">価格</th>
                   <th className="px-5 py-3">表示順</th>
                   <th className="px-5 py-3">個室</th>
+                  <th className="px-5 py-3">オンライン予約</th>
                   <th className="px-5 py-3">状態</th>
                   <th className="px-5 py-3 text-right">操作</th>
                 </tr>
@@ -244,6 +254,9 @@ export function ServiceManager() {
                     <td className="whitespace-nowrap px-5 py-4 text-stone-700">{item.sortOrder ?? 0}</td>
                     <td className="whitespace-nowrap px-5 py-4 text-stone-700">
                       {item.requiresPrivateRoom ? "個室必須" : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">
+                      {item.onlineBooking ? "○" : "×"}
                     </td>
                     <td className="whitespace-nowrap px-5 py-4">
                       <ActiveBadge isActive={item.isActive} />

@@ -13,6 +13,9 @@ function firstValue(value: string | string[] | undefined) {
 export default async function NewReservationPage({ searchParams }: { searchParams?: Promise<SearchParams> }) {
   const resolvedSearchParams = (await searchParams) ?? {};
 
+  // CTI（アロハND5/CTIエンジン）の着信番号は ?tel= で受ける（無ければ ?phone=）。顧客名は ?name=（T043）。
+  const tel = firstValue(resolvedSearchParams.tel) || firstValue(resolvedSearchParams.phone);
+
   return (
     <ReservationCreatePage
       initialPrefill={{
@@ -20,7 +23,9 @@ export default async function NewReservationPage({ searchParams }: { searchParam
         roomId: firstValue(resolvedSearchParams.roomId),
         date: firstValue(resolvedSearchParams.date),
         startTime: firstValue(resolvedSearchParams.startTime),
-        serviceMenuId: firstValue(resolvedSearchParams.serviceMenuId)
+        serviceMenuId: firstValue(resolvedSearchParams.serviceMenuId),
+        customerName: firstValue(resolvedSearchParams.name),
+        phone: tel.trim()
       }}
     />
   );

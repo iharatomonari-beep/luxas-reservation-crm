@@ -1,4 +1,5 @@
 import type {
+  CourseSet,
   CreditCardCompany,
   EmoneyBrand,
   MasterTag,
@@ -23,6 +24,7 @@ export const optionsStorageKey = "luxas-master-options";
 export const tagsStorageKey = "luxas-master-tags";
 export const creditCardsStorageKey = "luxas-master-creditcards";
 export const emoneyStorageKey = "luxas-master-emoney";
+export const courseSetsStorageKey = "luxas-master-course-sets";
 export const retailCategoriesStorageKey = "luxas-retail-categories";
 export const retailItemsStorageKey = "luxas-retail-items";
 export const retailSalesStorageKey = "luxas-retail-sales";
@@ -50,6 +52,11 @@ export const initialTags: MasterTag[] = [
   { id: "tag-104", name: "多言語看板", code: "SIGN", sortOrder: 40, kind: "route", isActive: true },
   { id: "tag-201", name: "肩こり", code: "", sortOrder: 10, kind: "karte", isActive: true },
   { id: "tag-202", name: "腰痛", code: "", sortOrder: 20, kind: "karte", isActive: true }
+];
+
+export const initialCourseSets: CourseSet[] = [
+  { id: "set-001", name: "ボディ+フェイシャル 90分セット", category: "セット", price: 14000, sortOrder: 10, onlineBooking: true, isActive: true },
+  { id: "set-002", name: "カウンセリング+ボディ 120分セット", category: "セット", price: 17000, sortOrder: 20, onlineBooking: false, isActive: true }
 ];
 
 export const initialRetailCategories: RetailCategory[] = [

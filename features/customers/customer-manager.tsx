@@ -378,6 +378,10 @@ export function CustomerManager() {
                           <CustomerStatusBadge isActive={customer.isActive} />
                         </div>
                         <p className="mt-1 text-sm text-stone-500">{customer.nameKana}</p>
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-400">
+                          <span>会員番号: {customer.membershipNumber?.trim() ? customer.membershipNumber : "-"}</span>
+                          <span className="font-mono">ID: {customer.id.slice(0, 8)}</span>
+                        </p>
                         <div className="mt-2 flex flex-wrap gap-3 text-sm text-stone-600">
                           <span className="inline-flex items-center gap-1">
                             <Phone size={14} aria-hidden="true" />

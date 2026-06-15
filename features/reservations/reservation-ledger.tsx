@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Ban, BookMarked, CalendarDays, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, Save, Undo2, UserRound, Wallet, X } from "lucide-react";
+import { Ban, BookMarked, CalendarDays, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Undo2, UserRound, Wallet, X } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import type { Customer } from "@/features/customers/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
@@ -370,6 +370,22 @@ export function ReservationLedger() {
   // 表示モード（基本=5時間スケール／全体=終日を画面幅にフィット）。初期は基本。
   const [timelineView, setTimelineView] = useState<"basic" | "full">("basic");
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
+  // 現在時刻（HH:mm・JST）。1分ごとに更新する表示専用。
+  const [currentTime, setCurrentTime] = useState("");
+  useEffect(() => {
+    function updateClock() {
+      setCurrentTime(
+        new Date().toLocaleTimeString("ja-JP", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Asia/Tokyo"
+        })
+      );
+    }
+    updateClock();
+    const timer = window.setInterval(updateClock, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // 表示モードに応じた1コマ幅。基本=16px固定。全体=営業時間全体を画面幅に収めるよう縮小。
   const fullCellWidth =
@@ -379,7 +395,6 @@ export function ReservationLedger() {
   const cellWidth = timelineView === "full" ? fullCellWidth : slotWidth;
   const timelineWidth = slots.length * cellWidth;
   const timelineTotalWidth = staffColumnWidth + timelineWidth;
-  const selectedDateLabel = formatDayLabel(selectedDate);
   const selectedDateIsToday = selectedDate === getTodayDate();
   const reservationStats = useMemo(
     () =>
@@ -776,7 +791,7 @@ export function ReservationLedger() {
     // 「新規予約」ボタン（セル無し）はその日の先頭出勤スタッフを仮置き（後でドラッグ移動可）。
     const defaultStaffId = prefill.staffId ?? timelineStaff[0]?.id ?? activeStaff[0]?.id ?? "";
     setForm({
-      customerName: prefill.customerName ?? "",
+      customerName: prefill.customerName ?? "ゲスト",
       phone: prefill.phone ?? "",
       serviceMenuId: prefill.serviceMenuId ?? "",
       staffId: defaultStaffId,
@@ -1081,13 +1096,7 @@ export function ReservationLedger() {
     currentReservations: Reservation[],
     currentReservationId: string | null
   ) {
-    if (isBlank(value.customerName)) {
-      return "顧客名を入力してください。電話口の予約名義をそのまま入れてください。";
-    }
-
-    if (isBlank(value.phone)) {
-      return "電話番号を入力してください。折り返し先が分かる番号を入れてください。";
-    }
+    // 顧客名・電話番号はゲスト登録のため必須にしない（T043。空なら保存時に「ゲスト」補完）。
 
     const selectedStaff = staff.find((item) => item.id === value.staffId);
     if (!selectedStaff) {
@@ -1211,17 +1220,9 @@ export function ReservationLedger() {
   }
 
   return (
-    <div className="space-y-4">
-      <section className="flex flex-col gap-2 border-b border-luxas-line pb-2 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-sm font-medium text-luxas-green">Reservation Ledger</p>
-          <h1 className="mt-1 text-xl font-semibold text-luxas-ink">予約台帳</h1>
-          <p className="mt-1 max-w-3xl text-sm leading-5 text-stone-600">
-            電話予約を受けながら、空き枠、顧客情報、予約操作をまとめて確認できます。
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:self-start">
+    <div className="flex flex-col gap-4">
+      <section className="order-1 flex flex-wrap items-center gap-2 border-b border-luxas-line pb-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <button
             type="button"
             className="inline-flex items-center justify-center gap-2 rounded-md bg-luxas-green px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#285f51]"
@@ -1270,14 +1271,35 @@ export function ReservationLedger() {
               翌日
               <ChevronRight size={17} aria-hidden="true" />
             </button>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-luxas-paper"
+              onClick={() => window.location.reload()}
+              title="最新データを再読込"
+            >
+              <RotateCw size={17} aria-hidden="true" />
+              再読込
+            </button>
           </div>
+        </div>
+        {/* PM準拠の静的プレースホルダ（天気／絞り込み／店舗）と現在時刻。機能は後続。 */}
+        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-stone-500">
+          <span className="rounded-md border border-luxas-line bg-luxas-paper px-2 py-1" title="準備中">☀ 天気 --℃</span>
+          <span className="rounded-md border border-luxas-line bg-white px-2 py-1" title="準備中">すべて ▾</span>
+          <span className="rounded-md border border-luxas-line bg-white px-2 py-1" title="準備中">LUXAS 店舗 ▾</span>
+          <span className="inline-flex items-center gap-1 rounded-md border border-luxas-line bg-white px-2 py-1 font-mono text-sm font-semibold text-luxas-ink">
+            <Clock3 size={14} className="text-luxas-green" aria-hidden="true" />
+            {currentTime || "--:--"}
+          </span>
         </div>
       </section>
 
-      <StatusMessage message={message} />
+      <div className="order-2 empty:hidden">
+        <StatusMessage message={message} />
+      </div>
 
       {isDebugMode ? (
-        <section className="rounded-md border border-dashed border-luxas-line bg-luxas-paper px-4 py-3 text-xs text-stone-600">
+        <section className="order-3 rounded-md border border-dashed border-luxas-line bg-luxas-paper px-4 py-3 text-xs text-stone-600">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-white px-2 py-0.5 font-medium text-stone-500">Debug</span>
             <span>selectedDate: {debugCounts.selectedDate}</span>
@@ -1288,14 +1310,8 @@ export function ReservationLedger() {
         </section>
       ) : null}
 
-      <section className="grid gap-2 sm:grid-cols-3">
-        <SummaryCard label="表示日" value={selectedDateLabel} />
-        <SummaryCard label="予約数" value={`${dayReservations.length}件`} />
-        <SummaryCard label="担当数" value={`${timelineStaff.length}名`} />
-      </section>
-
-      {/* 当日情報パネル（PM準拠・T036）。予約情報／販売情報／返客情報の3タブ。 */}
-      <section className="rounded-lg border border-luxas-line bg-white">
+      {/* 当日情報パネル（PM準拠・T036）。予約情報／販売情報／返客情報の3タブ。タイムラインの下に配置（T042）。 */}
+      <section className="order-5 rounded-lg border border-luxas-line bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-luxas-line px-3 py-2">
           {([
             { key: "reservation", label: "予約情報" },
@@ -1396,7 +1412,7 @@ export function ReservationLedger() {
       </section>
 
       {selectedReservation ? (
-        <section className="rounded-lg border border-luxas-line bg-white px-4 py-4 shadow-sm">
+        <section className="order-6 rounded-lg border border-luxas-line bg-white px-4 py-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -1457,7 +1473,7 @@ export function ReservationLedger() {
       ) : null}
 
       {heldReservations.length > 0 && (
-        <section className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4">
+        <section className="order-7 rounded-lg border border-amber-200 bg-amber-50 px-4 py-4">
           <div className="flex flex-wrap items-center gap-2">
             <BookMarked size={16} className="text-amber-600" aria-hidden="true" />
             <h2 className="text-sm font-semibold text-amber-900">保留棚</h2>
@@ -1503,15 +1519,42 @@ export function ReservationLedger() {
         </section>
       )}
 
-      <div className="flex items-stretch gap-3">
+      <div className="order-4 flex items-stretch gap-3">
         {/* 左縦アクションレール（PM準拠・配置のみ）。既存導線のみ結線、無いものは準備中で無効。 */}
         <nav className="flex w-16 shrink-0 flex-col gap-1 self-start rounded-lg border border-luxas-line bg-white p-1.5">
           {[
             { key: "予約", icon: Plus, enabled: true, onClick: () => openCreateForm({ date: selectedDate }) },
-            { key: "開く", icon: DoorOpen, enabled: false },
-            { key: "返客", icon: Undo2, enabled: false },
-            { key: "会計", icon: Wallet, enabled: false },
+            // 開く=選択中予約の詳細モーダルを開く（未選択なら案内・落ちない）。
+            {
+              key: "開く",
+              icon: DoorOpen,
+              enabled: true,
+              onClick: () => {
+                if (!selectedReservation) {
+                  setMessage({ type: "error", text: "予約カードを選択してから「開く」を押してください。" });
+                  return;
+                }
+                setSelectedReservationId(selectedReservation.id);
+              }
+            },
+            // 返客=返客一覧へ。
+            { key: "返客", icon: Undo2, enabled: true, href: "/dashboard/reservations/returns" },
+            // 会計=選択中予約の会計モーダルを開く（未選択なら案内・落ちない）。
+            {
+              key: "会計",
+              icon: Wallet,
+              enabled: true,
+              onClick: () => {
+                if (!selectedReservation) {
+                  setMessage({ type: "error", text: "予約カードを選択してから「会計」を押してください。" });
+                  return;
+                }
+                setCheckoutReservationId(selectedReservation.id);
+                setSelectedReservationId(null);
+              }
+            },
             { key: "顧客", icon: UserRound, enabled: true, href: "/dashboard/customers" },
+            // カード=回数券・プリペイド管理は未実装のため準備中（別タスクで対応）。
             { key: "カード", icon: CreditCard, enabled: false }
           ].map((item) => {
             const Icon = item.icon;
@@ -1543,7 +1586,7 @@ export function ReservationLedger() {
           })}
         </nav>
 
-      <section className="min-w-0 flex-1 rounded-lg border border-luxas-line bg-white">
+      <section className="flex min-w-0 flex-1 flex-col rounded-lg border border-luxas-line bg-white">
         <div className="flex flex-col gap-1.5 border-b border-luxas-line px-3 py-1.5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             <Clock3 size={16} className="text-luxas-green" aria-hidden="true" />
@@ -1571,6 +1614,17 @@ export function ReservationLedger() {
               >
                 全体
               </button>
+              {["シフト", "ブース", "両方"].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  disabled
+                  title="準備中"
+                  className="cursor-not-allowed bg-white px-3 py-0.5 font-medium text-stone-300"
+                >
+                  {label}
+                </button>
+              ))}
             </div>
             <span className="rounded-full border border-luxas-line bg-luxas-paper px-2 py-0.5">{businessStart} - {businessEnd}</span>
             <span className="rounded-full border border-luxas-line bg-white px-2 py-0.5">
@@ -1579,8 +1633,20 @@ export function ReservationLedger() {
           </div>
         </div>
 
-        {/* 予約集計バー（PM準拠・T019/T033）。売上・支払方法別・客単価・新規/リピートは会計（T022）確定データの実値。 */}
-        <div className="space-y-1 border-b border-luxas-line px-3 py-2 text-[11px] text-stone-600">
+        {/* ドラッグ用横長帯（PM準拠・T045）。日跨ぎ移動は保留棚へ誘導。 */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-luxas-line bg-luxas-paper px-3 py-2 text-xs text-stone-500">
+          <span>日付をまたいで予定を変更したい場合は、一旦このエリア（下部の「保留棚」）に置いてください。</span>
+          <Link
+            href="/dashboard/shifts/monthly"
+            className="inline-flex items-center gap-1.5 rounded-md border border-luxas-line bg-white px-2.5 py-1 font-medium text-luxas-ink transition hover:bg-luxas-mist"
+          >
+            <CalendarDays size={14} className="text-luxas-green" aria-hidden="true" />
+            シフト追加
+          </Link>
+        </div>
+
+        {/* 予約集計バー（PM準拠・T019/T033）。売上・支払方法別・客単価・新規/リピートは会計（T022）確定データの実値。T045でタイムライン下部へ移動。 */}
+        <div className="space-y-1 border-t border-luxas-line px-3 py-2 text-[11px] text-stone-600 order-last">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="rounded-full bg-luxas-mist px-2 py-0.5 font-medium text-luxas-green">予約中 {reservationStats.booked}</span>
             <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800">完了 {reservationStats.completed}</span>
@@ -2268,7 +2334,7 @@ function normalizeForm(form: ReservationForm): Omit<Reservation, "id"> {
   // 指名あり（nominatedStaffId が空でない）なら担当を指名スタッフに合わせる。
   const staffId = nominatedStaffId || normalizeText(form.staffId);
   return {
-    customerName: normalizeText(form.customerName),
+    customerName: normalizeText(form.customerName) || "ゲスト",
     phone: normalizeText(form.phone),
     serviceMenuId: normalizeText(form.serviceMenuId),
     staffId,
@@ -2326,15 +2392,6 @@ function parseOptionalNumber(value: string): number | undefined {
   if (trimmed === "") return undefined;
   const num = Number(trimmed);
   return Number.isFinite(num) ? num : undefined;
-}
-
-function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-luxas-line bg-white px-3 py-1.5">
-      <p className="text-xs font-medium text-stone-600">{label}</p>
-      <p className="text-sm font-semibold text-luxas-ink">{value}</p>
-    </div>
-  );
 }
 
 function ReservationStatusPill({ status }: { status: ReservationStatus }) {
@@ -2741,6 +2798,9 @@ function ReservationFormModal({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  // コース選択のカテゴリタブ（PM風）。選択中コースのカテゴリを既定表示。
+  const [courseTab, setCourseTab] = useState<string>("");
+
   if (!isOpen || !mode) {
     return null;
   }
@@ -2813,15 +2873,13 @@ function ReservationFormModal({
               label="顧客名"
               value={form.customerName}
               onChange={(value) => update("customerName", value)}
-              placeholder="例: 森下 彩"
-              required
+              placeholder="例: 森下 彩（空欄ならゲスト）"
             />
             <FormInput
               label="電話番号"
               value={form.phone}
               onChange={(value) => update("phone", value)}
-              placeholder="例: 090-1111-2222"
-              required
+              placeholder="例: 090-1111-2222（任意）"
             />
           </div>
 
@@ -2844,38 +2902,73 @@ function ReservationFormModal({
           )}
 
           <FormSectionTitle index={2} title="メニュー（コース）" />
-          <div className="space-y-3">
-            {Array.from(new Set(services.filter((s) => s.isActive).map((s) => s.category || "未分類"))).map((category) => {
-              const color = categoryColorClass(category);
-              return (
-                <div key={category}>
-                  <span className={["mb-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold", color.tag].join(" ")}>
-                    {category}
-                  </span>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {services
-                      .filter((s) => s.isActive && (s.category || "未分類") === category)
-                      .map((service) => {
-                        const active = form.serviceMenuId === service.id;
-                        return (
-                          <button
-                            key={service.id}
-                            type="button"
-                            onClick={() => update("serviceMenuId", service.id)}
-                            className={[
-                              "rounded-md border px-3 py-2 text-sm font-medium transition",
-                              active ? `${color.activeBg} border-transparent text-white` : `bg-white ${color.text} ${color.border} hover:bg-luxas-paper`
-                            ].join(" ")}
-                          >
-                            {service.name}
-                          </button>
-                        );
-                      })}
-                  </div>
+          {(() => {
+            const courseCategories = Array.from(
+              new Set(services.filter((s) => s.isActive).map((s) => s.category || "未分類"))
+            );
+            const selectedCategory = selectedService ? selectedService.category || "未分類" : "";
+            const activeTab =
+              courseTab && courseCategories.includes(courseTab)
+                ? courseTab
+                : selectedCategory || courseCategories[0] || "";
+            const tabServices = services.filter(
+              (s) => s.isActive && (s.category || "未分類") === activeTab
+            );
+            return (
+              <div className="space-y-3">
+                {/* カテゴリ色分けタブ（PM準拠・T047） */}
+                <div className="flex flex-wrap gap-1.5">
+                  {courseCategories.map((category) => {
+                    const color = categoryColorClass(category);
+                    const isActive = category === activeTab;
+                    return (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => setCourseTab(category)}
+                        className={[
+                          "rounded-full border px-3 py-1 text-xs font-semibold transition",
+                          isActive
+                            ? `${color.activeBg} border-transparent text-white`
+                            : `bg-white ${color.text} ${color.border} hover:bg-luxas-paper`
+                        ].join(" ")}
+                      >
+                        {category}
+                      </button>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+                {/* 選択中カテゴリのコース一覧（名前/料金/時間） */}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {tabServices.map((service) => {
+                    const color = categoryColorClass(service.category || "未分類");
+                    const active = form.serviceMenuId === service.id;
+                    return (
+                      <button
+                        key={service.id}
+                        type="button"
+                        onClick={() => update("serviceMenuId", service.id)}
+                        className={[
+                          "flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition",
+                          active
+                            ? `${color.activeBg} border-transparent text-white`
+                            : `bg-white ${color.text} ${color.border} hover:bg-luxas-paper`
+                        ].join(" ")}
+                      >
+                        <span className="text-sm font-semibold">{service.name}</span>
+                        <span className={["text-xs", active ? "text-white/85" : "text-stone-500"].join(" ")}>
+                          ¥{service.price.toLocaleString()} / {service.durationMinutes}分
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {tabServices.length === 0 ? (
+                    <p className="text-sm text-stone-500">このカテゴリに有効なコースがありません。</p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })()}
 
           <FormSectionTitle index={3} title="ブース種別 / 指名" />
           <div className="grid gap-4 md:grid-cols-2">

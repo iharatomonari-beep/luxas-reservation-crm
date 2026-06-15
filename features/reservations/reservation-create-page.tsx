@@ -59,6 +59,8 @@ type ReservationCreatePrefill = {
   date?: string;
   startTime?: string;
   serviceMenuId?: string;
+  customerName?: string;
+  phone?: string;
 };
 
 type ReservationCreatePageProps = {
@@ -71,6 +73,8 @@ type NormalizedReservationCreatePrefill = {
   date: string;
   startTime: string;
   serviceMenuId: string;
+  customerName: string;
+  phone: string;
 };
 
 export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageProps) {
@@ -93,6 +97,8 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
   const [formMessage, setFormMessage] = useState<StatusMessageValue | null>(null);
   const [savedReservation, setSavedReservation] = useState<Reservation | null>(null);
   const [closeFallbackVisible, setCloseFallbackVisible] = useState(false);
+  // コース選択のカテゴリタブ（PM風・T047）。
+  const [courseTab, setCourseTab] = useState<string>("");
 
   const selectedService = services.find((service) => service.id === form.serviceMenuId) ?? null;
   const matchedCustomer = findCustomerForReservationForm(form, customers);
@@ -105,6 +111,22 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
         endTime: savedReservation.endTime
       }
     : null;
+
+  // コースカテゴリの色（PM風・T047）。既存luxasカラーを流用・lib追加なし。
+  function courseCategoryColor(category: string): { text: string; border: string; activeBg: string } {
+    switch (category) {
+      case "ボディケア":
+        return { text: "text-luxas-green", border: "border-luxas-green/40", activeBg: "bg-luxas-green" };
+      case "フェイシャル":
+        return { text: "text-rose-700", border: "border-rose-300", activeBg: "bg-rose-600" };
+      case "カウンセリング":
+        return { text: "text-sky-700", border: "border-sky-300", activeBg: "bg-sky-600" };
+      case "オプション":
+        return { text: "text-amber-700", border: "border-amber-300", activeBg: "bg-amber-600" };
+      default:
+        return { text: "text-stone-700", border: "border-luxas-line", activeBg: "bg-stone-600" };
+    }
+  }
 
   function update<K extends keyof ReservationForm>(key: K, value: ReservationForm[K]) {
     const nextForm: ReservationForm = { ...form, [key]: value };
@@ -279,15 +301,13 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
               label="顧客名"
               value={form.customerName}
               onChange={(value) => update("customerName", value)}
-              placeholder="例: 森下 彩"
-              required
+              placeholder="例: 森下 彩（空欄ならゲスト）"
             />
             <FormInput
               label="電話番号"
               value={form.phone}
               onChange={(value) => update("phone", value)}
-              placeholder="例: 090-1111-2222"
-              required
+              placeholder="例: 090-1111-2222（任意）"
             />
           </div>
 
@@ -309,16 +329,72 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
             </section>
           )}
 
-          <FormSectionTitle index={2} title="メニュー" />
-          <FormSelect label="メニュー" value={form.serviceMenuId} onChange={(value) => update("serviceMenuId", value)} required>
-            <option value="">選択してください</option>
-            {services.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.name}
-                {service.isActive ? "" : "（停止中）"}
-              </option>
-            ))}
-          </FormSelect>
+          <FormSectionTitle index={2} title="メニュー（コース）" />
+          {(() => {
+            const courseCategories = Array.from(
+              new Set(services.filter((s) => s.isActive).map((s) => s.category || "未分類"))
+            );
+            const selectedCategory = selectedService ? selectedService.category || "未分類" : "";
+            const activeTab =
+              courseTab && courseCategories.includes(courseTab)
+                ? courseTab
+                : selectedCategory || courseCategories[0] || "";
+            const tabServices = services.filter(
+              (s) => s.isActive && (s.category || "未分類") === activeTab
+            );
+            return (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {courseCategories.map((category) => {
+                    const color = courseCategoryColor(category);
+                    const isActive = category === activeTab;
+                    return (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => setCourseTab(category)}
+                        className={[
+                          "rounded-full border px-3 py-1 text-xs font-semibold transition",
+                          isActive
+                            ? `${color.activeBg} border-transparent text-white`
+                            : `bg-white ${color.text} ${color.border} hover:bg-luxas-paper`
+                        ].join(" ")}
+                      >
+                        {category}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {tabServices.map((service) => {
+                    const color = courseCategoryColor(service.category || "未分類");
+                    const active = form.serviceMenuId === service.id;
+                    return (
+                      <button
+                        key={service.id}
+                        type="button"
+                        onClick={() => update("serviceMenuId", service.id)}
+                        className={[
+                          "flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition",
+                          active
+                            ? `${color.activeBg} border-transparent text-white`
+                            : `bg-white ${color.text} ${color.border} hover:bg-luxas-paper`
+                        ].join(" ")}
+                      >
+                        <span className="text-sm font-semibold">{service.name}</span>
+                        <span className={["text-xs", active ? "text-white/85" : "text-stone-500"].join(" ")}>
+                          ¥{service.price.toLocaleString()} / {service.durationMinutes}分
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {tabServices.length === 0 ? (
+                    <p className="text-sm text-stone-500">このカテゴリに有効なコースがありません。</p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })()}
 
           <FormSectionTitle index={3} title="担当 / ブース種別" />
           <div className="grid gap-4 md:grid-cols-2">
@@ -456,8 +532,9 @@ function createInitialForm(prefill: NormalizedReservationCreatePrefill, services
     "11:00";
 
   return {
-    customerName: "",
-    phone: "",
+    // 顧客名は既定「ゲスト」（電話受けながら素早く取れるよう・T043）。prefillがあれば優先。
+    customerName: prefill.customerName || "ゲスト",
+    phone: prefill.phone || "",
     serviceMenuId,
     staffId,
     roomId,
@@ -475,7 +552,9 @@ function normalizeReservationCreatePrefill(prefill: ReservationCreatePrefill): N
     roomId: optionalPrefillValue(prefill.roomId),
     date: normalizeDateInputValue(optionalPrefillValue(prefill.date)) ?? "",
     startTime: normalizeTimeInputValue(optionalPrefillValue(prefill.startTime)) ?? "",
-    serviceMenuId: optionalPrefillValue(prefill.serviceMenuId)
+    serviceMenuId: optionalPrefillValue(prefill.serviceMenuId),
+    customerName: optionalPrefillValue(prefill.customerName),
+    phone: optionalPrefillValue(prefill.phone)
   };
 }
 
@@ -487,13 +566,7 @@ function validateReservationForm(
   currentShifts: StaffShift[],
   currentServices: ServiceMenu[]
 ) {
-  if (isBlank(value.customerName)) {
-    return "顧客名を入力してください。電話口の予約名義をそのまま入れてください。";
-  }
-
-  if (isBlank(value.phone)) {
-    return "電話番号を入力してください。折り返し先が分かる番号を入れてください。";
-  }
+  // 顧客名・電話番号はゲスト登録のため必須にしない（T043。空なら保存時に「ゲスト」補完）。
 
   const selectedStaff = currentStaff.find((item) => item.id === value.staffId);
   if (!selectedStaff) {
@@ -606,7 +679,7 @@ function validateReservationForm(
 
 function normalizeForm(form: ReservationForm): Omit<Reservation, "id"> {
   return {
-    customerName: normalizeText(form.customerName),
+    customerName: normalizeText(form.customerName) || "ゲスト",
     phone: normalizeText(form.phone),
     serviceMenuId: normalizeText(form.serviceMenuId),
     staffId: normalizeText(form.staffId),

@@ -23,6 +23,19 @@ export type ServiceMenu = {
    * 任意フィールド: 既存のメニュー生成箇所（service-manager 等・本タスクでは変更不可）を壊さないため optional。
    */
   requiresPrivateRoom?: boolean;
+  /** オンライン予約に掲載するか（PM準拠・T053）。任意・未設定は非掲載扱い。 */
+  onlineBooking?: boolean;
+};
+
+// セット商品マスタ（PM準拠・T053）。コースの組み合わせ等を1商品として扱う。既存ServiceMenuとは別管理。
+export type CourseSet = {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  sortOrder: number;
+  onlineBooking?: boolean;
+  isActive: boolean;
 };
 
 export type RoomKind = "treatment" | "private" | "counseling" | "other";
@@ -133,6 +146,8 @@ export type EmoneyBrand = {
 export type RetailCategory = {
   id: string;
   name: string;
+  /** 省略名（PM準拠・T053・任意）。 */
+  shortName?: string;
   sortOrder: number;
   isActive: boolean;
 };

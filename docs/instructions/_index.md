@@ -55,9 +55,38 @@
 | 38 | T038 | `tasks/T038-mail-management.md` | 完了 | CAUTION | メール管理一式（定型文/対象抽出/配信履歴/eDM）※実送信なしモック。実機内部未巡回=PM標準で設計【実装済・実機確認待ち／PM標準設計・要実機再確認】 | 実送信/依存追加はSTOP／要実機再確認 |
 | 39 | T039 | `tasks/T039-analytics-reports-detail.md` | 完了 | CAUTION | 経営指標 詳細帳票（売上明細/クレジット別/日次集計/帳票CSV）。会計依存。実機内部未巡回=PM標準で設計【実装済・実機確認待ち／CSVは既存serializeCsv流用・lib追加なし】 | グラフlib追加はSTOP／要実機再確認 |
 | 40 | T040 | `tasks/T040-store-settings-sections.md` | 完了 | CAUTION | 店舗設定の拡張(業務設定/会員番号発行/予約用HP/オンライン予約・通知/インボイス)※実連携なし【実装済・実機確認待ち／StoreSettings任意拡張・折りたたみセクション】 | 外部連携/認証/決済はSTOP／要実機再確認 |
-| 41 | T041 | `tasks/T041-loose-ends-integration.md` | 実行中 | CAUTION | 積み残し整合: 予約一覧キャンセル日時列／会計モーダル売上見込プリフィル／hasBoothCapacityにインターバル反映【実装済・実機確認待ち／売上見込はmock-dataに共用helper化しT037と一致】 | 売上見込はT037と一致／指定外ファイルはSTOP／実機確認 |
+| 41 | T041 | `tasks/T041-loose-ends-integration.md` | 完了 | CAUTION | 【実機確認OK 2026-06-15】積み残し整合: 予約一覧キャンセル日時列／会計モーダル売上見込プリフィル／hasBoothCapacityにインターバル反映（売上見込はmock-dataに共用helper化しT037と一致） | 売上見込はT037と一致／指定外ファイルはSTOP／実機確認 |
+| 42 | T042 | `tasks/T042-ledger-pm-layout-step1-timeline-first.md` | 完了 | CAUTION | 【完了・実機OK】PM配置寄せStep1。タイトル/説明文/サマリ3枚を削除。ルートをflex化しorderでPM順=ヘッダ→status→debug→タイムライン→当日情報3タブ→選択中→保留棚。ロジック不変（order方式） | 指定外ファイルはSTOP／ロジック変更が必要なら停止／lint・build失敗で停止／実機確認 |
+| 43 | T043 | `tasks/T043-guest-booking-and-cti-phone.md` | 完了 | CAUTION | 【完了・実機OK】顧客名・電話を任意化＝ゲスト登録可（既定「ゲスト」・空保存で「ゲスト」）。両作成フォーム対応。＋CTI着信番号を `/dashboard/reservations/new?tel=番号`（無ければ?phone=）で電話欄に自動入力・?name=で顧客名。Reservation型変更なし | Reservation型追加が要るなら停止／指定外ファイルはSTOP／lint・build失敗で停止／実機確認 |
+| 44 | T044 | `tasks/T044-nav-pm-top-menu.md` | 完了 | CAUTION | 【実機確認OK 2026-06-15】左サイドバー撤去→PM風 上部ドロップダウンメニュー（top-menu.tsx新規＋dashboard-shell.tsx改修）。7グループ・全ルート到達・PCバー/モバイルアコーディオン・active表示。sidebar.tsxは残置（未使用）。lint/build OK | sidebar.tsx削除はSTOP／指定外ファイルはSTOP／lint・build失敗で停止／実機確認 |
+| 45 | T045 | `tasks/T045-ledger-display-pm-align.md` | 完了 | CAUTION | 【実機確認OK 2026-06-14】上部日付バーをコンパクト化（`<今日>`/再読込/現在時刻、天気/すべて/店舗はプレースホルダ）＋表示タブ5種（シフト/ブース/両方は準備中）＋予約集計バーをタイムライン下へ移動＋ドラッグ用横長帯＋シフト追加リンク。reservation-ledger.tsx 1ファイル中心 | 指定外ファイルはSTOP／計算ロジック変更が必要なら停止／ドラッグ結線が重ければ説明帯のみで報告／lint・build失敗で停止／実機確認 |
+| 46 | T046 | `tasks/T046-ledger-rail-wiring.md` | 完了 | CAUTION | 【完了 2026-06-15・ユーザーOK（実機は後日確認）】【台帳・左レール結線】開く=選択予約詳細/返客=返客一覧/会計=会計モーダル/顧客=顧客。カードは準備中明示。reservation-ledger.tsx | 指定外ファイルSTOP／lint・build失敗で停止／実機確認 |
+| 47 | T047 | `tasks/T047-booking-course-category-tabs.md` | 完了 | CAUTION | 【完了 2026-06-15・実機OK】【予約受付】コース選択を`<select>`→カテゴリ色分けタブ＋一覧に。保存/計算は不変。台帳インライン＋専用画面 | 指定外ファイルSTOP／崩れたら台帳のみ先行報告／実機確認 |
+| 48 | T048 | `tasks/T048-booking-list-columns-pm.md` | 実行中 | CAUTION | 【実装済・実機確認待ち】【予約一覧】列をPM順＋実値化（売上/会計状況/キャンセル日時/性別/リピート/経路は可能な範囲）＋総販売額/検索条件追加。reservation-list.tsx | customers破壊STOP／実機確認 |
+| 49 | T049 | `tasks/T049-payments-register-page.md` | 実行中 | CAUTION | 【実装済・実機確認待ち】【新規】支払・レジ一覧(/dashboard/payments)。当日会計を支払方法別表示＋メニュー導線。会計データ参照のみ | 会計構造変更が要れば停止／依存追加STOP／実機確認 |
+| 50 | T050 | `tasks/T050-booking-returns-columns.md` | 実行中 | CAUTION | 【実装済・実機確認待ち】【返客一覧】列PM順＋種別/返客理由/予約タグ実値化。booking-returns.tsx | 指定外ファイルSTOP／実機確認 |
+| 51 | T051 | `tasks/T051-master-split-panel-component.md` | 完了 | CAUTION | 【完了・lint/build OK／単体は画面変化なし】【共通UI】PMスプリットパネル・マスタUIコンポーネント新規（左一覧+検索/新規、右明細設定）。既存画面は未変更 | 依存追加STOP／lint・build失敗で停止 |
+| 52 | T052 | `tasks/T052-masters-to-split-panel.md` | 実行中 | CAUTION | 【7/7実装済・実機確認待ち（スタッフ/ブース/経費/クレカ/電子マネー/カテゴリ=スプリット化、顧客=既存充実検索構成に会員番号/ID列追加）。lint/build OK・プレビューでスタッフ/クレカ確認済】【マスタ統一】スタッフ/ブース/経費/クレカ/電子マネー/顧客/カテゴリをT051形式へ（1画面ずつ）＋不足列。CRUD維持 | データ構造変更で停止／1画面ずつ／実機確認 |
+| 53 | T053 | `tasks/T053-products-expand.md` | 完了 | CAUTION | 【完了 2026-06-15・実機OK（セット商品/物販カテゴリ/EPARK表示確認OK）。①〜④実装済。①オンライン予約○×／②セット商品/dashboard/course-sets新規／③物販カテゴリ/dashboard/retail-categories新規(省略名追加・既存データ共有・破壊的再シードなし)／④EPARK設定/dashboard/epark新規。メニュー導線追加・lint/build OK(35頁)】【商品拡充】メニュー/オプションにオンライン予約○×＋セット商品/物販カテゴリ/EPARK掲載 新規（1項目ずつ） | 再シードで既存物販破壊なら停止／依存追加STOP／実機確認 |
+| 54 | T054 | `tasks/T054-tags-split-three.md` | 未実行 | CAUTION | 【タグ3分割】顧客/予約ルート/施術カルテの3画面＋管理コード。既存タグ参照維持 | データ移行は推奨で最小実装報告／指定外STOP／実機確認 |
+| 55 | T055 | `tasks/T055-daily-ops-split.md` | 未実行 | CAUTION | 【日次分割】開店/レジ金点検/閉店/閉店検索/売上日報(PM全項目)/出勤退勤 を独立画面に（1画面ずつ） | 締め/現金確定の実処理は作らない停止／1画面ずつ／実機確認 |
+| 56 | T056 | `tasks/T056-mail-five-screens.md` | 未実行 | CAUTION | 【メール5画面】配信履歴/配信取消/定型文/eDM/シンプルeDM（実送信なしモック） | 実送信/外部連携/依存追加STOP／1画面ずつ／実機確認 |
+| 57 | T057 | `tasks/T057-analytics-reports-pm.md` | 未実行 | CAUTION | 【経営指標拡充】スタッフ別/商品別/物販/時間帯/日次/クレカ別/顧客数推移＋CSV。帳票出力リンク集 | グラフlib/依存追加STOP／会計未整備は0+注記／実機確認 |
+| 58 | T058 | `tasks/T058-store-settings-form-pm.md` | 未実行 | CAUTION | 【店舗設定拡張】PM店舗マスタの基本フィールド＋アコーディオン群。営業時間連動維持 | 外部連携/決済/認証STOP／台帳連動維持／実機確認 |
+| 59 | T059 | `tasks/T059-remaining-new-screens.md` | 未実行 | CAUTION | 【残り新規画面】本日のオンライン設定/シフトひな型/シフトパターン/データ不備/ユーザマスタ(表示のみ)（1画面ずつ） | 認証/権限実装STOP／1画面ずつ／実機確認 |
+| 60 | T060 | `tasks/T060-top-menu-complete-pm.md` | 未実行 | CAUTION | 【ナビ最終化】上部メニューをPM店舗8グループ全項目に（各ページ完成後）。死にリンク禁止。top-menu.tsx | 未実装へのリンクは載せず報告／指定外STOP／実機確認 |
+| 61 | T061 | `tasks/T061-org-hierarchy-types-seed.md` | 未実行 | CAUTION | 【外販SaaS土台】tenant→area→store 階層の型・初期データを最小・非破壊で追加（features/org/ 新規。既存型/データ/画面は不変、強制FK追加なし）。株式会社東邦→東京→LUXAS渋谷 1件＋currentStoreId="store-shibuya" | 既存型/キー/画面の変更が要れば停止／依存追加STOP／lint・build失敗で停止 |
 
-> 現在、未実行タスクはありません。T030〜T040 は実機確認OK（2026-06-14）で「完了」。T041 は実装済・実機確認待ち（実行中）。
+> 【現況 2026-06-15 更新】
+> - 完了: T001〜T047, T051, T053（T046/T047/T053はユーザー実機OK・T051は画面変化なし）。
+> - 実行中（実装済・実機確認待ち）: **T048 / T049 / T050 / T052(7/7実装済)**。lint/build OK。ユーザーの一括実機確認後に「完了」化予定。
+> - 未実行: **T054 / T055 / T056 / T057 / T058 / T059 / T060 / T061**。次に着手するタスクは **T054**（reservation-ledger.tsx は触らない）。
+> - T061 は外販SaaS土台（org階層の型・初期データのみ・非破壊）。番号は最後だが他と独立で着手可。
+> T054以降は**番号順に1つずつ**実行する。同一ファイルを編集するタスクの並行実行は禁止（特に reservation-ledger.tsx を触るタスクは1つずつ）。
+> 各タスクは安全レベル（ほぼCAUTION）に従い、完了条件・検証（lint/build＋実機確認）を満たしてから「完了」にする。STOP対象（削除/DB/認証/env/依存追加/実送信/外部決済/PMデータ変更）は止めて報告。
+> 全体方針: PMに忠実に寄せる。設計の正本は `~/Desktop/pm_スクリーンショット/LUXAS_docs/pm-screen-structure-reference.md` と `pm-match-build-roadmap.md`。
+> PM配置寄せの予定（台帳）: Step1=T042【完了】。続き（番号は作成時に採番）= 表示切替の5タブ化（基本/全体/シフト/ブース/両方）＋ドラッグ用横長バー＋シフト追加ボタン＋予約集計バーをタイムライン下へ／上部バー仕上げ（`<今日>`コンパクト・再読込・天気・すべて絞り込み・店舗セレクタ・時計）。これらはユーザーの優先順に応じてCoworkが順次作成。
+> T030〜T040 は実機確認OK（2026-06-14）で「完了」。T041 は実装済・実機確認待ち（実行中）。
 > 旧: 未実行タスク（推奨順）: **T030→T031→T032→T033→T034→T035→T036→T037→T038→T039→T040**。
 > 補足: T038/T039/T040 はPM画面の内部まで実機巡回していないため「PM標準で設計・相違あれば実機再確認」。実送信/外部連携/決済/認証/依存追加はSTOP。
 > 設計書: `~/Desktop/pm_スクリーンショット/LUXAS_docs/luxas-build-spec-from-pm.md`。
@@ -66,9 +95,9 @@
 > 全機能の設計書: `~/Desktop/pm_スクリーンショット/LUXAS_docs/luxas-build-spec-from-pm.md`（PM準拠・優先度つき。T021〜T029が対応）。
 > PM準拠 推奨順: 台帳(T018→T019→T020)→ P1(T021→T022→T026)→ P2(T024→T025)→ T023 → P3(T027)→ P4(T028)→ P5(T029)。
 
-> ⚠️ 多数のタスクが「実行中（実機確認待ち）」です。**まず実機確認→「完了」化を先に**: T007/T009/T014/T015/T003、および未実行のT017。
-> その後、PM準拠の作り込みを順に: **T018 →（実機OK）→ T019 →（実機OK）→ T020**。
-> ⚠️ T005/T007/T009/T017/T018/T019/T020 は同じ `reservation-ledger.tsx` を編集するため**必ず1つずつ・並行編集しない**。
+> （以下は履歴メモ・現況は上記「現況 2026-06-15 更新」を正とする）
+> ⚠️【履歴】旧ガイダンス: T007/T009/T014/T015/T003 等の実機確認→完了化、T018→T019→T020 の順。いずれも完了済み。
+> ⚠️ reservation-ledger.tsx を編集するタスクは**必ず1つずつ・並行編集しない**（現行も有効なルール）。
 > 備考: T012 は 2026-06-13 に Cowork が `roomsStorageKey="luxas-master-rooms-v2"` へ直接修正（lint通過）。「更新で一瞬10→2に戻る」現象（localStorage上書き）の根治。
 > 実行順テーブルは番号順だが、推奨順を優先してよい。
 > 未実行タスクが無くなった場合は、この表の下に「現在、未実行タスクはありません」と記載する。

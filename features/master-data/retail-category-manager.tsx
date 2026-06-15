@@ -3,37 +3,24 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { TextField, ToggleField } from "@/features/master-data/form-controls";
+import { initialRetailCategories, retailCategoriesStorageKey } from "@/features/master-data/mock-data";
 import { ActiveBadge, MasterPage } from "@/features/master-data/master-page";
 import { MasterSplitPanel, type MasterColumn } from "@/components/master/master-split-panel";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
+import type { RetailCategory } from "@/features/master-data/types";
 import { compareBySortOrder, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 
-type FeeMaster = { id: string; name: string; feePercent: number; sortOrder: number; isActive: boolean };
-type FeeForm = { name: string; feePercent: string; sortOrder: string; isActive: boolean };
-const emptyForm: FeeForm = { name: "", feePercent: "0", sortOrder: "10", isActive: true };
+type CatForm = { name: string; shortName: string; sortOrder: string; isActive: boolean };
+const emptyForm: CatForm = { name: "", shortName: "", sortOrder: "10", isActive: true };
 
-export function FeeMasterManager({
-  title,
-  description,
-  storageKey,
-  initial,
-  idPrefix,
-  nameLabel
-}: {
-  title: string;
-  description: string;
-  storageKey: string;
-  initial: FeeMaster[];
-  idPrefix: string;
-  nameLabel: string;
-}) {
-  const [items, setItems] = useLocalCollection<FeeMaster>(storageKey, initial);
-  const [form, setForm] = useState<FeeForm>(emptyForm);
+export function RetailCategoryManager() {
+  const [categories, setCategories] = useLocalCollection<RetailCategory>(retailCategoriesStorageKey, initialRetailCategories);
+  const [form, setForm] = useState<CatForm>(emptyForm);
   // null=未選択 / ""=新規 / id=編集。
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
-  const sortedItems = useMemo(() => [...items].sort(compareBySortOrder), [items]);
+  const sortedCategories = useMemo(() => [...categories].sort(compareBySortOrder), [categories]);
 
   function resetForm() {
     setForm(emptyForm);
@@ -49,41 +36,41 @@ export function FeeMasterManager({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isBlank(form.name)) {
-      setMessage({ type: "error", text: `${nameLabel}を入力してください。` });
+      setMessage({ type: "error", text: "カテゴリ名を入力してください。" });
       return;
     }
     const payload = {
       name: normalizeText(form.name),
-      feePercent: Number(form.feePercent) || 0,
+      shortName: normalizeText(form.shortName),
       sortOrder: Number(form.sortOrder) || 0,
       isActive: form.isActive
     };
     if (editingId) {
-      setItems((current) => current.map((item) => (item.id === editingId ? { ...item, ...payload } : item)));
-      setMessage({ type: "success", text: "更新しました。" });
+      setCategories((current) => current.map((item) => (item.id === editingId ? { ...item, ...payload } : item)));
+      setMessage({ type: "success", text: "物販カテゴリを更新しました。" });
     } else {
-      setItems((current) => [{ id: makeLocalId(idPrefix), ...payload }, ...current]);
-      setMessage({ type: "success", text: "追加しました。" });
+      setCategories((current) => [{ id: makeLocalId("retail-cat"), ...payload }, ...current]);
+      setMessage({ type: "success", text: "物販カテゴリを追加しました。" });
     }
     resetForm();
   }
 
-  function handleEdit(item: FeeMaster) {
+  function handleEdit(item: RetailCategory) {
     setEditingId(item.id);
-    setForm({ name: item.name, feePercent: String(item.feePercent), sortOrder: String(item.sortOrder), isActive: item.isActive });
+    setForm({ name: item.name, shortName: item.shortName ?? "", sortOrder: String(item.sortOrder), isActive: item.isActive });
     setMessage(null);
   }
 
   function handleDelete(id: string) {
-    setItems((current) => current.filter((item) => item.id !== id));
+    setCategories((current) => current.filter((item) => item.id !== id));
     if (editingId === id) resetForm();
-    setMessage({ type: "success", text: "削除しました。" });
+    setMessage({ type: "success", text: "物販カテゴリを削除しました。" });
   }
 
-  const columns: MasterColumn<FeeMaster>[] = [
-    { key: "id", header: "ID", render: (i) => <span className="font-mono text-xs text-stone-400">{i.id.slice(0, 8)}</span> },
-    { key: "name", header: nameLabel, render: (i) => <span className="font-medium text-luxas-ink">{i.name}</span> },
-    { key: "fee", header: "手数料率", render: (i) => `${i.feePercent}%` },
+  const columns: MasterColumn<RetailCategory>[] = [
+    { key: "id", header: "ID", render: (i) => <span className="font-mono text-xs text-stone-400">{i.id.slice(0, 10)}</span> },
+    { key: "name", header: "名前", render: (i) => <span className="font-medium text-luxas-ink">{i.name}</span> },
+    { key: "shortName", header: "省略名", render: (i) => i.shortName?.trim() ? i.shortName : "—" },
     { key: "sortOrder", header: "表示順", render: (i) => i.sortOrder },
     { key: "status", header: "状態", render: (i) => <ActiveBadge isActive={i.isActive} /> }
   ];
@@ -92,7 +79,7 @@ export function FeeMasterManager({
     return (
       <div>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-luxas-ink">{editingId ? "編集" : "追加"}</h2>
+          <h2 className="text-base font-semibold text-luxas-ink">{editingId ? "物販カテゴリを編集" : "物販カテゴリを追加"}</h2>
           {editingId !== null ? (
             <button type="button" className="inline-flex items-center gap-1 rounded-md border border-luxas-line px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-luxas-paper" onClick={resetForm}>
               <RotateCcw size={14} aria-hidden="true" />
@@ -101,8 +88,8 @@ export function FeeMasterManager({
           ) : null}
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <TextField label={nameLabel} value={form.name} onChange={(v) => setForm((c) => ({ ...c, name: v }))} required />
-          <TextField label="手数料率（%）" value={form.feePercent} onChange={(v) => setForm((c) => ({ ...c, feePercent: v }))} type="number" min="0" />
+          <TextField label="名前" value={form.name} onChange={(v) => setForm((c) => ({ ...c, name: v }))} placeholder="例: 物販" required />
+          <TextField label="省略名（任意）" value={form.shortName} onChange={(v) => setForm((c) => ({ ...c, shortName: v }))} placeholder="例: 物" />
           <TextField label="表示順" value={form.sortOrder} onChange={(v) => setForm((c) => ({ ...c, sortOrder: v }))} type="number" min="0" />
           <ToggleField label="有効にする" checked={form.isActive} onChange={(v) => setForm((c) => ({ ...c, isActive: v }))} />
           <StatusMessage message={message} />
@@ -124,16 +111,16 @@ export function FeeMasterManager({
   }
 
   return (
-    <MasterPage title={title} description={description}>
+    <MasterPage title="物販カテゴリマスタ" description="物販商品の分類を管理します（物販商品画面と同じデータを参照・PM準拠の省略名対応）。">
       <MasterSplitPanel
-        items={sortedItems}
+        items={sortedCategories}
         columns={columns}
-        searchKeys={["name"]}
+        searchKeys={["name", "shortName"]}
         selectedId={editingId}
         onSelect={handleEdit}
         onCreate={startCreate}
         renderDetail={renderDetail}
-        searchPlaceholder={`${nameLabel}で検索`}
+        searchPlaceholder="カテゴリ名で検索"
         createLabel="新規作成"
       />
     </MasterPage>
