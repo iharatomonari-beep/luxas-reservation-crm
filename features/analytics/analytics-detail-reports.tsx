@@ -18,6 +18,8 @@ import {
 import type { RetailItem, RetailSale, ServiceMenu, StaffMember } from "@/features/master-data/types";
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
 import type { Reservation } from "@/features/reservations/types";
+import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import { serializeCsv } from "@/features/import-export/csv-utils";
 
 type Tab = "summary" | "staff" | "product" | "retail" | "hourly" | "credit" | "daily" | "trend" | "reports";
@@ -54,7 +56,10 @@ function downloadCsv(fileName: string, headers: string[], records: Array<Record<
 }
 
 export function AnalyticsDetailReports() {
-  const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  const [allReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  const { currentStoreId } = useCurrentStore();
+  // 現在店舗で安全フィルタ（T063）。以降の集計はすべて現在店舗基準。
+  const reservations = useMemo(() => filterReservationsByStore(allReservations, currentStoreId), [allReservations, currentStoreId]);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [retailItems] = useLocalCollection<RetailItem>(retailItemsStorageKey, initialRetailItems);

@@ -20,6 +20,8 @@ import { customersStorageKey, initialCustomers } from "@/features/customers/mock
 import { customerGenderLabels, type Customer } from "@/features/customers/types";
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
 import { cancelTypeLabels, type Reservation } from "@/features/reservations/types";
+import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import { formatDayLabel } from "@/features/reservations/date-utils";
 
 function todayStr() {
@@ -35,12 +37,16 @@ export function ReservationList() {
   const [options] = useLocalCollection<ServiceOption>(optionsStorageKey, initialOptions);
   const [tags] = useLocalCollection<MasterTag>(tagsStorageKey, initialTags);
   const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
+  const { currentStoreId } = useCurrentStore();
   const [date, setDate] = useState<string>(todayStr());
   const [query, setQuery] = useState("");
 
+  // 現在店舗で安全フィルタ（T063）。
+  const scopedReservations = useMemo(() => filterReservationsByStore(reservations, currentStoreId), [reservations, currentStoreId]);
+
   const rows = useMemo(
     () =>
-      reservations
+      scopedReservations
         .filter((r) => r.date === date)
         .filter((r) => {
           const q = query.trim();
@@ -48,7 +54,7 @@ export function ReservationList() {
           return r.customerName.includes(q) || (r.phone ?? "").includes(q);
         })
         .sort((a, b) => a.startTime.localeCompare(b.startTime)),
-    [reservations, date, query]
+    [scopedReservations, date, query]
   );
 
   const routeTags = useMemo(() => tags.filter((t) => t.kind === "route"), [tags]);

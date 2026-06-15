@@ -7,6 +7,7 @@ import { Save, ChevronLeft } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import type { Customer } from "@/features/customers/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import {
   hasBoothCapacity,
   initialRooms,
@@ -88,6 +89,7 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
   const [shifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
   const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  const { currentStoreId } = useCurrentStore();
 
   const activeStaff = useMemo(() => [...staff].sort(compareBySortOrder).filter((item) => item.isActive), [staff]);
   const activeServices = useMemo(() => [...services].sort(compareBySortOrder).filter((item) => item.isActive), [services]);
@@ -166,7 +168,8 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
     }
 
     const payload = normalizeForm(form);
-    const nextReservation = { id: makeLocalId("reservation"), ...payload };
+    // 新規予約にだけ現在店舗の storeId を付与（T063）。既存データは触らない。
+    const nextReservation = { id: makeLocalId("reservation"), ...payload, storeId: currentStoreId };
     const nextReservations = [nextReservation, ...currentReservations];
     const ledgerNotification = {
       type: "reservation-created",

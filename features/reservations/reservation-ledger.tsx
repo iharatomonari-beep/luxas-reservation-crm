@@ -27,6 +27,8 @@ import {
 } from "@/features/master-data/mock-data";
 import type { MasterTag, RetailSale, ServiceMenu, ServiceOption, ServiceRoom, StaffMember, StaffShift } from "@/features/master-data/types";
 import { initialStoreSettings, useStoreSettings } from "@/features/master-data/store-settings";
+import { useCurrentStore } from "@/features/org/use-current-store";
+import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import {
@@ -311,6 +313,8 @@ export function ReservationLedger() {
   const routeTags = useMemo(() => allTags.filter((t) => t.kind === "route" && t.isActive), [allTags]);
   const activeOptions = useMemo(() => allOptions.filter((o) => o.isActive), [allOptions]);
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  // 現在店舗（T062）。新規予約への storeId 付与と表示の安全フィルタ（T063）に使う。
+  const { currentStoreId } = useCurrentStore();
   // 店舗設定（営業時間・時間きざみ）をランタイム参照する（T031）。設定画面の保存値が台帳に反映される。
   const [storeSettings] = useStoreSettings();
   const businessStart = storeSettings.businessStartTime;
@@ -329,10 +333,14 @@ export function ReservationLedger() {
 
   const normalizedReservations = useMemo(
     () =>
-      reservations
-        .map(normalizeReservationForDisplay)
-        .filter((reservation): reservation is Reservation => reservation !== null),
-    [reservations]
+      // 現在店舗で安全フィルタ（T063・非破壊）。渋谷=storeId未設定の既存も表示／他店舗=storeId一致のみ。
+      filterReservationsByStore(
+        reservations
+          .map(normalizeReservationForDisplay)
+          .filter((reservation): reservation is Reservation => reservation !== null),
+        currentStoreId
+      ),
+    [reservations, currentStoreId]
   );
   const activeStaff = useMemo(() => [...staff].sort(compareBySortOrder).filter((item) => item.isActive), [staff]);
   const activeServices = useMemo(() => [...services].sort(compareBySortOrder).filter((item) => item.isActive), [services]);
@@ -969,7 +977,8 @@ export function ReservationLedger() {
       setMessage({ type: "success", text: "予約を更新しました。" });
       scrollTimelineToTime(payload.startTime);
     } else {
-      setReservations((current) => [{ id: makeLocalId("reservation"), ...payload }, ...current]);
+      // 新規予約にだけ現在店舗の storeId を付与（T063）。既存データは触らない。
+      setReservations((current) => [{ id: makeLocalId("reservation"), ...payload, storeId: currentStoreId }, ...current]);
       setSelectedDate(payload.date);
       scrollTimelineToTime(payload.startTime);
 

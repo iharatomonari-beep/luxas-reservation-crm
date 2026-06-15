@@ -15,6 +15,8 @@ import {
 import type { MasterTag, ServiceMenu, StaffMember } from "@/features/master-data/types";
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
 import { cancelTypeLabels, type Reservation } from "@/features/reservations/types";
+import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { useCurrentStore } from "@/features/org/use-current-store";
 
 function firstOfMonth() {
   const d = new Date();
@@ -30,13 +32,17 @@ export function BookingReturns() {
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [tags] = useLocalCollection<MasterTag>(tagsStorageKey, initialTags);
+  const { currentStoreId } = useCurrentStore();
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(today());
   const [query, setQuery] = useState("");
 
+  // 現在店舗で安全フィルタ（T063）。
+  const scopedReservations = useMemo(() => filterReservationsByStore(reservations, currentStoreId), [reservations, currentStoreId]);
+
   const rows = useMemo(
     () =>
-      reservations
+      scopedReservations
         .filter((r) => r.status === "canceled")
         .filter((r) => (!from || r.date >= from) && (!to || r.date <= to))
         .filter((r) => {
@@ -45,7 +51,7 @@ export function BookingReturns() {
           return r.customerName.includes(q) || (r.phone ?? "").includes(q);
         })
         .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date))),
-    [reservations, from, to, query]
+    [scopedReservations, from, to, query]
   );
 
   const staffName = (id: string) => staff.find((s) => s.id === id)?.displayName ?? "-";

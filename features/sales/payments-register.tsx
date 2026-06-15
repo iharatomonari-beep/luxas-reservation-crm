@@ -10,6 +10,8 @@ import { customersStorageKey, initialCustomers } from "@/features/customers/mock
 import { customerGenderLabels, type Customer } from "@/features/customers/types";
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
 import { type PaymentMethod, type Reservation } from "@/features/reservations/types";
+import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import { formatDayLabel } from "@/features/reservations/date-utils";
 
 function todayStr() {
@@ -26,13 +28,17 @@ export function PaymentsRegister() {
   const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
+  const { currentStoreId } = useCurrentStore();
   const [date, setDate] = useState<string>(todayStr());
   const [query, setQuery] = useState("");
+
+  // 現在店舗で安全フィルタ（T063）。
+  const scopedReservations = useMemo(() => filterReservationsByStore(reservations, currentStoreId), [reservations, currentStoreId]);
 
   // 当日・会計確定（paymentStatus=paid もしくは payments あり）の予約のみ。
   const rows = useMemo(
     () =>
-      reservations
+      scopedReservations
         .filter((r) => r.date === date)
         .filter((r) => r.paymentStatus === "paid" || (r.payments?.length ?? 0) > 0)
         .filter((r) => {
@@ -41,7 +47,7 @@ export function PaymentsRegister() {
           return r.customerName.includes(q) || (r.phone ?? "").includes(q);
         })
         .sort((a, b) => a.startTime.localeCompare(b.startTime)),
-    [reservations, date, query]
+    [scopedReservations, date, query]
   );
 
   function matchCustomer(r: Reservation): Customer | null {

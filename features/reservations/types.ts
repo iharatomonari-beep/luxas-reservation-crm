@@ -12,6 +12,8 @@ export type Reservation = {
   roomId: string;
   status: ReservationStatus;
   memo: string;
+  /** 所属店舗ID（T063・任意）。未設定＝既存データ扱い（既定店舗 store-shibuya でのみ表示）。新規作成時に現在店舗を付与。 */
+  storeId?: string;
   /** 指名スタッフID（顧客が担当を指定）。未設定＝指名なし。指名時は担当スタッフ変更不可（T017） */
   nominatedStaffId?: string;
   /** 会計状況（T022）。未設定＝未会計扱い */
