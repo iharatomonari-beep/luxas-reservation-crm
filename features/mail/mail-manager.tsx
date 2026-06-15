@@ -53,44 +53,149 @@ function formatDateTime(value: string) {
   }).format(date);
 }
 
-export function MailManager() {
+// 独立画面の表示種別（T056）。"all"=旧統合タブ（後方互換）。
+export type MailView = "all" | "history" | "cancel" | "templates" | "edm" | "edm-simple";
+
+const MAIL_VIEW_META: Record<Exclude<MailView, "all">, { title: string; description: string }> = {
+  history: { title: "メール配信履歴", description: "配信済みメールの履歴を確認します（実送信なし・記録のみ）。" },
+  cancel: { title: "メール配信一括停止", description: "配信予定/配信済みメールを取消します（記録のみ・実送信なし）。" },
+  templates: { title: "メール定型文設定", description: "メールの定型文を管理します。" },
+  edm: { title: "eDM設定", description: "自動配信（eDM・詳細設定）ルールを管理します（実行はモック）。" },
+  "edm-simple": { title: "シンプルeDM設定", description: "誕生日お祝い等のシンプルな自動配信を設定します（実行はモック）。" }
+};
+
+export function MailManager({ view = "all" }: { view?: MailView }) {
   const [tab, setTab] = useState<Tab>("templates");
   const [templates, setTemplates] = useLocalCollection<MailTemplate>(mailTemplatesStorageKey, initialMailTemplates);
   const [deliveries, setDeliveries] = useLocalCollection<MailDelivery>(mailDeliveriesStorageKey, initialMailDeliveries);
   const [autoRules, setAutoRules] = useLocalCollection<MailAutoRule>(mailAutoRulesStorageKey, initialMailAutoRules);
 
+  const title = view === "all" ? "メール管理" : MAIL_VIEW_META[view].title;
+  const description =
+    view === "all"
+      ? "定型文・一斉配信・配信履歴・自動配信(eDM)の設定を行います。v0.1 は実送信なし・記録のみのモックです。"
+      : MAIL_VIEW_META[view].description;
+
   return (
-    <MasterPage
-      title="メール管理"
-      description="定型文・一斉配信・配信履歴・自動配信(eDM)の設定を行います。v0.1 は実送信なし・記録のみのモックです。"
-    >
+    <MasterPage title={title} description={description}>
       <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
         ※ v0.1 ではメールの実送信は行いません。配信・取消はローカルへの記録のみです（送信API・外部連携は未接続）。
       </div>
 
-      <div className="mb-4 inline-flex flex-wrap overflow-hidden rounded-md border border-luxas-line">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={[
-              "px-3 py-2 text-sm font-medium transition",
-              tab === t.key ? "bg-luxas-green text-white" : "bg-white text-stone-600 hover:bg-luxas-paper"
-            ].join(" ")}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {view === "all" ? (
+        <div className="mb-4 inline-flex flex-wrap overflow-hidden rounded-md border border-luxas-line">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={[
+                "px-3 py-2 text-sm font-medium transition",
+                tab === t.key ? "bg-luxas-green text-white" : "bg-white text-stone-600 hover:bg-luxas-paper"
+              ].join(" ")}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
-      {tab === "templates" ? <TemplatesTab templates={templates} setTemplates={setTemplates} /> : null}
-      {tab === "broadcast" ? (
+      {view === "all" && tab === "templates" ? <TemplatesTab templates={templates} setTemplates={setTemplates} /> : null}
+      {view === "all" && tab === "broadcast" ? (
         <BroadcastTab templates={templates} setDeliveries={setDeliveries} deliveries={deliveries} onSent={() => setTab("history")} />
       ) : null}
-      {tab === "history" ? <HistoryTab deliveries={deliveries} setDeliveries={setDeliveries} /> : null}
-      {tab === "auto" ? <AutoTab autoRules={autoRules} setAutoRules={setAutoRules} templates={templates} /> : null}
+      {view === "all" && tab === "history" ? <HistoryTab deliveries={deliveries} setDeliveries={setDeliveries} /> : null}
+      {view === "all" && tab === "auto" ? <AutoTab autoRules={autoRules} setAutoRules={setAutoRules} templates={templates} /> : null}
+
+      {/* 独立画面（T056） */}
+      {view === "history" ? (
+        <div className="space-y-4">
+          <BroadcastTab templates={templates} setDeliveries={setDeliveries} deliveries={deliveries} onSent={() => undefined} />
+          <HistoryTab deliveries={deliveries} setDeliveries={setDeliveries} />
+        </div>
+      ) : null}
+      {view === "cancel" ? <CancelTab deliveries={deliveries} setDeliveries={setDeliveries} /> : null}
+      {view === "templates" ? <TemplatesTab templates={templates} setTemplates={setTemplates} /> : null}
+      {view === "edm" ? <AutoTab autoRules={autoRules} setAutoRules={setAutoRules} templates={templates} mode="edm" /> : null}
+      {view === "edm-simple" ? <AutoTab autoRules={autoRules} setAutoRules={setAutoRules} templates={templates} mode="simple" /> : null}
     </MasterPage>
+  );
+}
+
+// メール配信一括停止（T056）。配信済み(sent)を取消(canceled)にする。記録のみ・実送信なし。
+function CancelTab({
+  deliveries,
+  setDeliveries
+}: {
+  deliveries: MailDelivery[];
+  setDeliveries: (updater: (current: MailDelivery[]) => MailDelivery[]) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const rows = deliveries
+    .filter((d) => {
+      const q = query.trim();
+      if (!q) return true;
+      return d.subject.includes(q) || d.templateName.includes(q);
+    })
+    .sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+
+  function cancel(id: string) {
+    setDeliveries((current) => current.map((d) => (d.id === id ? { ...d, status: "canceled" } : d)));
+  }
+
+  return (
+    <section className="rounded-lg border border-luxas-line bg-white">
+      <div className="flex flex-wrap items-center gap-3 border-b border-luxas-line px-4 py-3 text-sm">
+        <input
+          type="search"
+          className="rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm outline-none focus:border-luxas-green"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="タイトル・定型文で検索"
+        />
+        <span className="ml-auto text-stone-500">{rows.length}件</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-luxas-paper text-xs font-semibold text-stone-500">
+            <tr>
+              <th className="px-4 py-3">ID</th>
+              <th className="px-4 py-3">タイトル</th>
+              <th className="px-4 py-3">配信予定/配信</th>
+              <th className="px-4 py-3">状態</th>
+              <th className="px-4 py-3 text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-luxas-line">
+            {rows.length === 0 ? (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-stone-500">対象の配信はありません。</td></tr>
+            ) : (
+              rows.map((d) => (
+                <tr key={d.id}>
+                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-stone-400">{d.id.slice(0, 8)}</td>
+                  <td className="px-4 py-3 font-medium text-luxas-ink">{d.subject}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-stone-700">{formatDateTime(d.sentAt)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    {d.status === "canceled" ? (
+                      <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-500">取消済</span>
+                    ) : (
+                      <span className="rounded-full bg-luxas-mist px-2 py-0.5 text-[11px] font-medium text-luxas-green">配信済</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    {d.status === "canceled" ? (
+                      <span className="text-xs text-stone-400">—</span>
+                    ) : (
+                      <button type="button" className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50" onClick={() => cancel(d.id)}>取消</button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -474,19 +579,24 @@ const emptyAutoForm: AutoForm = { name: "", trigger: "after_visit", templateId: 
 function AutoTab({
   autoRules,
   setAutoRules,
-  templates
+  templates,
+  mode = "all"
 }: {
   autoRules: MailAutoRule[];
   setAutoRules: (updater: (current: MailAutoRule[]) => MailAutoRule[]) => void;
   templates: MailTemplate[];
+  mode?: "all" | "edm" | "simple";
 }) {
-  const [form, setForm] = useState<AutoForm>(emptyAutoForm);
+  const initialForm: AutoForm = mode === "edm" ? { ...emptyAutoForm, isSimple: false } : { ...emptyAutoForm, isSimple: true };
+  const [form, setForm] = useState<AutoForm>(initialForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
   const templateNameById = useMemo(() => new Map(templates.map((t) => [t.id, t.name])), [templates]);
+  // mode に応じて一覧を絞り込む（eDM=詳細 / simple=簡易 / all=両方）。
+  const shownRules = mode === "edm" ? autoRules.filter((r) => !r.isSimple) : mode === "simple" ? autoRules.filter((r) => r.isSimple) : autoRules;
 
   function reset() {
-    setForm(emptyAutoForm);
+    setForm(initialForm);
     setEditingId(null);
   }
 
@@ -572,7 +682,7 @@ function AutoTab({
       <section className="rounded-lg border border-luxas-line bg-white">
         <div className="border-b border-luxas-line px-5 py-4">
           <h2 className="text-base font-semibold text-luxas-ink">自動配信ルール一覧</h2>
-          <p className="mt-1 text-sm text-stone-500">{autoRules.length}件（実行はモック・自動送信なし）</p>
+          <p className="mt-1 text-sm text-stone-500">{shownRules.length}件（実行はモック・自動送信なし）</p>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
@@ -587,7 +697,7 @@ function AutoTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-luxas-line">
-              {autoRules.map((rule) => (
+              {shownRules.map((rule) => (
                 <tr key={rule.id}>
                   <td className="whitespace-nowrap px-5 py-4 font-medium text-luxas-ink">{rule.name}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-stone-700">{rule.isSimple ? "シンプルeDM" : "eDM"}</td>
@@ -610,7 +720,7 @@ function AutoTab({
                   </td>
                 </tr>
               ))}
-              {autoRules.length === 0 ? (
+              {shownRules.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-8 text-center text-sm text-stone-500">ルールがありません。</td>
                 </tr>

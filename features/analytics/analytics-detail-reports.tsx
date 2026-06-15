@@ -1,23 +1,37 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Download } from "lucide-react";
 import { MasterPage } from "@/features/master-data/master-page";
 import { useLocalCollection } from "@/features/master-data/local-storage";
-import { initialServices, initialStaff, servicesStorageKey, staffStorageKey } from "@/features/master-data/mock-data";
-import type { ServiceMenu, StaffMember } from "@/features/master-data/types";
+import {
+  initialRetailItems,
+  initialRetailSales,
+  initialServices,
+  initialStaff,
+  retailItemsStorageKey,
+  retailSalesStorageKey,
+  servicesStorageKey,
+  staffStorageKey
+} from "@/features/master-data/mock-data";
+import type { RetailItem, RetailSale, ServiceMenu, StaffMember } from "@/features/master-data/types";
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
 import type { Reservation } from "@/features/reservations/types";
 import { serializeCsv } from "@/features/import-export/csv-utils";
 
-type Tab = "summary" | "credit" | "daily" | "staff" | "trend";
+type Tab = "summary" | "staff" | "product" | "retail" | "hourly" | "credit" | "daily" | "trend" | "reports";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "summary", label: "売上・明細集計" },
+  { key: "staff", label: "スタッフ別売上" },
+  { key: "product", label: "商品別売上" },
+  { key: "retail", label: "物販売上" },
+  { key: "hourly", label: "時間帯別来店" },
   { key: "credit", label: "クレジット会社別" },
   { key: "daily", label: "日次集計（日別）" },
-  { key: "staff", label: "日次集計（個人別）" },
-  { key: "trend", label: "顧客数推移" }
+  { key: "trend", label: "顧客数推移" },
+  { key: "reports", label: "帳票出力" }
 ];
 
 function yen(value: number) {
@@ -43,6 +57,8 @@ export function AnalyticsDetailReports() {
   const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
+  const [retailItems] = useLocalCollection<RetailItem>(retailItemsStorageKey, initialRetailItems);
+  const [retailSales] = useLocalCollection<RetailSale>(retailSalesStorageKey, initialRetailSales);
   const [tab, setTab] = useState<Tab>("summary");
 
   const now = new Date();
@@ -131,6 +147,46 @@ export function AnalyticsDetailReports() {
       }))
       .sort((a, b) => b.売上 - a.売上);
   }, [monthPaid, staffName]);
+
+  // 商品別売上（メニュー別・当月会計済）
+  const productRows = useMemo(() => {
+    const map = new Map<string, { sales: number; count: number }>();
+    for (const r of monthPaid) {
+      const prev = map.get(r.serviceMenuId) ?? { sales: 0, count: 0 };
+      map.set(r.serviceMenuId, { sales: prev.sales + (r.saleAmount ?? 0), count: prev.count + 1 });
+    }
+    return [...map.entries()]
+      .map(([id, v]) => ({ 商品: serviceName.get(id) ?? id, 件数: v.count, 売上: v.sales }))
+      .sort((a, b) => b.売上 - a.売上);
+  }, [monthPaid, serviceName]);
+
+  // 物販売上（当月の物販販売・スナップショット単価×数量）
+  const retailItemName = useMemo(() => new Map(retailItems.map((i) => [i.id, i.name])), [retailItems]);
+  const retailRows = useMemo(() => {
+    const map = new Map<string, { sales: number; qty: number }>();
+    for (const s of retailSales) {
+      if (!s.saleDate.startsWith(month)) continue;
+      const prev = map.get(s.retailItemId) ?? { sales: 0, qty: 0 };
+      map.set(s.retailItemId, { sales: prev.sales + s.unitPrice * s.quantity, qty: prev.qty + s.quantity });
+    }
+    return [...map.entries()]
+      .map(([id, v]) => ({ 物販商品: retailItemName.get(id) ?? id, 数量: v.qty, 売上: v.sales }))
+      .sort((a, b) => b.売上 - a.売上);
+  }, [retailSales, month, retailItemName]);
+
+  // 時間帯別来店（開始時刻の時で集計）
+  const hourlyRows = useMemo(() => {
+    const map = new Map<number, { visits: number; sales: number }>();
+    for (const r of monthReservations) {
+      const hour = Number(r.startTime.slice(0, 2));
+      if (!Number.isFinite(hour)) continue;
+      const prev = map.get(hour) ?? { visits: 0, sales: 0 };
+      map.set(hour, { visits: prev.visits + 1, sales: prev.sales + (r.paymentStatus === "paid" ? r.saleAmount ?? 0 : 0) });
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([hour, v]) => ({ 時間帯: `${String(hour).padStart(2, "0")}:00`, 来店: v.visits, 売上: v.sales }));
+  }, [monthReservations]);
 
   // 顧客数推移（月別 新規/リピート/総数）
   const trendRows = useMemo(() => {
@@ -232,6 +288,62 @@ export function AnalyticsDetailReports() {
           onExport={() => downloadCsv(`日次集計_個人別_${month}.csv`, ["スタッフ", "売上", "件数", "客単価"], staffRows)}
           emptyText="会計済データがありません。"
         />
+      ) : null}
+
+      {tab === "product" ? (
+        <ReportTable
+          title="商品別売上（当月）"
+          columns={["商品", "件数", "売上"]}
+          rows={productRows.map((r) => [r.商品, `${r.件数}件`, yen(r.売上)])}
+          onExport={() => downloadCsv(`商品別売上_${month}.csv`, ["商品", "件数", "売上"], productRows)}
+          emptyText="会計済データがありません。"
+        />
+      ) : null}
+
+      {tab === "retail" ? (
+        <ReportTable
+          title="物販売上（当月）"
+          columns={["物販商品", "数量", "売上"]}
+          rows={retailRows.map((r) => [r.物販商品, `${r.数量}点`, yen(r.売上)])}
+          onExport={() => downloadCsv(`物販売上_${month}.csv`, ["物販商品", "数量", "売上"], retailRows)}
+          emptyText="当月の物販販売データがありません（物販販売画面で登録）。"
+        />
+      ) : null}
+
+      {tab === "hourly" ? (
+        <ReportTable
+          title="時間帯別来店（当月）"
+          columns={["時間帯", "来店", "売上"]}
+          rows={hourlyRows.map((r) => [r.時間帯, `${r.来店}件`, yen(r.売上)])}
+          onExport={() => downloadCsv(`時間帯別来店_${month}.csv`, ["時間帯", "来店", "売上"], hourlyRows)}
+          emptyText="当月の予約データがありません。"
+        />
+      ) : null}
+
+      {tab === "reports" ? (
+        <section className="rounded-lg border border-luxas-line bg-white p-5">
+          <h2 className="text-base font-semibold text-luxas-ink">帳票出力</h2>
+          <p className="mt-1 text-sm text-stone-500">各帳票・関連画面へのリンク集です。</p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {[
+              { label: "店舗売上日報", href: "/dashboard/daily-report" },
+              { label: "実績明細（予約明細）", href: "/dashboard/reservations/list" },
+              { label: "時間別来店数", href: "/dashboard/analytics/reports", note: "当画面「時間帯別来店」タブ" },
+              { label: "個人実績（スタッフ別）", href: "/dashboard/analytics/reports", note: "当画面「スタッフ別売上」タブ" },
+              { label: "30日リピート（顧客数推移）", href: "/dashboard/analytics/reports", note: "当画面「顧客数推移」タブ" },
+              { label: "返客一覧", href: "/dashboard/reservations/returns" }
+            ].map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="flex items-center justify-between rounded-md border border-luxas-line bg-white px-4 py-3 text-sm font-medium text-luxas-ink transition hover:bg-luxas-mist"
+              >
+                <span>{item.label}{item.note ? <span className="ml-2 text-xs text-stone-400">{item.note}</span> : null}</span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       {tab === "trend" ? (

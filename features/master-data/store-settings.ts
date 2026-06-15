@@ -49,6 +49,25 @@ export type StoreSettings = {
   notifyEmail?: string;
   /** インボイス: 登録番号 */
   invoiceRegistrationNumber?: string;
+  // --- T058 PM店舗マスタ基本情報（すべて任意・表示/保持のみ・外部連携なし） ---
+  companyId?: string;
+  areaId?: string;
+  storeId?: string;
+  storeCode?: string;
+  storeName?: string;
+  storeShortName?: string;
+  postalCode?: string;
+  prefecture?: string;
+  city?: string;
+  address2?: string;
+  phone?: string;
+  fax?: string;
+  email?: string;
+  hpUrl?: string;
+  department?: string;
+  managerName?: string;
+  /** 背景色設定（CSSカラー文字列） */
+  themeColor?: string;
 };
 
 export const storeSettingsStorageKey = "luxas-store-settings";
@@ -71,7 +90,25 @@ export const initialStoreSettings: StoreSettings = {
   hpClosedDaysText: "",
   onlineReservationEnabled: false,
   notifyEmail: "",
-  invoiceRegistrationNumber: ""
+  invoiceRegistrationNumber: "",
+  // T058 基本情報の初期値（単一店舗の既定）
+  companyId: "",
+  areaId: "",
+  storeId: "store-shibuya",
+  storeCode: "",
+  storeName: "LUXAS",
+  storeShortName: "LUXAS",
+  postalCode: "",
+  prefecture: "",
+  city: "",
+  address2: "",
+  phone: "",
+  fax: "",
+  email: "",
+  hpUrl: "",
+  department: "",
+  managerName: "",
+  themeColor: ""
 };
 
 function readStoredStoreSettings(): StoreSettings | null {

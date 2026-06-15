@@ -1,0 +1,5 @@
+import { TagManager } from "@/features/master-data/tag-manager";
+
+export default function RouteTagsPage() {
+  return <TagManager kind="route" />;
+}

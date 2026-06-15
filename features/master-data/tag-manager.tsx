@@ -1,32 +1,40 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { FormEvent, useMemo, useState } from "react";
+import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { TextField, ToggleField } from "@/features/master-data/form-controls";
 import { initialTags, tagsStorageKey } from "@/features/master-data/mock-data";
 import { ActiveBadge, MasterPage } from "@/features/master-data/master-page";
+import { MasterSplitPanel, type MasterColumn } from "@/components/master/master-split-panel";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import { tagKindLabels, type MasterTag, type TagKind } from "@/features/master-data/types";
 import { compareBySortOrder, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 
-const KINDS: TagKind[] = ["customer", "route", "karte"];
-
 type TagForm = { name: string; code: string; sortOrder: string; isActive: boolean };
 const emptyForm: TagForm = { name: "", code: "", sortOrder: "10", isActive: true };
 
-export function TagManager() {
+// 種別固定の1画面（PM準拠・T054）。顧客タグは管理コードなし、予約ルート/施術カルテは管理コードあり。
+export function TagManager({ kind }: { kind: TagKind }) {
   const [tags, setTags] = useLocalCollection<MasterTag>(tagsStorageKey, initialTags);
-  const [kind, setKind] = useState<TagKind>("customer");
   const [form, setForm] = useState<TagForm>(emptyForm);
+  // null=未選択 / ""=新規 / id=編集。
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
 
-  const shown = tags.filter((t) => t.kind === kind).sort(compareBySortOrder);
+  const hasCode = kind !== "customer";
+  const label = tagKindLabels[kind];
+  const shown = useMemo(() => tags.filter((t) => t.kind === kind).sort(compareBySortOrder), [tags, kind]);
 
   function resetForm() {
     setForm(emptyForm);
     setEditingId(null);
+  }
+
+  function startCreate() {
+    setForm(emptyForm);
+    setEditingId("");
+    setMessage(null);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -37,7 +45,7 @@ export function TagManager() {
     }
     const payload = {
       name: normalizeText(form.name),
-      code: normalizeText(form.code),
+      code: hasCode ? normalizeText(form.code) : "",
       sortOrder: Number(form.sortOrder) || 0,
       kind,
       isActive: form.isActive
@@ -64,94 +72,64 @@ export function TagManager() {
     setMessage({ type: "success", text: "タグを削除しました。" });
   }
 
-  return (
-    <MasterPage title="タグ管理" description="顧客タグ／予約ルートタグ／施術カルテタグを管理します。予約受付や顧客検索で参照します。">
-      <div className="mb-4 inline-flex overflow-hidden rounded-md border border-luxas-line">
-        {KINDS.map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => {
-              setKind(k);
-              resetForm();
-            }}
-            className={["px-4 py-2 text-sm font-medium transition", kind === k ? "bg-luxas-green text-white" : "bg-white text-stone-600 hover:bg-luxas-paper"].join(" ")}
-          >
-            {tagKindLabels[k]}
-          </button>
-        ))}
-      </div>
+  const columns: MasterColumn<MasterTag>[] = [
+    { key: "id", header: "ID", render: (i) => <span className="font-mono text-xs text-stone-400">{i.id.slice(0, 8)}</span> },
+    { key: "name", header: "名前", render: (i) => <span className="font-medium text-luxas-ink">{i.name}</span> },
+    ...(hasCode ? [{ key: "code", header: "管理コード", render: (i: MasterTag) => i.code || "—" }] : []),
+    { key: "sortOrder", header: "表示順", render: (i) => i.sortOrder },
+    { key: "status", header: "状態", render: (i) => <ActiveBadge isActive={i.isActive} /> }
+  ];
 
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <section className="rounded-lg border border-luxas-line bg-white p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-luxas-ink">
-              {editingId ? "タグを編集" : "タグを追加"}（{tagKindLabels[kind]}）
-            </h2>
-            {editingId ? (
-              <button type="button" className="inline-flex items-center gap-1 rounded-md border border-luxas-line px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-luxas-paper" onClick={resetForm}>
-                <RotateCcw size={14} aria-hidden="true" />
-                解除
-              </button>
-            ) : null}
-          </div>
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <TextField label="タグ名" value={form.name} onChange={(v) => setForm((c) => ({ ...c, name: v }))} placeholder="例: VIP / Instagram" required />
+  function renderDetail() {
+    return (
+      <div>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-luxas-ink">{editingId ? "タグを編集" : "タグを追加"}</h2>
+          {editingId !== null ? (
+            <button type="button" className="inline-flex items-center gap-1 rounded-md border border-luxas-line px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-luxas-paper" onClick={resetForm}>
+              <RotateCcw size={14} aria-hidden="true" />
+              閉じる
+            </button>
+          ) : null}
+        </div>
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <TextField label="タグ名" value={form.name} onChange={(v) => setForm((c) => ({ ...c, name: v }))} placeholder="例: VIP / Instagram" required />
+          {hasCode ? (
             <TextField label="管理コード（任意）" value={form.code} onChange={(v) => setForm((c) => ({ ...c, code: v }))} placeholder="例: IG" />
-            <TextField label="表示順" value={form.sortOrder} onChange={(v) => setForm((c) => ({ ...c, sortOrder: v }))} type="number" min="0" />
-            <ToggleField label="有効にする" checked={form.isActive} onChange={(v) => setForm((c) => ({ ...c, isActive: v }))} />
-            <StatusMessage message={message} />
-            <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#285f51]">
+          ) : null}
+          <TextField label="表示順" value={form.sortOrder} onChange={(v) => setForm((c) => ({ ...c, sortOrder: v }))} type="number" min="0" />
+          <ToggleField label="有効にする" checked={form.isActive} onChange={(v) => setForm((c) => ({ ...c, isActive: v }))} />
+          <StatusMessage message={message} />
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="submit" className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#285f51]">
               <Plus size={17} aria-hidden="true" />
               {editingId ? "更新する" : "追加する"}
             </button>
-          </form>
-        </section>
-
-        <section className="rounded-lg border border-luxas-line bg-white">
-          <div className="border-b border-luxas-line px-5 py-4">
-            <h2 className="text-base font-semibold text-luxas-ink">{tagKindLabels[kind]}一覧</h2>
-            <p className="mt-1 text-sm text-stone-500">{shown.length}件</p>
+            {editingId ? (
+              <button type="button" className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-3 text-sm font-medium text-red-700 hover:bg-red-50" onClick={() => handleDelete(editingId)}>
+                <Trash2 size={15} aria-hidden="true" />
+                削除
+              </button>
+            ) : null}
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-luxas-paper text-xs font-semibold text-stone-500">
-                <tr>
-                  <th className="px-5 py-3">タグ名</th>
-                  <th className="px-5 py-3">コード</th>
-                  <th className="px-5 py-3">表示順</th>
-                  <th className="px-5 py-3">状態</th>
-                  <th className="px-5 py-3 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-luxas-line">
-                {shown.map((item) => (
-                  <tr key={item.id}>
-                    <td className="whitespace-nowrap px-5 py-4 font-medium text-luxas-ink">{item.name}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">{item.code || "—"}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">{item.sortOrder}</td>
-                    <td className="whitespace-nowrap px-5 py-4">
-                      <ActiveBadge isActive={item.isActive} />
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 text-right">
-                      <div className="inline-flex gap-2">
-                        <button type="button" className="inline-flex items-center gap-1 rounded-md border border-luxas-line px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-luxas-paper" onClick={() => handleEdit(item)}>
-                          <Pencil size={14} aria-hidden="true" />
-                          編集
-                        </button>
-                        <button type="button" className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50" onClick={() => handleDelete(item.id)}>
-                          <Trash2 size={14} aria-hidden="true" />
-                          削除
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        </form>
       </div>
+    );
+  }
+
+  return (
+    <MasterPage title={`${label}管理`} description={`${label}を管理します。予約受付や顧客検索で参照します（PM準拠・種別ごとに独立画面）。`}>
+      <MasterSplitPanel
+        items={shown}
+        columns={columns}
+        searchKeys={["name", "code"]}
+        selectedId={editingId}
+        onSelect={handleEdit}
+        onCreate={startCreate}
+        renderDetail={renderDetail}
+        searchPlaceholder="名前で検索"
+        createLabel="新規作成"
+      />
     </MasterPage>
   );
 }

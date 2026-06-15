@@ -21,7 +21,11 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "返客一覧", href: "/dashboard/reservations/returns" },
       { label: "物販販売", href: "/dashboard/retail" },
       { label: "シフト", href: "/dashboard/shifts" },
-      { label: "月間シフト", href: "/dashboard/shifts/monthly" }
+      { label: "月間シフト", href: "/dashboard/shifts/monthly" },
+      { label: "本日のオンライン設定", href: "/dashboard/online-blocks" },
+      { label: "シフトひな型", href: "/dashboard/shift-templates" },
+      { label: "シフトパターン", href: "/dashboard/shift-patterns" },
+      { label: "データ不備のお知らせ", href: "/dashboard/data-errors" }
     ]
   },
   {
@@ -29,6 +33,13 @@ const NAV_GROUPS: NavGroup[] = [
     label: "日次管理",
     items: [
       { label: "日次管理", href: "/dashboard/daily" },
+      { label: "出勤・退勤", href: "/dashboard/attendance" },
+      { label: "開店処理", href: "/dashboard/open-register" },
+      { label: "レジ金点検", href: "/dashboard/check-register" },
+      { label: "閉店処理", href: "/dashboard/close-register" },
+      { label: "閉店処理検索", href: "/dashboard/close-history" },
+      { label: "売上日報", href: "/dashboard/daily-report" },
+      { label: "月間目標入力", href: "/dashboard/shifts/monthly" },
       { label: "経費マスタ", href: "/dashboard/expense-accounts" }
     ]
   },
@@ -40,7 +51,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "スタッフ", href: "/dashboard/staff" },
       { label: "ブース", href: "/dashboard/rooms" },
       { label: "クレカ会社", href: "/dashboard/creditcards" },
-      { label: "電子マネー", href: "/dashboard/emoney" }
+      { label: "電子マネー", href: "/dashboard/emoney" },
+      { label: "ユーザ情報", href: "/dashboard/users" }
     ]
   },
   {
@@ -49,7 +61,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "顧客管理", href: "/dashboard/customers" },
       { label: "顧客フル検索", href: "/dashboard/customers/search" },
-      { label: "タグ管理", href: "/dashboard/tags" },
+      { label: "顧客タグ", href: "/dashboard/customer-tags" },
+      { label: "予約ルートタグ", href: "/dashboard/route-tags" },
+      { label: "施術カルテタグ", href: "/dashboard/chart-tags" },
       { label: "CSV入出力", href: "/dashboard/import-export" }
     ]
   },
@@ -66,7 +80,17 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "EPARK掲載設定", href: "/dashboard/epark" }
     ]
   },
-  { key: "mail", label: "メール管理", href: "/dashboard/mail" },
+  {
+    key: "mail",
+    label: "メール管理",
+    items: [
+      { label: "配信履歴", href: "/dashboard/mail" },
+      { label: "配信一括停止", href: "/dashboard/mail/cancel" },
+      { label: "定型文設定", href: "/dashboard/mail/templates" },
+      { label: "eDM設定", href: "/dashboard/mail/edm" },
+      { label: "シンプルeDM", href: "/dashboard/mail/edm-simple" }
+    ]
+  },
   {
     key: "analytics",
     label: "経営指標",

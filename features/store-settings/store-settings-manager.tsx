@@ -6,6 +6,21 @@ import { TextField, ToggleField } from "@/features/master-data/form-controls";
 import { MasterPage } from "@/features/master-data/master-page";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import { useStoreSettings, type StoreSettings } from "@/features/master-data/store-settings";
+import { useLocalCollection } from "@/features/master-data/local-storage";
+import {
+  creditCardsStorageKey,
+  emoneyStorageKey,
+  initialCreditCards,
+  initialEmoney
+} from "@/features/master-data/mock-data";
+import type { CreditCardCompany, EmoneyBrand } from "@/features/master-data/types";
+
+const BASIC_FIELDS = [
+  "companyId", "areaId", "storeId", "storeCode", "storeName", "storeShortName",
+  "postalCode", "prefecture", "city", "address2", "phone", "fax", "email",
+  "hpUrl", "department", "managerName", "themeColor"
+] as const;
+type BasicField = (typeof BASIC_FIELDS)[number];
 
 type StoreSettingsForm = {
   businessStartTime: string;
@@ -24,7 +39,7 @@ type StoreSettingsForm = {
   onlineReservationEnabled: boolean;
   notifyEmail: string;
   invoiceRegistrationNumber: string;
-};
+} & Record<BasicField, string>;
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -45,9 +60,30 @@ function toForm(settings: StoreSettings): StoreSettingsForm {
     hpClosedDaysText: settings.hpClosedDaysText ?? "",
     onlineReservationEnabled: settings.onlineReservationEnabled ?? false,
     notifyEmail: settings.notifyEmail ?? "",
-    invoiceRegistrationNumber: settings.invoiceRegistrationNumber ?? ""
+    invoiceRegistrationNumber: settings.invoiceRegistrationNumber ?? "",
+    ...Object.fromEntries(BASIC_FIELDS.map((f) => [f, (settings[f] as string | undefined) ?? ""])) as Record<BasicField, string>
   };
 }
+
+const BASIC_LABELS: Record<BasicField, string> = {
+  companyId: "企業ID",
+  areaId: "エリアID",
+  storeId: "店舗ID",
+  storeCode: "店舗コード",
+  storeName: "店舗名",
+  storeShortName: "略称",
+  postalCode: "郵便番号",
+  prefecture: "都道府県",
+  city: "市区町村番地",
+  address2: "住所2",
+  phone: "電話",
+  fax: "FAX",
+  email: "メール",
+  hpUrl: "HP URL",
+  department: "担当部署",
+  managerName: "担当者名",
+  themeColor: "背景色設定"
+};
 
 function Section({ title, summary, children }: { title: string; summary: string; children: ReactNode }) {
   return (
@@ -65,6 +101,8 @@ export function StoreSettingsManager() {
   const [settings, setSettings, isHydrated] = useStoreSettings();
   const [form, setForm] = useState<StoreSettingsForm>(() => toForm(settings));
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
+  const [creditCards] = useLocalCollection<CreditCardCompany>(creditCardsStorageKey, initialCreditCards);
+  const [emoney] = useLocalCollection<EmoneyBrand>(emoneyStorageKey, initialEmoney);
 
   // localStorage からの読み込み（ハイドレーション）後にフォームを最新値へ同期する。
   useEffect(() => {
@@ -126,7 +164,8 @@ export function StoreSettingsManager() {
       hpClosedDaysText: form.hpClosedDaysText,
       onlineReservationEnabled: form.onlineReservationEnabled,
       notifyEmail: form.notifyEmail,
-      invoiceRegistrationNumber: form.invoiceRegistrationNumber
+      invoiceRegistrationNumber: form.invoiceRegistrationNumber,
+      ...Object.fromEntries(BASIC_FIELDS.map((f) => [f, form[f]]))
     }));
     setMessage({ type: "success", text: "店舗設定を保存しました。" });
   }
@@ -144,6 +183,20 @@ export function StoreSettingsManager() {
 
       <form className="grid gap-4 xl:grid-cols-[640px_1fr]" onSubmit={handleSubmit}>
         <div className="space-y-3">
+          <Section title="基本情報" summary="PM店舗マスタの基本フィールド（表示/保持のみ）">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {BASIC_FIELDS.map((field) => (
+                <TextField
+                  key={field}
+                  label={BASIC_LABELS[field]}
+                  value={form[field]}
+                  onChange={(v) => update(field, v)}
+                  placeholder={field === "themeColor" ? "例: #2f6e5e" : undefined}
+                />
+              ))}
+            </div>
+          </Section>
+
           <Section title="業務設定（営業時間・予約単位）" summary="タイムラインに連動">
             <div className="grid gap-4 sm:grid-cols-2">
               <TextField label="営業開始時刻" type="time" value={form.businessStartTime} onChange={(v) => update("businessStartTime", v)} required />
@@ -185,6 +238,40 @@ export function StoreSettingsManager() {
 
           <Section title="インボイス設定" summary="登録番号の保持">
             <TextField label="適格請求書 登録番号" value={form.invoiceRegistrationNumber} onChange={(v) => update("invoiceRegistrationNumber", v)} placeholder="例: T1234567890123" />
+          </Section>
+
+          <Section title="利用可能クレジットカード会社一覧" summary="クレカ会社マスタを参照（編集はクレカ会社マスタで）">
+            <ul className="space-y-1 text-sm text-stone-700">
+              {creditCards.filter((c) => c.isActive).length === 0 ? (
+                <li className="text-stone-500">有効なクレジットカード会社がありません。</li>
+              ) : (
+                creditCards.filter((c) => c.isActive).map((c) => (
+                  <li key={c.id} className="flex items-center justify-between border-b border-luxas-line pb-1 last:border-0">
+                    <span>{c.name}</span>
+                    <span className="text-xs text-stone-500">手数料率 {c.feePercent}%</span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </Section>
+
+          <Section title="利用可能電子マネー一覧" summary="電子マネーマスタを参照（編集は電子マネーマスタで）">
+            <ul className="space-y-1 text-sm text-stone-700">
+              {emoney.filter((e) => e.isActive).length === 0 ? (
+                <li className="text-stone-500">有効な電子マネーがありません。</li>
+              ) : (
+                emoney.filter((e) => e.isActive).map((e) => (
+                  <li key={e.id} className="flex items-center justify-between border-b border-luxas-line pb-1 last:border-0">
+                    <span>{e.name}</span>
+                    <span className="text-xs text-stone-500">手数料率 {e.feePercent}%</span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </Section>
+
+          <Section title="店舗サマリ / ウィジェット" summary="表示のみ（PM準拠の枠）">
+            <p className="text-sm text-stone-600">店舗サマリ・予約ウィジェットの設定枠です（v0.1 は表示のみ・外部連携なし）。</p>
           </Section>
 
           <StatusMessage message={message} />

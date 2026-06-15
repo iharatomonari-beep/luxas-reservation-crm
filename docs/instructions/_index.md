@@ -68,21 +68,20 @@
 | 51 | T051 | `tasks/T051-master-split-panel-component.md` | 完了 | CAUTION | 【完了・lint/build OK／単体は画面変化なし】【共通UI】PMスプリットパネル・マスタUIコンポーネント新規（左一覧+検索/新規、右明細設定）。既存画面は未変更 | 依存追加STOP／lint・build失敗で停止 |
 | 52 | T052 | `tasks/T052-masters-to-split-panel.md` | 実行中 | CAUTION | 【7/7実装済・実機確認待ち（スタッフ/ブース/経費/クレカ/電子マネー/カテゴリ=スプリット化、顧客=既存充実検索構成に会員番号/ID列追加）。lint/build OK・プレビューでスタッフ/クレカ確認済】【マスタ統一】スタッフ/ブース/経費/クレカ/電子マネー/顧客/カテゴリをT051形式へ（1画面ずつ）＋不足列。CRUD維持 | データ構造変更で停止／1画面ずつ／実機確認 |
 | 53 | T053 | `tasks/T053-products-expand.md` | 完了 | CAUTION | 【完了 2026-06-15・実機OK（セット商品/物販カテゴリ/EPARK表示確認OK）。①〜④実装済。①オンライン予約○×／②セット商品/dashboard/course-sets新規／③物販カテゴリ/dashboard/retail-categories新規(省略名追加・既存データ共有・破壊的再シードなし)／④EPARK設定/dashboard/epark新規。メニュー導線追加・lint/build OK(35頁)】【商品拡充】メニュー/オプションにオンライン予約○×＋セット商品/物販カテゴリ/EPARK掲載 新規（1項目ずつ） | 再シードで既存物販破壊なら停止／依存追加STOP／実機確認 |
-| 54 | T054 | `tasks/T054-tags-split-three.md` | 未実行 | CAUTION | 【タグ3分割】顧客/予約ルート/施術カルテの3画面＋管理コード。既存タグ参照維持 | データ移行は推奨で最小実装報告／指定外STOP／実機確認 |
-| 55 | T055 | `tasks/T055-daily-ops-split.md` | 未実行 | CAUTION | 【日次分割】開店/レジ金点検/閉店/閉店検索/売上日報(PM全項目)/出勤退勤 を独立画面に（1画面ずつ） | 締め/現金確定の実処理は作らない停止／1画面ずつ／実機確認 |
-| 56 | T056 | `tasks/T056-mail-five-screens.md` | 未実行 | CAUTION | 【メール5画面】配信履歴/配信取消/定型文/eDM/シンプルeDM（実送信なしモック） | 実送信/外部連携/依存追加STOP／1画面ずつ／実機確認 |
-| 57 | T057 | `tasks/T057-analytics-reports-pm.md` | 未実行 | CAUTION | 【経営指標拡充】スタッフ別/商品別/物販/時間帯/日次/クレカ別/顧客数推移＋CSV。帳票出力リンク集 | グラフlib/依存追加STOP／会計未整備は0+注記／実機確認 |
-| 58 | T058 | `tasks/T058-store-settings-form-pm.md` | 未実行 | CAUTION | 【店舗設定拡張】PM店舗マスタの基本フィールド＋アコーディオン群。営業時間連動維持 | 外部連携/決済/認証STOP／台帳連動維持／実機確認 |
-| 59 | T059 | `tasks/T059-remaining-new-screens.md` | 未実行 | CAUTION | 【残り新規画面】本日のオンライン設定/シフトひな型/シフトパターン/データ不備/ユーザマスタ(表示のみ)（1画面ずつ） | 認証/権限実装STOP／1画面ずつ／実機確認 |
-| 60 | T060 | `tasks/T060-top-menu-complete-pm.md` | 未実行 | CAUTION | 【ナビ最終化】上部メニューをPM店舗8グループ全項目に（各ページ完成後）。死にリンク禁止。top-menu.tsx | 未実装へのリンクは載せず報告／指定外STOP／実機確認 |
-| 61 | T061 | `tasks/T061-org-hierarchy-types-seed.md` | 未実行 | CAUTION | 【外販SaaS土台】tenant→area→store 階層の型・初期データを最小・非破壊で追加（features/org/ 新規。既存型/データ/画面は不変、強制FK追加なし）。株式会社東邦→東京→LUXAS渋谷 1件＋currentStoreId="store-shibuya" | 既存型/キー/画面の変更が要れば停止／依存追加STOP／lint・build失敗で停止 |
+| 54 | T054 | `tasks/T054-tags-split-three.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／顧客タグ・予約ルートタグ・施術カルテタグの3画面に分離（tag-managerをkind固定化＋スプリット化）。管理コードはroute/karteのみ。旧/dashboard/tagsは/customer-tagsへredirect。menu3項目。lint/build OK(38頁)】【タグ3分割】顧客/予約ルート/施術カルテの3画面＋管理コード。既存タグ参照維持 | データ移行は推奨で最小実装報告／指定外STOP／実機確認 |
+| 55 | T055 | `tasks/T055-daily-ops-split.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／DailyOpsにviewプロップ追加し6独立ルート化（出勤退勤/開店/点検/閉店/閉店処理検索/売上日報）＋日報をPM全項目(本日の結果/達成度/提案数/明日の予定/実施プラン/振り返り/シフト状況/天気)に拡張・一時保存/送信(モック)。締め/現金確定の実処理は作らず。旧/dashboard/dailyは統合タブ維持。menu追加。lint/build OK(44頁)】【日次分割】開店/レジ金点検/閉店/閉店検索/売上日報(PM全項目)/出勤退勤 を独立画面に（1画面ずつ） | 締め/現金確定の実処理は作らない停止／1画面ずつ／実機確認 |
+| 56 | T056 | `tasks/T056-mail-five-screens.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／MailManagerにviewプロップ追加し5ルート化(配信履歴=/mail・配信一括停止=/mail/cancel・定型文=/mail/templates・eDM=/mail/edm・シンプルeDM=/mail/edm-simple)。AutoTabにmode(edm/simple)絞り込み追加・CancelTab新規。実送信なしモック。menu5項目。lint/build OK(48頁)】【メール5画面】配信履歴/配信取消/定型文/eDM/シンプルeDM（実送信なしモック） | 実送信/外部連携/依存追加STOP／1画面ずつ／実機確認 |
+| 57 | T057 | `tasks/T057-analytics-reports-pm.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／詳細帳票(analytics-detail-reports)にスタッフ別/商品別/物販/時間帯別来店/帳票出力リンク集タブを追加（既存の売上明細/クレカ別/日次/顧客数推移に加え計9タブ）。各CSV出力(serializeCsv流用)・グラフlib追加なし。物販/会計未整備は0+注記】【経営指標拡充】スタッフ別/商品別/物販/時間帯/日次/クレカ別/顧客数推移＋CSV。帳票出力リンク集 | グラフlib/依存追加STOP／会計未整備は0+注記／実機確認 |
+| 58 | T058 | `tasks/T058-store-settings-form-pm.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／StoreSettingsにPM基本情報17項目(企業/エリア/店舗ID・コード・名称・略称・住所・電話/FAX/メール・HP・担当・背景色)を任意追加＋「基本情報」セクション。クレカ/電子マネー一覧(マスタ参照・読取)・店舗サマリ/ウィジェット枠を追加。営業時間連動キーは不変。lint/build OK】【店舗設定拡張】PM店舗マスタの基本フィールド＋アコーディオン群。営業時間連動維持 | 外部連携/決済/認証STOP／台帳連動維持／実機確認 |
+| 59 | T059 | `tasks/T059-remaining-new-screens.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／5画面追加: 本日のオンライン設定(/online-blocks)・シフトひな型(/shift-templates)・シフトパターン(/shift-patterns・スプリット)・データ不備(/data-errors・スプリット)・ユーザマスタ(/users・表示のみ・認証非接触)。menu導線追加。lint/build OK(53頁)】【残り新規画面】本日のオンライン設定/シフトひな型/シフトパターン/データ不備/ユーザマスタ(表示のみ)（1画面ずつ） | 認証/権限実装STOP／1画面ずつ／実機確認 |
+| 60 | T060 | `tasks/T060-top-menu-complete-pm.md` | 実行中 | CAUTION | 【実装済・実機確認待ち／上部メニューをPM8グループ構成に最終調整。データ不備を予約台帳グループへ・ユーザ情報を店舗情報へ・月間目標入力を日次管理へ。全46リンクが実在ルートに対応＝死にリンク0（スクリプト検証済）。lint/build OK】【ナビ最終化】上部メニューをPM店舗8グループ全項目に（各ページ完成後）。死にリンク禁止。top-menu.tsx | 未実装へのリンクは載せず報告／指定外STOP／実機確認 |
+| 61 | T061 | `tasks/T061-org-hierarchy-types-seed.md` | 完了 | CAUTION | 【完了 2026-06-15・既存画面不変・lint/build OK（UIなしのため実機確認不要）】【外販SaaS土台】tenant→area→store 階層の型・初期データを最小・非破壊で追加（features/org/ 新規。既存型/データ/画面は不変、強制FK追加なし）。株式会社東邦→東京→LUXAS渋谷 1件＋currentStoreId="store-shibuya" | 既存型/キー/画面の変更が要れば停止／依存追加STOP／lint・build失敗で停止 |
 
-> 【現況 2026-06-15 更新】
-> - 完了: T001〜T047, T051, T053（T046/T047/T053はユーザー実機OK・T051は画面変化なし）。
-> - 実行中（実装済・実機確認待ち）: **T048 / T049 / T050 / T052(7/7実装済)**。lint/build OK。ユーザーの一括実機確認後に「完了」化予定。
-> - 未実行: **T054 / T055 / T056 / T057 / T058 / T059 / T060 / T061**。次に着手するタスクは **T054**（reservation-ledger.tsx は触らない）。
-> - T061 は外販SaaS土台（org階層の型・初期データのみ・非破壊）。番号は最後だが他と独立で着手可。
-> T054以降は**番号順に1つずつ**実行する。同一ファイルを編集するタスクの並行実行は禁止（特に reservation-ledger.tsx を触るタスクは1つずつ）。
+> 【現況 2026-06-15 再更新】
+> - 完了: T001〜T047, T051, T053, T061（実機OK or UIなし）。
+> - 実行中（実装済・lint/build OK・実機確認待ち）: **T048 / T049 / T050 / T052 / T054 / T055 / T056 / T057 / T058 / T059 / T060**。
+> - 未実行タスクはありません（T046〜T061 すべて実装完了）。残るはユーザーの一括実機確認のみ→確認後に上記を「完了」化。
+> - 全体ビルド: 53ページ・lint/build エラー0・上部メニュー死にリンク0。reservation-ledger.tsx を触るのはT046/T047のみ（完了済）。
 > 各タスクは安全レベル（ほぼCAUTION）に従い、完了条件・検証（lint/build＋実機確認）を満たしてから「完了」にする。STOP対象（削除/DB/認証/env/依存追加/実送信/外部決済/PMデータ変更）は止めて報告。
 > 全体方針: PMに忠実に寄せる。設計の正本は `~/Desktop/pm_スクリーンショット/LUXAS_docs/pm-screen-structure-reference.md` と `pm-match-build-roadmap.md`。
 > PM配置寄せの予定（台帳）: Step1=T042【完了】。続き（番号は作成時に採番）= 表示切替の5タブ化（基本/全体/シフト/ブース/両方）＋ドラッグ用横長バー＋シフト追加ボタン＋予約集計バーをタイムライン下へ／上部バー仕上げ（`<今日>`コンパクト・再読込・天気・すべて絞り込み・店舗セレクタ・時計）。これらはユーザーの優先順に応じてCoworkが順次作成。
