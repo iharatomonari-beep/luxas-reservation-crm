@@ -10,6 +10,7 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import { staffRoleLabels, type ServiceMenu, type StaffMember, type StaffRole } from "@/features/master-data/types";
 import { compareBySortOrder, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { useCurrentStore } from "@/features/org/use-current-store";
 
 type StaffForm = {
   fullName: string;
@@ -18,6 +19,9 @@ type StaffForm = {
   sortOrder: string;
   serviceMenuIds: string[];
   isActive: boolean;
+  homeStoreId: string;
+  startDate: string;
+  endDate: string;
 };
 
 const emptyForm: StaffForm = {
@@ -26,7 +30,10 @@ const emptyForm: StaffForm = {
   role: "therapist",
   sortOrder: "10",
   serviceMenuIds: [],
-  isActive: true
+  isActive: true,
+  homeStoreId: "",
+  startDate: "",
+  endDate: ""
 };
 
 const roles = Object.entries(staffRoleLabels) as [StaffRole, string][];
@@ -34,6 +41,9 @@ const roles = Object.entries(staffRoleLabels) as [StaffRole, string][];
 export function StaffManager() {
   const [staff, setStaff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
+  const { stores } = useCurrentStore();
+  const storeOptions = useMemo(() => [...stores].filter((s) => s.isActive).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)), [stores]);
+  const storeName = (id?: string) => (id ? stores.find((s) => s.id === id)?.name ?? id : "—");
   const [form, setForm] = useState<StaffForm>(emptyForm);
   // null=未選択（右ペイン非表示）/ ""=新規 / id=編集。
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -83,7 +93,10 @@ export function StaffManager() {
       role: form.role,
       sortOrder: Number(form.sortOrder),
       serviceMenuIds: form.serviceMenuIds,
-      isActive: form.isActive
+      isActive: form.isActive,
+      homeStoreId: form.homeStoreId || undefined,
+      startDate: form.startDate || undefined,
+      endDate: form.endDate || undefined
     };
 
     if (editingId) {
@@ -105,19 +118,19 @@ export function StaffManager() {
       role: item.role,
       sortOrder: String(item.sortOrder ?? 10),
       serviceMenuIds: item.serviceMenuIds ?? [],
-      isActive: item.isActive
+      isActive: item.isActive,
+      homeStoreId: item.homeStoreId ?? "",
+      startDate: item.startDate ?? "",
+      endDate: item.endDate ?? ""
     });
     setMessage(null);
   }
 
-  function handleDelete(id: string) {
-    setStaff((current) => current.filter((item) => item.id !== id));
-
-    if (editingId === id) {
-      resetForm();
-    }
-
-    setMessage({ type: "success", text: "スタッフを削除しました。" });
+  // 物理削除はしない（過去予約・会計の担当名解決のためデータは残す）。無効化＝新規候補・台帳縦軸から外す。
+  function handleDeactivate(id: string) {
+    setStaff((current) => current.map((item) => (item.id === id ? { ...item, isActive: false } : item)));
+    setForm((current) => ({ ...current, isActive: false }));
+    setMessage({ type: "success", text: "スタッフを「表示しない（無効）」にしました。過去予約の担当名は引き続き表示されます。" });
   }
 
   const columns: MasterColumn<StaffMember>[] = [
@@ -125,6 +138,7 @@ export function StaffManager() {
     { key: "fullName", header: "氏名", render: (s) => <span className="font-medium text-luxas-ink">{s.fullName}</span> },
     { key: "displayName", header: "ニックネーム", render: (s) => s.displayName },
     { key: "role", header: "役割", render: (s) => staffRoleLabels[s.role] },
+    { key: "homeStore", header: "所属店舗", render: (s) => storeName(s.homeStoreId) },
     { key: "sortOrder", header: "表示順", render: (s) => s.sortOrder ?? 0 },
     { key: "status", header: "状態", render: (s) => <ActiveBadge isActive={s.isActive} /> }
   ];
@@ -181,6 +195,39 @@ export function StaffManager() {
               min="0"
               required
               hint="小さい番号を上に表示します"
+            />
+          </div>
+          <div>
+            <SelectField
+              label="所属店舗"
+              value={form.homeStoreId}
+              onChange={(value) => setForm((current) => ({ ...current, homeStoreId: value }))}
+            >
+              <option value="">未設定（既定店舗）</option>
+              {storeOptions.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.name}
+                </option>
+              ))}
+            </SelectField>
+            <p className="mt-1.5 text-xs text-stone-500">
+              未設定は既定店舗（渋谷）扱い。台帳の縦軸はシフト基準で表示され、所属だけでは表示されません。
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="開始日"
+              type="date"
+              value={form.startDate}
+              onChange={(value) => setForm((current) => ({ ...current, startDate: value }))}
+              hint="在籍の開始日（任意）"
+            />
+            <TextField
+              label="終了日"
+              type="date"
+              value={form.endDate}
+              onChange={(value) => setForm((current) => ({ ...current, endDate: value }))}
+              hint="在籍の終了日（任意）。終了後は無効化して新規候補・台帳から外す運用です。"
             />
           </div>
           <section className="rounded-md border border-luxas-line bg-white p-3">
@@ -242,10 +289,13 @@ export function StaffManager() {
             )}
           </section>
           <ToggleField
-            label="有効にする"
+            label="表示する（有効）"
             checked={form.isActive}
             onChange={(value) => setForm((current) => ({ ...current, isActive: value }))}
           />
+          <p className="text-xs text-stone-500">
+            ※ スタッフは物理削除しません。「表示しない（無効）」にすると新規候補・台帳の縦軸から外れますが、過去予約・会計の担当名は引き続き表示されます。
+          </p>
           <StatusMessage message={message} />
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -255,14 +305,14 @@ export function StaffManager() {
               <Plus size={17} aria-hidden="true" />
               {editingId ? "更新する" : "追加する"}
             </button>
-            {editingId ? (
+            {editingId && form.isActive ? (
               <button
                 type="button"
-                className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-3 text-sm font-medium text-red-700 hover:bg-red-50"
-                onClick={() => handleDelete(editingId)}
+                className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-3 text-sm font-medium text-amber-800 hover:bg-amber-50"
+                onClick={() => handleDeactivate(editingId)}
               >
                 <Trash2 size={15} aria-hidden="true" />
-                削除
+                表示しない（無効化）
               </button>
             ) : null}
           </div>

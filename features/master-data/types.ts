@@ -8,6 +8,12 @@ export type StaffMember = {
   sortOrder: number;
   serviceMenuIds: string[];
   isActive: boolean;
+  /** 所属店舗ID（T064・任意）。未設定＝既定店舗 store-shibuya 扱い。台帳縦軸はシフト基準で表示し、所属だけでは表示しない。 */
+  homeStoreId?: string;
+  /** 在籍 開始日（"YYYY-MM-DD"・任意・T064）。 */
+  startDate?: string;
+  /** 在籍 終了日（"YYYY-MM-DD"・任意・T064）。在籍終了後は新規候補・台帳縦軸に出さない運用（過去予約の名前解決のためデータは残す）。 */
+  endDate?: string;
 };
 
 export type ServiceMenu = {
@@ -58,6 +64,8 @@ export type StaffShift = {
   breakEnd: string;
   memo: string;
   isActive: boolean;
+  /** 勤務店舗ID（T064・任意）。未設定＝既定店舗 store-shibuya のシフト扱い。ヘルプ勤務は応援先店舗の storeId を持つシフトで表現する。 */
+  storeId?: string;
 };
 
 export const staffRoleLabels: Record<StaffRole, string> = {

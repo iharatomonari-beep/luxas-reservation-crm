@@ -11,6 +11,7 @@ import {
 } from "@/features/master-data/mock-data";
 import type { StaffMember, StaffShift } from "@/features/master-data/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { useCurrentStore } from "@/features/org/use-current-store";
 
 export const dailyTargetsStorageKey = "luxas-daily-targets";
 
@@ -26,6 +27,7 @@ export function MonthlyShiftGrid() {
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [shifts, setShifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
   const [targets, setTargets] = useLocalCollection<DailyTarget>(dailyTargetsStorageKey, []);
+  const { currentStoreId } = useCurrentStore();
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -64,7 +66,9 @@ export function MonthlyShiftGrid() {
           breakStart: "",
           breakEnd: "",
           memo: "",
-          isActive: true
+          isActive: true,
+          // 新規シフトに現在店舗を付与（T064）。既存シフトには一括付与しない。
+          storeId: currentStoreId
         }
       ];
     });

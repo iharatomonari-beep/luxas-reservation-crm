@@ -29,6 +29,7 @@ import type { MasterTag, RetailSale, ServiceMenu, ServiceOption, ServiceRoom, St
 import { initialStoreSettings, useStoreSettings } from "@/features/master-data/store-settings";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import { isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import {
@@ -355,11 +356,20 @@ export function ReservationLedger() {
     () => normalizedReservations.filter((r) => holdShelf.includes(r.id)),
     [normalizedReservations, holdShelf]
   );
-  const timelineStaff = useMemo(() => getVisibleStaffForSelectedDate(activeStaff, selectedDate, shifts), [
+  // 現在店舗のシフトだけに絞る（T064・非破壊）。storeId未設定の既存シフトは既定店舗(渋谷)扱い。
+  // 名前解決用の full `staff` 配列は絞らない（縦軸・担当候補のみ店舗スコープ）。
+  const storeShifts = useMemo(() => filterShiftsByStore(shifts, currentStoreId), [shifts, currentStoreId]);
+  // 縦軸＝現在店舗で選択日に有効シフトがあるスタッフのみ（所属だけでは出さない／シフトが無ければ空）。
+  const timelineStaff = useMemo(() => getVisibleStaffForSelectedDate(activeStaff, selectedDate, storeShifts), [
     activeStaff,
     selectedDate,
-    shifts
+    storeShifts
   ]);
+  // 担当候補＝現在店舗でフォーム日付に有効シフトがある有効スタッフ（編集時は選択中スタッフを別途保持）。
+  const formCandidateStaff = useMemo(
+    () => getVisibleStaffForSelectedDate(activeStaff, form.date, storeShifts),
+    [activeStaff, form.date, storeShifts]
+  );
   const selectedReservation =
     selectedReservationId ? normalizedReservations.find((reservation) => reservation.id === selectedReservationId) ?? null : null;
   const selectedReservationCustomer = getCustomerByReservation(selectedReservation);
@@ -499,8 +509,8 @@ export function ReservationLedger() {
     [activeServices, form.serviceMenuId, reservationFormMode, services]
   );
   const formStaffOptions = useMemo(
-    () => buildSelectableStaff(activeStaff, staff, form.serviceMenuId, form.staffId, reservationFormMode),
-    [activeStaff, form.serviceMenuId, form.staffId, reservationFormMode, staff]
+    () => buildSelectableStaff(formCandidateStaff, staff, form.serviceMenuId, form.staffId, reservationFormMode),
+    [formCandidateStaff, form.serviceMenuId, form.staffId, reservationFormMode, staff]
   );
   const debugCounts = {
     selectedDate,

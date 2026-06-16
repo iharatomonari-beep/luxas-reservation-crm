@@ -8,6 +8,7 @@ import { initialCustomers, customersStorageKey } from "@/features/customers/mock
 import type { Customer } from "@/features/customers/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useCurrentStore } from "@/features/org/use-current-store";
+import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import {
   hasBoothCapacity,
   initialRooms,
@@ -104,7 +105,27 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
 
   const selectedService = services.find((service) => service.id === form.serviceMenuId) ?? null;
   const matchedCustomer = findCustomerForReservationForm(form, customers);
-  const staffOptions = buildSelectableStaff(activeStaff, staff, form.serviceMenuId, form.staffId);
+  // 担当候補＝現在店舗でフォーム日付に有効シフトがある有効スタッフ（T064・非破壊）。
+  // 名前解決用の full `staff` は絞らない（候補のみ店舗スコープ）。storeId未設定シフトは既定店舗(渋谷)扱い。
+  const candidateStaff = useMemo(() => {
+    const normalizedFormDate = normalizeDateInputValue(form.date);
+    if (!normalizedFormDate) {
+      return [] as StaffMember[];
+    }
+    const storeShifts = filterShiftsByStore(shifts, currentStoreId);
+    const workingStaffIds = new Set(
+      storeShifts
+        .filter(
+          (shift) =>
+            (shift.isActive ?? true) !== false &&
+            normalizeDateInputValue(shift.workDate) === normalizedFormDate &&
+            Boolean(normalizeTimeInputValue(shift.startTime) && normalizeTimeInputValue(shift.endTime))
+        )
+        .map((shift) => shift.staffId)
+    );
+    return activeStaff.filter((member) => workingStaffIds.has(member.id));
+  }, [shifts, currentStoreId, form.date, activeStaff]);
+  const staffOptions = buildSelectableStaff(candidateStaff, staff, form.serviceMenuId, form.staffId);
   const debugSavePayload = savedReservation
     ? {
         date: savedReservation.date,

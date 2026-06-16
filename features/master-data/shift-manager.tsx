@@ -8,6 +8,7 @@ import { MasterPage } from "@/features/master-data/master-page";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import type { StaffMember, StaffShift } from "@/features/master-data/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { useCurrentStore } from "@/features/org/use-current-store";
 
 // 曜日: 0=日,1=月,...6=土。UIは月→日の順で並べる。
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -50,6 +51,7 @@ function makeDefaultPattern(): WeeklyPattern {
 export function ShiftManager() {
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [shifts, setShifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
+  const { currentStoreId } = useCurrentStore();
   const activeStaff = useMemo(() => staff.filter((item) => item.isActive), [staff]);
 
   const [selectedStaffId, setSelectedStaffId] = useState<string>(activeStaff[0]?.id ?? "");
@@ -147,7 +149,9 @@ export function ShiftManager() {
           breakStart: "",
           breakEnd: "",
           memo: "",
-          isActive: true
+          isActive: true,
+          // 新規生成シフトに現在店舗を付与（T064）。既存シフトへの一括付与はしない。
+          storeId: currentStoreId
         });
       }
       cursor.setDate(cursor.getDate() + 1);
