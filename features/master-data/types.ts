@@ -42,6 +42,8 @@ export type ServiceMenu = {
   storeScope?: "all" | "selected";
   /** storeScope="selected" のときの提供店舗ID一覧（T065・任意）。1件=店舗専用、複数=複数店舗対応。 */
   storeIds?: string[];
+  /** 予約カードの背景色（T066・任意・色キー: green/rose/sky/amber/violet/teal/stone）。未設定はカテゴリ色→デフォルト。 */
+  color?: string;
   /** 作成日時（ISO・任意・T064.5）。保存時に自動付与（表示のみ）。 */
   createdAt?: string;
   /** 最終更新日時（ISO・任意・T064.5）。保存時に自動更新（表示のみ）。 */

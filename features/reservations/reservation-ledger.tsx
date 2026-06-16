@@ -31,6 +31,7 @@ import { useCurrentStore } from "@/features/org/use-current-store";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import { filterMenusByStore } from "@/features/master-data/store-menu-scope";
+import { reservationCardStyle } from "@/features/master-data/menu-colors";
 import { isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import {
@@ -68,12 +69,6 @@ const dragSnapThresholdPx = 4;
 const staffColumnWidth = 168;
 const timelineRowHeight = 64;
 const timelineHeaderHeight = 44;
-
-const statusStyles: Record<ReservationStatus, string> = {
-  booked: "border-luxas-green bg-luxas-mist text-luxas-ink",
-  completed: "border-emerald-300 bg-emerald-50 text-emerald-900",
-  canceled: "border-stone-300 bg-stone-100 text-stone-500"
-};
 
 type ReservationForm = {
   customerName: string;
@@ -802,6 +797,41 @@ export function ReservationLedger() {
     );
   }
 
+  // 予約カードの表示補助（T066）。新規判定＝当日来店客で、selectedDate より前の会計済予約が無い（既存の新規/リピート定義に整合）。
+  const cardHistoryKeys = useMemo(
+    () =>
+      new Set(
+        normalizedReservations
+          .filter((r) => r.paymentStatus === "paid" && r.date < selectedDate)
+          .map((r) => (r.phone.trim() || r.customerName.trim()))
+          .filter(Boolean)
+      ),
+    [normalizedReservations, selectedDate]
+  );
+
+  // 予約カードの追加表示プロップ（メニュー色・性別ラベル・新規・個室名）を算出する。
+  function getReservationCardProps(reservation: Reservation) {
+    const menu = services.find((s) => s.id === reservation.serviceMenuId);
+    const matchedCustomer = getCustomerByReservation(reservation);
+    // 性別は顧客マスタの本人性別を使う（Reservation.preference は男性スタッフ希望なので使わない）。
+    const genderLabel = matchedCustomer
+      ? matchedCustomer.gender === "female"
+        ? "女"
+        : matchedCustomer.gender === "male"
+          ? "男"
+          : ""
+      : "";
+    const key = (reservation.phone || "").trim() || reservation.customerName.trim();
+    // 新規はゲスト/未照合では出さない（誤表示回避）。照合できた顧客で過去の会計済来店が無ければ新規。
+    const isNew = Boolean(matchedCustomer) && Boolean(key) && !cardHistoryKeys.has(key);
+    // 個室利用時のみ。roomId から個室名が安全に取れればそれ、無ければ汎用「個室」。通常ブースは空。
+    let privateRoomLabel = "";
+    if (menu?.requiresPrivateRoom) {
+      const room = reservation.roomId ? rooms.find((r) => r.id === reservation.roomId) : null;
+      privateRoomLabel = room?.name ?? "個室";
+    }
+    return { menuColorKey: menu?.color, genderLabel, isNew, privateRoomLabel };
+  }
 
   function openCreateForm(prefill: ReservationCreatePrefill = {}) {
     // 未指定時は店舗設定の受付開始時刻を既定に（固定の"10:00"を避ける・T003 方針A）
@@ -1884,8 +1914,7 @@ export function ReservationLedger() {
                             key={`ghost-${dragState.reservationId}`}
                             reservation={ghostReservation}
                             serviceName={getServiceName(srcReservation.serviceMenuId)}
-                            roomName={getBoothKindLabel(srcReservation.serviceMenuId)}
-                            customerNoteStatus={getCustomerNoteStatus(getCustomerByReservation(srcReservation))}
+                            {...getReservationCardProps(srcReservation)}
                             onClick={() => {}}
                             onPointerDown={() => {}}
                             isDragging={true}
@@ -1914,8 +1943,7 @@ export function ReservationLedger() {
                           key={reservation.id}
                           reservation={displayReservation}
                           serviceName={getServiceName(reservation.serviceMenuId)}
-                          roomName={getBoothKindLabel(reservation.serviceMenuId)}
-                          customerNoteStatus={getCustomerNoteStatus(getCustomerByReservation(reservation))}
+                          {...getReservationCardProps(reservation)}
                           onClick={() => {
                             if (dragSuppressClickRef.current) {
                               dragSuppressClickRef.current = false;
@@ -2436,8 +2464,10 @@ function ReservationStatusPill({ status }: { status: ReservationStatus }) {
 function ReservationCard({
   reservation,
   serviceName,
-  roomName,
-  customerNoteStatus,
+  menuColorKey,
+  genderLabel,
+  isNew = false,
+  privateRoomLabel = "",
   onClick,
   onPointerDown,
   isDragging,
@@ -2449,8 +2479,10 @@ function ReservationCard({
 }: {
   reservation: Reservation;
   serviceName: string;
-  roomName: string;
-  customerNoteStatus: string;
+  menuColorKey?: string;
+  genderLabel?: string;
+  isNew?: boolean;
+  privateRoomLabel?: string;
   onClick: () => void;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   isDragging: boolean;
@@ -2463,12 +2495,21 @@ function ReservationCard({
   const placement = getReservationPlacement(reservation, cellWidth, businessStart, businessEnd, slotMinutes);
   const isCanceled = reservation.status === "canceled";
   const isCompleted = reservation.status === "completed";
-  const statusLabel =
-    reservation.status === "booked" ? "予約中" : reservation.status === "completed" ? "完了済み" : "キャンセル";
+  const isPaid = reservation.paymentStatus === "paid";
+  const isNominated = Boolean(reservation.nominatedStaffId);
+  // 背景色（T066）: 会計済み=グレー優先 ／ それ以外=メニュー色（未設定はデフォルト）。
+  const cardStyle = reservationCardStyle(menuColorKey, isPaid);
 
   if (!placement) {
     return null;
   }
+
+  // 小ラベル（女/男・新・指）。
+  const labelChip = (text: string) => (
+    <span className="mr-1 inline-flex shrink-0 items-center rounded-sm bg-white/85 px-1 text-[9px] font-bold leading-[14px] text-stone-700 ring-1 ring-inset ring-stone-300">
+      {text}
+    </span>
+  );
 
   return (
     <button
@@ -2479,36 +2520,30 @@ function ReservationCard({
         isCompleted ? "ring-1 ring-inset ring-emerald-300" : "",
         isDragging ? "cursor-grabbing opacity-80 shadow-soft ring-2 ring-luxas-green/25" : "cursor-grab",
         fadedOut ? "opacity-25" : "",
-        statusStyles[reservation.status]
+        cardStyle.bg,
+        cardStyle.text,
+        cardStyle.border
       ].join(" ")}
       style={{ left: placement.left, top: 7, width: placement.width, height: timelineRowHeight - 14, touchAction: "none", userSelect: "none" }}
       onClick={onClick}
       onPointerDown={onPointerDown}
     >
-      <div className="flex items-start justify-between gap-1">
-        <p className="min-w-0 truncate text-xs font-semibold leading-tight">{reservation.customerName}</p>
-        <span
-          className={[
-            "shrink-0 rounded-full px-1.5 py-0 text-[10px] font-medium leading-tight",
-            reservation.status === "completed"
-              ? "bg-white/90 text-emerald-800"
-              : reservation.status === "canceled"
-                ? "bg-white/80 text-stone-500"
-                : "bg-white/80 text-luxas-green"
-          ].join(" ")}
-        >
-          {statusLabel}
-        </span>
-      </div>
-      <p className="mt-0.5 truncate whitespace-nowrap text-[11px] font-medium leading-tight">
-        {reservation.startTime} - {reservation.endTime}
+      {/* 1行目: [女/男] 顧客名（個室利用時のみ【個室名】） */}
+      <p className="flex min-w-0 items-center truncate text-xs font-semibold leading-tight">
+        {genderLabel ? labelChip(genderLabel) : null}
+        <span className="truncate">{reservation.customerName}</span>
+        {privateRoomLabel ? <span className="ml-1 shrink-0 text-[10px] font-medium text-stone-600">【{privateRoomLabel}】</span> : null}
       </p>
-      <p className="truncate whitespace-nowrap text-[10px] leading-tight text-stone-600">
-        {serviceName}・{roomName}
+      {/* 2行目: [新] 開始〜終了 */}
+      <p className="mt-0.5 flex items-center truncate whitespace-nowrap text-[11px] font-medium leading-tight">
+        {isNew ? labelChip("新") : null}
+        <span>{reservation.startTime} - {reservation.endTime}</span>
       </p>
-      {customerNoteStatus ? (
-        <p className="mt-0.5 truncate text-[10px] leading-tight text-luxas-ink">{customerNoteStatus}</p>
-      ) : null}
+      {/* 3行目: [指] メニュー名 */}
+      <p className="flex items-center truncate whitespace-nowrap text-[10px] leading-tight">
+        {isNominated ? labelChip("指") : null}
+        <span className="truncate">{serviceName}</span>
+      </p>
     </button>
   );
 }
@@ -3320,10 +3355,6 @@ function FormSectionTitle({ index, title }: { index: number; title: string }) {
       </div>
     </div>
   );
-}
-
-function getCustomerNoteStatus(customer: Customer | null) {
-  return customer?.caution.trim().length ? "注意事項あり" : "注意事項なし";
 }
 
 function findCustomerForReservationForm(form: ReservationForm, customers: Customer[]) {

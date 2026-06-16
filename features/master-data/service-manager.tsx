@@ -11,6 +11,7 @@ import { compareBySortOrder, formatCurrency, isBlank, makeLocalId, normalizeText
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 import { useCurrentStore } from "@/features/org/use-current-store";
+import { MENU_COLOR_OPTIONS, menuColorStyle } from "@/features/master-data/menu-colors";
 
 type ServiceForm = {
   name: string;
@@ -24,6 +25,8 @@ type ServiceForm = {
   // 提供店舗範囲（T065）。"all"=全店共通／"selected"=指定店舗のみ。
   storeScope: "all" | "selected";
   storeIds: string[];
+  // 予約カード背景色（T066）。空＝デフォルト。
+  color: string;
 };
 
 const emptyForm: ServiceForm = {
@@ -36,7 +39,8 @@ const emptyForm: ServiceForm = {
   requiresPrivateRoom: false,
   onlineBooking: false,
   storeScope: "all",
-  storeIds: []
+  storeIds: [],
+  color: ""
 };
 
 const categories = ["ボディケア", "フェイシャル", "カウンセリング", "オプション", "その他"];
@@ -115,7 +119,9 @@ export function ServiceManager() {
       onlineBooking: form.onlineBooking,
       // 提供店舗範囲（T065）。全店共通は storeIds を空に。
       storeScope: form.storeScope,
-      storeIds: form.storeScope === "selected" ? form.storeIds : []
+      storeIds: form.storeScope === "selected" ? form.storeIds : [],
+      // 予約カード色（T066）。未設定は undefined（デフォルト色）。
+      color: form.color || undefined
     };
 
     if (editingId) {
@@ -142,7 +148,8 @@ export function ServiceManager() {
       onlineBooking: item.onlineBooking ?? false,
       // 未設定の既存メニューは「全店共通」として表示（保存するまでバックフィルしない）。
       storeScope: item.storeScope === "selected" ? "selected" : "all",
-      storeIds: item.storeIds ?? []
+      storeIds: item.storeIds ?? [],
+      color: item.color ?? ""
     });
     setMessage(null);
   }
@@ -251,6 +258,25 @@ export function ServiceManager() {
               onChange={(value) => setForm((current) => ({ ...current, isActive: value }))}
             />
 
+            <div>
+              <SelectField
+                label="予約カード色"
+                value={form.color}
+                onChange={(value) => setForm((current) => ({ ...current, color: value }))}
+              >
+                {MENU_COLOR_OPTIONS.map((option) => (
+                  <option key={option.key || "default"} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </SelectField>
+              <div className="mt-2 flex items-center gap-2 text-xs text-stone-500">
+                <span>予約枠の背景色:</span>
+                <span className={["inline-block h-4 w-8 rounded border", menuColorStyle(form.color).bg, menuColorStyle(form.color).border].join(" ")} />
+                <span>（会計済みの予約はグレー優先で表示されます）</span>
+              </div>
+            </div>
+
             <section className="rounded-md border border-luxas-line bg-white p-3">
               <p className="text-sm font-medium text-stone-700">提供店舗</p>
               <p className="mt-1 text-xs text-stone-500">
@@ -349,7 +375,12 @@ export function ServiceManager() {
               <tbody className="divide-y divide-luxas-line">
                 {[...services].sort(compareBySortOrder).map((item) => (
                   <tr key={item.id}>
-                    <td className="whitespace-nowrap px-5 py-4 font-medium text-luxas-ink">{item.name}</td>
+                    <td className="whitespace-nowrap px-5 py-4 font-medium text-luxas-ink">
+                      <span className="inline-flex items-center gap-2">
+                        <span className={["inline-block h-3 w-3 shrink-0 rounded-sm border", menuColorStyle(item.color).bg, menuColorStyle(item.color).border].join(" ")} aria-hidden="true" />
+                        {item.name}
+                      </span>
+                    </td>
                     <td className="whitespace-nowrap px-5 py-4 text-stone-700">{item.category}</td>
                     <td className="whitespace-nowrap px-5 py-4 text-stone-700">{item.durationMinutes}分</td>
                     <td className="whitespace-nowrap px-5 py-4 text-stone-700">{formatCurrency(item.price)}</td>
