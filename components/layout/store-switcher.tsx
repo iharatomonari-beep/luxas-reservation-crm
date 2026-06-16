@@ -24,7 +24,17 @@ export function StoreSwitcher() {
       {contextLabel ? <span className="max-w-[160px] truncate text-xs text-stone-500">{contextLabel}</span> : null}
       <select
         value={currentStoreId}
-        onChange={(event) => setCurrentStoreId(event.target.value)}
+        onChange={(event) => {
+          const nextStoreId = event.target.value;
+          // 同じ店舗を選んだ場合は何もしない（不要なリロードを避ける）。
+          if (nextStoreId === currentStoreId) {
+            return;
+          }
+          // 先に localStorage へ保存してから画面を再読み込み（各画面が選択店舗のscopeで描画される）。
+          // リロードはユーザー操作（onChange）でのみ発生するため、ループにならない。
+          setCurrentStoreId(nextStoreId);
+          window.location.reload();
+        }}
         className="rounded-md border border-luxas-line bg-white px-2 py-1.5 text-xs font-medium text-luxas-ink outline-none focus:border-luxas-green"
         aria-label="現在の店舗"
       >
