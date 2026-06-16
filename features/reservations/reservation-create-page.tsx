@@ -9,6 +9,7 @@ import type { Customer } from "@/features/customers/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
+import { filterMenusByStore } from "@/features/master-data/store-menu-scope";
 import {
   hasBoothCapacity,
   initialRooms,
@@ -93,7 +94,11 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
   const { currentStoreId } = useCurrentStore();
 
   const activeStaff = useMemo(() => [...staff].sort(compareBySortOrder).filter((item) => item.isActive), [staff]);
-  const activeServices = useMemo(() => [...services].sort(compareBySortOrder).filter((item) => item.isActive), [services]);
+  // メニュー選択候補＝有効かつ現在店舗で提供可能なメニューのみ（T065・非破壊）。lookup用 full services は絞らない。
+  const activeServices = useMemo(
+    () => filterMenusByStore([...services].sort(compareBySortOrder).filter((item) => item.isActive), currentStoreId),
+    [services, currentStoreId]
+  );
 
   const [form, setForm] = useState<ReservationForm>(() => createInitialForm(normalizedPrefill, activeServices, shifts));
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
@@ -355,16 +360,17 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
 
           <FormSectionTitle index={2} title="メニュー（コース）" />
           {(() => {
+            // コースタブも店舗scope後の候補（activeServices）から導出する（T065）。
             const courseCategories = Array.from(
-              new Set(services.filter((s) => s.isActive).map((s) => s.category || "未分類"))
+              new Set(activeServices.map((s) => s.category || "未分類"))
             );
             const selectedCategory = selectedService ? selectedService.category || "未分類" : "";
             const activeTab =
               courseTab && courseCategories.includes(courseTab)
                 ? courseTab
                 : selectedCategory || courseCategories[0] || "";
-            const tabServices = services.filter(
-              (s) => s.isActive && (s.category || "未分類") === activeTab
+            const tabServices = activeServices.filter(
+              (s) => (s.category || "未分類") === activeTab
             );
             return (
               <div className="space-y-3">

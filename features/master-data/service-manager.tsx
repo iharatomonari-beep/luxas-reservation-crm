@@ -10,6 +10,7 @@ import type { ServiceMenu } from "@/features/master-data/types";
 import { compareBySortOrder, formatCurrency, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
+import { useCurrentStore } from "@/features/org/use-current-store";
 
 type ServiceForm = {
   name: string;
@@ -20,6 +21,9 @@ type ServiceForm = {
   isActive: boolean;
   requiresPrivateRoom: boolean;
   onlineBooking: boolean;
+  // 提供店舗範囲（T065）。"all"=全店共通／"selected"=指定店舗のみ。
+  storeScope: "all" | "selected";
+  storeIds: string[];
 };
 
 const emptyForm: ServiceForm = {
@@ -30,7 +34,9 @@ const emptyForm: ServiceForm = {
   sortOrder: "10",
   isActive: true,
   requiresPrivateRoom: false,
-  onlineBooking: false
+  onlineBooking: false,
+  storeScope: "all",
+  storeIds: []
 };
 
 const categories = ["ボディケア", "フェイシャル", "カウンセリング", "オプション", "その他"];
@@ -40,6 +46,17 @@ export function ServiceManager() {
   const [form, setForm] = useState<ServiceForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
+  // 提供店舗の選択肢（T065）。localStorage補正後の有効な店舗一覧を参照。
+  const { stores } = useCurrentStore();
+  const storeOptions = [...stores].filter((s) => s.isActive).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? id;
+  function scopeLabel(item: ServiceMenu): string {
+    if (item.storeScope !== "selected") {
+      return "全店共通";
+    }
+    const names = (item.storeIds ?? []).map(storeName);
+    return names.length ? names.join("、") : "（店舗未選択）";
+  }
 
   function resetForm() {
     setForm(emptyForm);
@@ -71,6 +88,10 @@ export function ServiceManager() {
       return "カテゴリを選択してください。";
     }
 
+    if (form.storeScope === "selected" && form.storeIds.length === 0) {
+      return "「指定店舗のみ」の場合は、提供店舗を1つ以上選択してください。";
+    }
+
     return null;
   }
 
@@ -91,7 +112,10 @@ export function ServiceManager() {
       sortOrder: Number(form.sortOrder),
       isActive: form.isActive,
       requiresPrivateRoom: form.requiresPrivateRoom,
-      onlineBooking: form.onlineBooking
+      onlineBooking: form.onlineBooking,
+      // 提供店舗範囲（T065）。全店共通は storeIds を空に。
+      storeScope: form.storeScope,
+      storeIds: form.storeScope === "selected" ? form.storeIds : []
     };
 
     if (editingId) {
@@ -115,7 +139,10 @@ export function ServiceManager() {
       sortOrder: String(item.sortOrder ?? 10),
       isActive: item.isActive,
       requiresPrivateRoom: item.requiresPrivateRoom ?? false,
-      onlineBooking: item.onlineBooking ?? false
+      onlineBooking: item.onlineBooking ?? false,
+      // 未設定の既存メニューは「全店共通」として表示（保存するまでバックフィルしない）。
+      storeScope: item.storeScope === "selected" ? "selected" : "all",
+      storeIds: item.storeIds ?? []
     });
     setMessage(null);
   }
@@ -223,6 +250,70 @@ export function ServiceManager() {
               checked={form.isActive}
               onChange={(value) => setForm((current) => ({ ...current, isActive: value }))}
             />
+
+            <section className="rounded-md border border-luxas-line bg-white p-3">
+              <p className="text-sm font-medium text-stone-700">提供店舗</p>
+              <p className="mt-1 text-xs text-stone-500">
+                未設定は全店共通です。予約作成の選択候補だけを店舗で絞ります（過去予約のメニュー名表示には影響しません）。
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(["all", "selected"] as const).map((scope) => (
+                  <label
+                    key={scope}
+                    className={[
+                      "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                      form.storeScope === scope ? "border-luxas-green bg-luxas-mist text-luxas-green" : "border-luxas-line bg-white text-stone-700"
+                    ].join(" ")}
+                  >
+                    <input
+                      type="radio"
+                      name="storeScope"
+                      className="h-4 w-4 accent-luxas-green"
+                      checked={form.storeScope === scope}
+                      onChange={() => setForm((current) => ({ ...current, storeScope: scope }))}
+                    />
+                    {scope === "all" ? "全店共通" : "指定店舗のみ"}
+                  </label>
+                ))}
+              </div>
+              {form.storeScope === "selected" ? (
+                <div className="mt-3 grid gap-2">
+                  {storeOptions.length === 0 ? (
+                    <p className="text-sm text-stone-500">有効な店舗がありません（組織管理で店舗を有効化してください）。</p>
+                  ) : (
+                    storeOptions.map((store) => {
+                      const checked = form.storeIds.includes(store.id);
+                      return (
+                        <label
+                          key={store.id}
+                          className={[
+                            "flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm",
+                            checked ? "border-luxas-green bg-luxas-mist" : "border-luxas-line bg-white"
+                          ].join(" ")}
+                        >
+                          <span className="font-medium text-luxas-ink">{store.name}</span>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-luxas-green"
+                            checked={checked}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                storeIds: event.target.checked
+                                  ? [...current.storeIds, store.id]
+                                  : current.storeIds.filter((id) => id !== store.id)
+                              }))
+                            }
+                          />
+                        </label>
+                      );
+                    })
+                  )}
+                  <p className="text-xs text-stone-500">1店舗＝店舗専用 ／ 複数選択＝複数店舗対応。</p>
+                </div>
+              ) : null}
+            </section>
+
             <StatusMessage message={message} />
             <button
               type="submit"
@@ -250,6 +341,7 @@ export function ServiceManager() {
                   <th className="px-5 py-3">表示順</th>
                   <th className="px-5 py-3">個室</th>
                   <th className="px-5 py-3">オンライン予約</th>
+                  <th className="px-5 py-3">提供店舗</th>
                   <th className="px-5 py-3">状態</th>
                   <th className="px-5 py-3 text-right">操作</th>
                 </tr>
@@ -267,6 +359,9 @@ export function ServiceManager() {
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-stone-700">
                       {item.onlineBooking ? "○" : "×"}
+                    </td>
+                    <td className="px-5 py-4 text-stone-700">
+                      <span className="block max-w-[220px] truncate">{scopeLabel(item)}</span>
                     </td>
                     <td className="whitespace-nowrap px-5 py-4">
                       <ActiveBadge isActive={item.isActive} />

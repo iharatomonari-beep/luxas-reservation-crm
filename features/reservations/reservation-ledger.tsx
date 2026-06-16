@@ -30,6 +30,7 @@ import { initialStoreSettings, useStoreSettings } from "@/features/master-data/s
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
+import { filterMenusByStore } from "@/features/master-data/store-menu-scope";
 import { isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import {
@@ -344,7 +345,12 @@ export function ReservationLedger() {
     [reservations, currentStoreId]
   );
   const activeStaff = useMemo(() => [...staff].sort(compareBySortOrder).filter((item) => item.isActive), [staff]);
-  const activeServices = useMemo(() => [...services].sort(compareBySortOrder).filter((item) => item.isActive), [services]);
+  // メニュー選択候補＝有効かつ現在店舗で提供可能なメニューのみ（T065・非破壊）。
+  // 名前解決用の full `services` 配列は絞らない（getServiceName 等は従来どおり）。
+  const activeServices = useMemo(
+    () => filterMenusByStore([...services].sort(compareBySortOrder).filter((item) => item.isActive), currentStoreId),
+    [services, currentStoreId]
+  );
   const slots = useMemo(() => buildTimeSlots(businessStart, businessEnd, slotMinutes), [businessStart, businessEnd, slotMinutes]);
   const hourSlots = useMemo(() => buildTimeSlots(businessStart, businessEnd, 60), [businessStart, businessEnd]);
   const dayReservations = normalizedReservations.filter((reservation) => reservation.date === selectedDate);

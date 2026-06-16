@@ -35,6 +35,13 @@ export type ServiceMenu = {
   requiresPrivateRoom?: boolean;
   /** オンライン予約に掲載するか（PM準拠・T053）。任意・未設定は非掲載扱い。 */
   onlineBooking?: boolean;
+  /**
+   * 提供店舗範囲（T065・任意）。未設定 or "all" =全店共通。"selected" のとき storeIds の店舗のみで提供。
+   * 予約作成の「選択候補」だけを店舗で絞るために使う。過去予約のメニュー名 lookup（full配列）には使わない（履歴を壊さない）。
+   */
+  storeScope?: "all" | "selected";
+  /** storeScope="selected" のときの提供店舗ID一覧（T065・任意）。1件=店舗専用、複数=複数店舗対応。 */
+  storeIds?: string[];
   /** 作成日時（ISO・任意・T064.5）。保存時に自動付与（表示のみ）。 */
   createdAt?: string;
   /** 最終更新日時（ISO・任意・T064.5）。保存時に自動更新（表示のみ）。 */
