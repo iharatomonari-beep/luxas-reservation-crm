@@ -14,6 +14,7 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import type { RetailCategory, RetailItem } from "@/features/master-data/types";
 import { compareBySortOrder, formatCurrency, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 type ItemForm = { name: string; category: string; price: string; sortOrder: string; isActive: boolean };
 type CategoryForm = { name: string; sortOrder: string; isActive: boolean };
@@ -54,10 +55,10 @@ export function RetailItemManager() {
       isActive: itemForm.isActive
     };
     if (editingItemId) {
-      setItems((current) => current.map((item) => (item.id === editingItemId ? { ...item, ...payload } : item)));
+      setItems((current) => current.map((item) => (item.id === editingItemId ? { ...item, ...stampUpdate(payload, item) } : item)));
       setItemMessage({ type: "success", text: "物販商品を更新しました。" });
     } else {
-      setItems((current) => [{ id: makeLocalId("retail"), ...payload }, ...current]);
+      setItems((current) => [{ id: makeLocalId("retail"), ...stampCreate(payload) }, ...current]);
       setItemMessage({ type: "success", text: "物販商品を追加しました。" });
     }
     resetItemForm();
@@ -75,10 +76,10 @@ export function RetailItemManager() {
     setItemMessage(null);
   }
 
-  function handleItemDelete(id: string) {
-    setItems((current) => current.filter((item) => item.id !== id));
-    if (editingItemId === id) resetItemForm();
-    setItemMessage({ type: "success", text: "物販商品を削除しました。" });
+  // 物理削除はしない（物販履歴の商品名解決のためデータは残す）。販売停止＝isActive=false。
+  function handleItemDeactivate(id: string) {
+    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...stampUpdate({ ...item, isActive: false }, item) } : item)));
+    setItemMessage({ type: "success", text: "物販商品を販売停止（無効）にしました。物販履歴の商品名は引き続き表示されます。" });
   }
 
   function resetCategoryForm() {
@@ -134,6 +135,14 @@ export function RetailItemManager() {
                 </button>
               ) : null}
             </div>
+            {editingItemId ? (
+              (() => {
+                const editing = items.find((it) => it.id === editingItemId);
+                return editing ? (
+                  <p className="mb-3 text-[11px] text-stone-400">作成日: {formatTimestamp(editing.createdAt)} ／ 最終更新日: {formatTimestamp(editing.updatedAt)}</p>
+                ) : null;
+              })()
+            ) : null}
             <form className="space-y-4" onSubmit={handleItemSubmit}>
               <TextField label="商品名" value={itemForm.name} onChange={(v) => setItemForm((c) => ({ ...c, name: v }))} placeholder="例: ホームケアオイル" required />
               <SelectField label="カテゴリ" value={itemForm.category} onChange={(v) => setItemForm((c) => ({ ...c, category: v }))}>
@@ -188,10 +197,12 @@ export function RetailItemManager() {
                             <Pencil size={14} aria-hidden="true" />
                             編集
                           </button>
-                          <button type="button" className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50" onClick={() => handleItemDelete(item.id)}>
-                            <Trash2 size={14} aria-hidden="true" />
-                            削除
-                          </button>
+                          {item.isActive ? (
+                            <button type="button" className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50" onClick={() => handleItemDeactivate(item.id)}>
+                              <Trash2 size={14} aria-hidden="true" />
+                              販売停止
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>

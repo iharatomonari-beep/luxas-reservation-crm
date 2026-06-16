@@ -12,6 +12,7 @@ import {
 import type { StaffMember, StaffShift } from "@/features/master-data/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useCurrentStore } from "@/features/org/use-current-store";
+import { stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 export const dailyTargetsStorageKey = "luxas-daily-targets";
 
@@ -57,7 +58,7 @@ export function MonthlyShiftGrid() {
       const existing = current.find((s) => s.staffId === staffId && s.workDate === dateStr);
       return [
         ...others,
-        existing ?? {
+        existing ?? stampCreate({
           id: `shift-${staffId}-${dateStr.replace(/-/g, "")}`,
           staffId,
           workDate: dateStr,
@@ -69,14 +70,14 @@ export function MonthlyShiftGrid() {
           isActive: true,
           // 新規シフトに現在店舗を付与（T064）。既存シフトには一括付与しない。
           storeId: currentStoreId
-        }
+        })
       ];
     });
   }
 
   function updateShiftTime(staffId: string, dateStr: string, field: "startTime" | "endTime", value: string) {
     setShifts((current) =>
-      current.map((s) => (s.staffId === staffId && s.workDate === dateStr ? { ...s, [field]: value } : s))
+      current.map((s) => (s.staffId === staffId && s.workDate === dateStr ? stampUpdate({ ...s, [field]: value }, s) : s))
     );
   }
 

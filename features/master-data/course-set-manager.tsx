@@ -10,6 +10,7 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import type { CourseSet } from "@/features/master-data/types";
 import { compareBySortOrder, formatCurrency, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 type SetForm = { name: string; category: string; price: string; sortOrder: string; onlineBooking: boolean; isActive: boolean };
 const emptyForm: SetForm = { name: "", category: "セット", price: "0", sortOrder: "10", onlineBooking: false, isActive: true };
@@ -48,10 +49,10 @@ export function CourseSetManager() {
       isActive: form.isActive
     };
     if (editingId) {
-      setSets((current) => current.map((item) => (item.id === editingId ? { ...item, ...payload } : item)));
+      setSets((current) => current.map((item) => (item.id === editingId ? { ...item, ...stampUpdate(payload, item) } : item)));
       setMessage({ type: "success", text: "セット商品を更新しました。" });
     } else {
-      setSets((current) => [{ id: makeLocalId("set"), ...payload }, ...current]);
+      setSets((current) => [{ id: makeLocalId("set"), ...stampCreate(payload) }, ...current]);
       setMessage({ type: "success", text: "セット商品を追加しました。" });
     }
     resetForm();
@@ -70,10 +71,11 @@ export function CourseSetManager() {
     setMessage(null);
   }
 
-  function handleDelete(id: string) {
-    setSets((current) => current.filter((item) => item.id !== id));
-    if (editingId === id) resetForm();
-    setMessage({ type: "success", text: "セット商品を削除しました。" });
+  // 物理削除はしない（履歴参照のためデータは残す）。提供停止＝isActive=false。
+  function handleDeactivate(id: string) {
+    setSets((current) => current.map((item) => (item.id === id ? { ...item, ...stampUpdate({ ...item, isActive: false }, item) } : item)));
+    setForm((current) => ({ ...current, isActive: false }));
+    setMessage({ type: "success", text: "セット商品を提供停止（無効）にしました。" });
   }
 
   const columns: MasterColumn<CourseSet>[] = [
@@ -98,6 +100,14 @@ export function CourseSetManager() {
             </button>
           ) : null}
         </div>
+        {editingId ? (
+          (() => {
+            const editing = sets.find((s) => s.id === editingId);
+            return editing ? (
+              <p className="mb-3 text-[11px] text-stone-400">作成日: {formatTimestamp(editing.createdAt)} ／ 最終更新日: {formatTimestamp(editing.updatedAt)}</p>
+            ) : null;
+          })()
+        ) : null}
         <form className="space-y-4" onSubmit={handleSubmit}>
           <TextField label="セット名" value={form.name} onChange={(v) => setForm((c) => ({ ...c, name: v }))} placeholder="例: ボディ+フェイシャル 90分セット" required />
           <TextField label="カテゴリ" value={form.category} onChange={(v) => setForm((c) => ({ ...c, category: v }))} placeholder="例: セット" />
@@ -113,10 +123,10 @@ export function CourseSetManager() {
               <Plus size={17} aria-hidden="true" />
               {editingId ? "更新する" : "追加する"}
             </button>
-            {editingId ? (
-              <button type="button" className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-3 text-sm font-medium text-red-700 hover:bg-red-50" onClick={() => handleDelete(editingId)}>
+            {editingId && form.isActive ? (
+              <button type="button" className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-3 text-sm font-medium text-amber-800 hover:bg-amber-50" onClick={() => handleDeactivate(editingId)}>
                 <Trash2 size={15} aria-hidden="true" />
-                削除
+                提供停止
               </button>
             ) : null}
           </div>

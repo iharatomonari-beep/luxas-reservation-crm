@@ -9,6 +9,7 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import { optionKindLabels, type MenuCategory, type OptionKind, type ServiceOption } from "@/features/master-data/types";
 import { compareBySortOrder, formatCurrency, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 type OptionForm = {
   name: string;
@@ -64,10 +65,10 @@ export function OptionManager() {
       isActive: form.isActive
     };
     if (editingId) {
-      setOptions((current) => current.map((item) => (item.id === editingId ? { id: item.id, ...payload } : item)));
+      setOptions((current) => current.map((item) => (item.id === editingId ? { id: item.id, ...stampUpdate(payload, item) } : item)));
       setMessage({ type: "success", text: "オプションを更新しました。" });
     } else {
-      setOptions((current) => [{ id: makeLocalId("option"), ...payload }, ...current]);
+      setOptions((current) => [{ id: makeLocalId("option"), ...stampCreate(payload) }, ...current]);
       setMessage({ type: "success", text: "オプションを追加しました。" });
     }
     resetForm();
@@ -89,10 +90,10 @@ export function OptionManager() {
     setMessage(null);
   }
 
-  function handleDelete(id: string) {
-    setOptions((current) => current.filter((item) => item.id !== id));
-    if (editingId === id) resetForm();
-    setMessage({ type: "success", text: "オプションを削除しました。" });
+  // 物理削除はしない（過去予約のオプション名解決のためデータは残す）。提供停止＝isActive=false。
+  function handleDeactivate(id: string) {
+    setOptions((current) => current.map((item) => (item.id === id ? { ...item, ...stampUpdate({ ...item, isActive: false }, item) } : item)));
+    setMessage({ type: "success", text: "オプションを提供停止（無効）にしました。過去予約のオプション名は引き続き表示されます。" });
   }
 
   return (
@@ -108,6 +109,14 @@ export function OptionManager() {
               </button>
             ) : null}
           </div>
+          {editingId ? (
+            (() => {
+              const editing = options.find((o) => o.id === editingId);
+              return editing ? (
+                <p className="mb-3 text-[11px] text-stone-400">作成日: {formatTimestamp(editing.createdAt)} ／ 最終更新日: {formatTimestamp(editing.updatedAt)}</p>
+              ) : null;
+            })()
+          ) : null}
           <form className="space-y-4" onSubmit={handleSubmit}>
             <TextField label="オプション名" value={form.name} onChange={(v) => setForm((c) => ({ ...c, name: v }))} placeholder="例: 延長15分" required />
             <SelectField label="カテゴリ" value={form.category} onChange={(v) => setForm((c) => ({ ...c, category: v }))}>
@@ -181,10 +190,12 @@ export function OptionManager() {
                           <Pencil size={14} aria-hidden="true" />
                           編集
                         </button>
-                        <button type="button" className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50" onClick={() => handleDelete(item.id)}>
-                          <Trash2 size={14} aria-hidden="true" />
-                          削除
-                        </button>
+                        {item.isActive ? (
+                          <button type="button" className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50" onClick={() => handleDeactivate(item.id)}>
+                            <Trash2 size={14} aria-hidden="true" />
+                            提供停止
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

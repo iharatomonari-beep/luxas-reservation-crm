@@ -7,6 +7,7 @@ import { ActiveBadge, MasterPage } from "@/features/master-data/master-page";
 import { MasterSplitPanel, type MasterColumn } from "@/components/master/master-split-panel";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import { compareBySortOrder, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
+import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
   areasStorageKey,
@@ -66,15 +67,15 @@ function DetailHeader({ editingId, title, onReset }: { editingId: string | null;
   );
 }
 
-function SaveDeleteRow({ editingId, onDelete }: { editingId: string | null; onDelete: () => void }) {
+function SaveDeleteRow({ editingId, onDelete, deleteLabel = "削除" }: { editingId: string | null; onDelete: () => void; deleteLabel?: string }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button type="submit" className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#285f51]">
         <Plus size={17} aria-hidden="true" />{editingId ? "更新する" : "追加する"}
       </button>
       {editingId ? (
-        <button type="button" className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-3 text-sm font-medium text-red-700 hover:bg-red-50" onClick={onDelete}>
-          <Trash2 size={15} aria-hidden="true" />削除
+        <button type="button" className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-3 text-sm font-medium text-amber-800 hover:bg-amber-50" onClick={onDelete}>
+          <Trash2 size={15} aria-hidden="true" />{deleteLabel}
         </button>
       ) : null}
     </div>
@@ -247,10 +248,10 @@ function StorePanel({ stores, setStores, tenants, areas }: { stores: Store[]; se
     if (!form.tenantId || !form.areaId) { setMessage({ type: "error", text: "所属テナント・エリアを選択してください。" }); return; }
     const payload = { tenantId: form.tenantId, areaId: form.areaId, name: normalizeText(form.name), code: normalizeText(form.code), sortOrder: Number(form.sortOrder) || 0, isActive: form.isActive };
     if (editingId) {
-      setStores((c) => c.map((i) => (i.id === editingId ? { ...i, ...payload } : i)));
+      setStores((c) => c.map((i) => (i.id === editingId ? { ...i, ...stampUpdate(payload, i) } : i)));
       setMessage({ type: "success", text: "店舗を更新しました。" });
     } else {
-      setStores((c) => [{ id: makeLocalId("store"), ...payload }, ...c]);
+      setStores((c) => [{ id: makeLocalId("store"), ...stampCreate(payload) }, ...c]);
       setMessage({ type: "success", text: "店舗を追加しました。" });
     }
     reset();
@@ -260,7 +261,12 @@ function StorePanel({ stores, setStores, tenants, areas }: { stores: Store[]; se
     setForm({ tenantId: i.tenantId, areaId: i.areaId, name: i.name, code: i.code ?? "", sortOrder: String(i.sortOrder ?? 0), isActive: i.isActive });
     setMessage(null);
   }
-  function handleDelete(id: string) { setStores((c) => c.filter((i) => i.id !== id)); if (editingId === id) reset(); setMessage({ type: "success", text: "店舗を削除しました。" }); }
+  // 店舗は物理削除しない（履歴・現在店舗参照のためデータは残す）。無効化＝isActive=false。
+  function handleDeactivate(id: string) {
+    setStores((c) => c.map((i) => (i.id === id ? { ...i, ...stampUpdate({ ...i, isActive: false }, i) } : i)));
+    setForm((current) => ({ ...current, isActive: false }));
+    setMessage({ type: "success", text: "店舗を「無効化（表示しない）」にしました。" });
+  }
 
   const columns: MasterColumn<Store>[] = [
     { key: "id", header: "ID", render: (i) => <span className="font-mono text-xs text-stone-400">{i.id.slice(0, 10)}</span> },
@@ -282,6 +288,14 @@ function StorePanel({ stores, setStores, tenants, areas }: { stores: Store[]; se
       renderDetail={() => (
         <div>
           <DetailHeader editingId={editingId} title={editingId ? "店舗を編集" : "店舗を追加"} onReset={reset} />
+          {editingId ? (
+            (() => {
+              const editing = stores.find((s) => s.id === editingId);
+              return editing ? (
+                <p className="mb-3 text-[11px] text-stone-400">作成日: {formatTimestamp(editing.createdAt)} ／ 最終更新日: {formatTimestamp(editing.updatedAt)}</p>
+              ) : null;
+            })()
+          ) : null}
           <form className="space-y-4" onSubmit={handleSubmit}>
             <SelectField label="所属テナント" value={form.tenantId} onChange={(v) => setForm((c) => ({ ...c, tenantId: v, areaId: "" }))}>
               <option value="">選択してください</option>
@@ -298,7 +312,7 @@ function StorePanel({ stores, setStores, tenants, areas }: { stores: Store[]; se
             </div>
             <ToggleField label="有効にする" checked={form.isActive} onChange={(v) => setForm((c) => ({ ...c, isActive: v }))} />
             <StatusMessage message={message} />
-            <SaveDeleteRow editingId={editingId} onDelete={() => editingId && handleDelete(editingId)} />
+            <SaveDeleteRow editingId={editingId} onDelete={() => editingId && handleDeactivate(editingId)} deleteLabel="無効化（表示しない）" />
           </form>
         </div>
       )}

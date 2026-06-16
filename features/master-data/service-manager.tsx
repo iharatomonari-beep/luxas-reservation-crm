@@ -9,6 +9,7 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import type { ServiceMenu } from "@/features/master-data/types";
 import { compareBySortOrder, formatCurrency, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 type ServiceForm = {
   name: string;
@@ -94,10 +95,10 @@ export function ServiceManager() {
     };
 
     if (editingId) {
-      setServices((current) => current.map((item) => (item.id === editingId ? { ...item, ...payload } : item)));
+      setServices((current) => current.map((item) => (item.id === editingId ? { ...item, ...stampUpdate(payload, item) } : item)));
       setMessage({ type: "success", text: "メニューを更新しました。" });
     } else {
-      setServices((current) => [{ id: makeLocalId("service"), ...payload }, ...current]);
+      setServices((current) => [{ id: makeLocalId("service"), ...stampCreate(payload) }, ...current]);
       setMessage({ type: "success", text: "メニューを追加しました。" });
     }
 
@@ -119,14 +120,12 @@ export function ServiceManager() {
     setMessage(null);
   }
 
-  function handleDelete(id: string) {
-    setServices((current) => current.filter((item) => item.id !== id));
-
-    if (editingId === id) {
-      resetForm();
-    }
-
-    setMessage({ type: "success", text: "メニューを削除しました。" });
+  // 物理削除はしない（過去予約のメニュー名解決のためデータは残す）。提供停止＝isActive=false で新規候補から外す。
+  function handleDeactivate(id: string) {
+    setServices((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...stampUpdate({ ...item, isActive: false }, item) } : item))
+    );
+    setMessage({ type: "success", text: "メニューを提供停止（無効）にしました。過去予約のメニュー名は引き続き表示されます。" });
   }
 
   return (
@@ -151,6 +150,17 @@ export function ServiceManager() {
               </button>
             ) : null}
           </div>
+
+          {editingId ? (
+            (() => {
+              const editingService = services.find((s) => s.id === editingId);
+              return editingService ? (
+                <p className="mb-3 text-[11px] text-stone-400">
+                  作成日: {formatTimestamp(editingService.createdAt)} ／ 最終更新日: {formatTimestamp(editingService.updatedAt)}
+                </p>
+              ) : null;
+            })()
+          ) : null}
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <TextField
@@ -271,14 +281,16 @@ export function ServiceManager() {
                           <Pencil size={14} aria-hidden="true" />
                           編集
                         </button>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
-                          onClick={() => handleDelete(item.id)}
-                        >
-                          <Trash2 size={14} aria-hidden="true" />
-                          削除
-                        </button>
+                        {item.isActive ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50"
+                            onClick={() => handleDeactivate(item.id)}
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                            提供停止
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

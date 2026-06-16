@@ -9,6 +9,7 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import type { StaffMember, StaffShift } from "@/features/master-data/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useCurrentStore } from "@/features/org/use-current-store";
+import { stampCreate } from "@/features/master-data/timestamps";
 
 // 曜日: 0=日,1=月,...6=土。UIは月→日の順で並べる。
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -140,7 +141,7 @@ export function ShiftManager() {
       const day = pattern[wd];
       if (day.enabled) {
         const dateStr = toYmd(cursor);
-        generated.push({
+        generated.push(stampCreate({
           id: `shift-${selectedStaffId}-${dateStr.replace(/-/g, "")}`,
           staffId: selectedStaffId,
           workDate: dateStr,
@@ -152,7 +153,7 @@ export function ShiftManager() {
           isActive: true,
           // 新規生成シフトに現在店舗を付与（T064）。既存シフトへの一括付与はしない。
           storeId: currentStoreId
-        });
+        }));
       }
       cursor.setDate(cursor.getDate() + 1);
     }

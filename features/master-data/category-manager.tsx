@@ -10,6 +10,7 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import type { MenuCategory } from "@/features/master-data/types";
 import { compareBySortOrder, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 const COLORS = ["green", "rose", "sky", "amber", "stone"];
 
@@ -48,10 +49,10 @@ export function CategoryManager() {
       isActive: form.isActive
     };
     if (editingId) {
-      setCategories((current) => current.map((item) => (item.id === editingId ? { ...item, ...payload } : item)));
+      setCategories((current) => current.map((item) => (item.id === editingId ? { ...item, ...stampUpdate(payload, item) } : item)));
       setMessage({ type: "success", text: "カテゴリを更新しました。" });
     } else {
-      setCategories((current) => [{ id: makeLocalId("category"), ...payload }, ...current]);
+      setCategories((current) => [{ id: makeLocalId("category"), ...stampCreate(payload) }, ...current]);
       setMessage({ type: "success", text: "カテゴリを追加しました。" });
     }
     resetForm();
@@ -63,10 +64,11 @@ export function CategoryManager() {
     setMessage(null);
   }
 
-  function handleDelete(id: string) {
-    setCategories((current) => current.filter((item) => item.id !== id));
-    if (editingId === id) resetForm();
-    setMessage({ type: "success", text: "カテゴリを削除しました。" });
+  // 物理削除はしない（過去予約のカテゴリ参照のためデータは残す）。表示しない＝isActive=false。
+  function handleDeactivate(id: string) {
+    setCategories((current) => current.map((item) => (item.id === id ? { ...item, ...stampUpdate({ ...item, isActive: false }, item) } : item)));
+    setForm((current) => ({ ...current, isActive: false }));
+    setMessage({ type: "success", text: "カテゴリを「表示しない（無効）」にしました。" });
   }
 
   const columns: MasterColumn<MenuCategory>[] = [
@@ -89,6 +91,14 @@ export function CategoryManager() {
             </button>
           ) : null}
         </div>
+        {editingId ? (
+          (() => {
+            const editing = categories.find((c) => c.id === editingId);
+            return editing ? (
+              <p className="mb-3 text-[11px] text-stone-400">作成日: {formatTimestamp(editing.createdAt)} ／ 最終更新日: {formatTimestamp(editing.updatedAt)}</p>
+            ) : null;
+          })()
+        ) : null}
         <form className="space-y-4" onSubmit={handleSubmit}>
           <TextField label="カテゴリ名" value={form.name} onChange={(v) => setForm((c) => ({ ...c, name: v }))} placeholder="例: ボディケア" required />
           <TextField label="表示順" value={form.sortOrder} onChange={(v) => setForm((c) => ({ ...c, sortOrder: v }))} type="number" min="0" />
@@ -106,10 +116,10 @@ export function CategoryManager() {
               <Plus size={17} aria-hidden="true" />
               {editingId ? "更新する" : "追加する"}
             </button>
-            {editingId ? (
-              <button type="button" className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-3 text-sm font-medium text-red-700 hover:bg-red-50" onClick={() => handleDelete(editingId)}>
+            {editingId && form.isActive ? (
+              <button type="button" className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-3 text-sm font-medium text-amber-800 hover:bg-amber-50" onClick={() => handleDeactivate(editingId)}>
                 <Trash2 size={15} aria-hidden="true" />
-                削除
+                表示しない
               </button>
             ) : null}
           </div>

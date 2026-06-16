@@ -14,6 +14,10 @@ export type StaffMember = {
   startDate?: string;
   /** 在籍 終了日（"YYYY-MM-DD"・任意・T064）。在籍終了後は新規候補・台帳縦軸に出さない運用（過去予約の名前解決のためデータは残す）。 */
   endDate?: string;
+  /** 作成日時（ISO・任意・T064.5）。保存時に自動付与（表示のみ）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意・T064.5）。保存時に自動更新（表示のみ）。 */
+  updatedAt?: string;
 };
 
 export type ServiceMenu = {
@@ -31,6 +35,10 @@ export type ServiceMenu = {
   requiresPrivateRoom?: boolean;
   /** オンライン予約に掲載するか（PM準拠・T053）。任意・未設定は非掲載扱い。 */
   onlineBooking?: boolean;
+  /** 作成日時（ISO・任意・T064.5）。保存時に自動付与（表示のみ）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意・T064.5）。保存時に自動更新（表示のみ）。 */
+  updatedAt?: string;
 };
 
 // セット商品マスタ（PM準拠・T053）。コースの組み合わせ等を1商品として扱う。既存ServiceMenuとは別管理。
@@ -42,6 +50,10 @@ export type CourseSet = {
   sortOrder: number;
   onlineBooking?: boolean;
   isActive: boolean;
+  /** 作成日時（ISO・任意・T064.5）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意・T064.5）。 */
+  updatedAt?: string;
 };
 
 export type RoomKind = "treatment" | "private" | "counseling" | "other";
@@ -66,6 +78,10 @@ export type StaffShift = {
   isActive: boolean;
   /** 勤務店舗ID（T064・任意）。未設定＝既定店舗 store-shibuya のシフト扱い。ヘルプ勤務は応援先店舗の storeId を持つシフトで表現する。 */
   storeId?: string;
+  /** 作成日時（ISO・任意・T064.5）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意・T064.5）。 */
+  updatedAt?: string;
 };
 
 export const staffRoleLabels: Record<StaffRole, string> = {
@@ -89,6 +105,10 @@ export type MenuCategory = {
   sortOrder: number;
   color: string;
   isActive: boolean;
+  /** 作成日時（ISO・任意・T064.5）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意・T064.5）。 */
+  updatedAt?: string;
 };
 
 // オプション商品マスタ（T024）
@@ -107,6 +127,10 @@ export type ServiceOption = {
   /** kind=discount のときの割引率(%) */
   discountPercent?: number;
   isActive: boolean;
+  /** 作成日時（ISO・任意・T064.5）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意・T064.5）。 */
+  updatedAt?: string;
 };
 
 export const optionKindLabels: Record<OptionKind, string> = {
@@ -169,6 +193,10 @@ export type RetailItem = {
   price: number;
   sortOrder: number;
   isActive: boolean;
+  /** 作成日時（ISO・任意・T064.5）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意・T064.5）。 */
+  updatedAt?: string;
 };
 
 // 物販販売（T032）。会計(T022)との結合は将来。まずは物販単体で記録する。

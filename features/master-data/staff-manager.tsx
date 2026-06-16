@@ -11,6 +11,7 @@ import { staffRoleLabels, type ServiceMenu, type StaffMember, type StaffRole } f
 import { compareBySortOrder, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useCurrentStore } from "@/features/org/use-current-store";
+import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 type StaffForm = {
   fullName: string;
@@ -100,10 +101,10 @@ export function StaffManager() {
     };
 
     if (editingId) {
-      setStaff((current) => current.map((item) => (item.id === editingId ? { ...item, ...payload } : item)));
+      setStaff((current) => current.map((item) => (item.id === editingId ? { ...item, ...stampUpdate(payload, item) } : item)));
       setMessage({ type: "success", text: "スタッフ情報を更新しました。" });
     } else {
-      setStaff((current) => [{ id: makeLocalId("staff"), ...payload }, ...current]);
+      setStaff((current) => [{ id: makeLocalId("staff"), ...stampCreate(payload) }, ...current]);
       setMessage({ type: "success", text: "スタッフを追加しました。" });
     }
 
@@ -128,7 +129,9 @@ export function StaffManager() {
 
   // 物理削除はしない（過去予約・会計の担当名解決のためデータは残す）。無効化＝新規候補・台帳縦軸から外す。
   function handleDeactivate(id: string) {
-    setStaff((current) => current.map((item) => (item.id === id ? { ...item, isActive: false } : item)));
+    setStaff((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...stampUpdate({ ...item, isActive: false }, item) } : item))
+    );
     setForm((current) => ({ ...current, isActive: false }));
     setMessage({ type: "success", text: "スタッフを「表示しない（無効）」にしました。過去予約の担当名は引き続き表示されます。" });
   }
@@ -144,8 +147,14 @@ export function StaffManager() {
   ];
 
   function renderDetail() {
+    const editingStaff = editingId ? staff.find((s) => s.id === editingId) ?? null : null;
     return (
       <div>
+        {editingStaff ? (
+          <p className="mb-3 text-[11px] text-stone-400">
+            作成日: {formatTimestamp(editingStaff.createdAt)} ／ 最終更新日: {formatTimestamp(editingStaff.updatedAt)}
+          </p>
+        ) : null}
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-luxas-ink">{editingId ? "スタッフを編集" : "スタッフを追加"}</h2>
           {editingId !== null ? (

@@ -33,4 +33,8 @@ export type Store = {
   code?: string;
   sortOrder?: number;
   isActive: boolean;
+  /** 作成日時（ISO・任意・T064.5）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意・T064.5）。 */
+  updatedAt?: string;
 };
