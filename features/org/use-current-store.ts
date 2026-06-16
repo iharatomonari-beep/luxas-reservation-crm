@@ -24,7 +24,7 @@ export const currentStoreStorageKey = "luxas-current-store-id";
 export function useCurrentStore() {
   const [tenants] = useLocalCollection<Tenant>(tenantsStorageKey, initialTenants);
   const [areas] = useLocalCollection<Area>(areasStorageKey, initialAreas);
-  const [stores] = useLocalCollection<Store>(storesStorageKey, initialStores);
+  const [stores, setStores] = useLocalCollection<Store>(storesStorageKey, initialStores);
 
   const [currentStoreId, setCurrentStoreIdState] = useState<string>(defaultStoreId);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -40,6 +40,39 @@ export function useCurrentStore() {
     }
     setIsHydrated(true);
   }, []);
+
+  // 店舗データの補完（古いlocalStorageに 0件/1件/一部欠けの店舗が残っていても7店舗を表示できるようにする）。
+  // 既存店舗（store-shibuya 等）は維持し、initialStores のうち未保存IDだけを追加する（破壊しない）。
+  useEffect(() => {
+    const existingIds = new Set(stores.map((s) => s.id));
+    const missing = initialStores.filter((s) => !existingIds.has(s.id));
+    if (missing.length === 0) {
+      return;
+    }
+    setStores((current) => {
+      const currentIds = new Set(current.map((s) => s.id));
+      const toAdd = initialStores.filter((s) => !currentIds.has(s.id));
+      if (toAdd.length === 0) {
+        return current;
+      }
+      return [...current, ...toAdd].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    });
+  }, [stores, setStores]);
+
+  // 現在店舗IDが存在しない店舗を指している場合だけ、既定店舗（store-shibuya）に戻す。
+  useEffect(() => {
+    if (!isHydrated || stores.length === 0) {
+      return;
+    }
+    if (!stores.some((s) => s.id === currentStoreId)) {
+      setCurrentStoreIdState(defaultStoreId);
+      try {
+        window.localStorage.setItem(currentStoreStorageKey, defaultStoreId);
+      } catch {
+        // 保存失敗は無視（メモリ上は既定店舗に戻る）。
+      }
+    }
+  }, [isHydrated, stores, currentStoreId]);
 
   function setCurrentStoreId(id: string) {
     setCurrentStoreIdState(id);
