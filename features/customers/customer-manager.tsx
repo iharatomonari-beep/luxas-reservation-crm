@@ -31,6 +31,9 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import { customersStorageKey, initialCustomers } from "@/features/customers/mock-data";
 import type { Customer, CustomerGender } from "@/features/customers/types";
 import { customerGenderLabels } from "@/features/customers/types";
+import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
+import { useCurrentStore } from "@/features/org/use-current-store";
+import type { Store } from "@/features/org/types";
 
 type CustomerForm = {
   name: string;
@@ -46,6 +49,26 @@ type CustomerForm = {
   chartMemo: string;
   tagsText: string;
   isActive: boolean;
+  // --- T067 拡張項目 ---
+  membershipNumber: string;
+  phone2: string;
+  phone3: string;
+  email2: string;
+  postalCode: string;
+  prefecture: string;
+  addressLine1: string;
+  addressLine2: string;
+  acceptsEmail: boolean;
+  acceptsDm: boolean;
+  acceptsPush: boolean;
+  occupation: string;
+  rank: string;
+  comment: string;
+  note1: string;
+  note2: string;
+  homeStoreId: string;
+  effectiveStartDate: string;
+  effectiveEndDate: string;
 };
 
 type FormMode = "create" | "edit";
@@ -66,6 +89,10 @@ export function CustomerManager() {
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [rooms] = useLocalCollection<ServiceRoom>(roomsStorageKey, initialRooms);
+  // 母店（所属店舗）の選択肢（T067）。補正後の有効店舗一覧を参照。
+  const { stores } = useCurrentStore();
+  const storeOptions = [...stores].filter((s) => s.isActive).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const storeName = (id?: string) => (id ? stores.find((s) => s.id === id)?.name ?? id : "—");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(initialCustomers[0]?.id ?? null);
   const [filters, setFilters] = useState<CustomerFilters>({
     name: "",
@@ -228,12 +255,14 @@ export function CustomerManager() {
     const payload = toCustomerPayload(form);
 
     if (editingCustomerId) {
-      setCustomers((current) => current.map((customer) => (customer.id === editingCustomerId ? { ...customer, ...payload } : customer)));
+      setCustomers((current) =>
+        current.map((customer) => (customer.id === editingCustomerId ? { ...customer, ...stampUpdate(payload, customer) } : customer))
+      );
       setSelectedCustomerId(editingCustomerId);
       setMessage({ type: "success", text: "顧客情報を更新しました。" });
     } else {
       const id = makeLocalId("customer");
-      setCustomers((current) => [{ id, ...payload }, ...current]);
+      setCustomers((current) => [{ id, ...stampCreate(payload) }, ...current]);
       setSelectedCustomerId(id);
       setMessage({ type: "success", text: "顧客を新規作成しました。" });
     }
@@ -510,8 +539,14 @@ export function CustomerManager() {
                 <InfoCard label="生年月日" value={formatDateLabel(selectedCustomer.birthDate)} />
                 <InfoCard label="性別" value={customerGenderLabels[selectedCustomer.gender]} />
                 <InfoCard label="住所" value={selectedCustomer.address || "未入力"} />
+                <InfoCard label="母店（所属店舗）" value={storeName(selectedCustomer.homeStoreId)} />
                 <InfoCard label="初回来店日" value={formatDateLabel(selectedCustomer.firstVisitDate)} />
                 <InfoCard label="最終来店日" value={formatDateLabel(selectedCustomer.lastVisitDate)} />
+                <InfoCard
+                  label="配信設定"
+                  value={[`メール:${selectedCustomer.acceptsEmail === false ? "不可" : "可"}`, `DM:${selectedCustomer.acceptsDm === false ? "不可" : "可"}`, `プッシュ:${selectedCustomer.acceptsPush ? "可" : "不可"}`].join(" / ")}
+                />
+                <InfoCard label="作成日時 / 更新日時" value={`${formatTimestamp(selectedCustomer.createdAt)} / ${formatTimestamp(selectedCustomer.updatedAt)}`} />
               </div>
 
               <section className="rounded-md border border-luxas-line bg-white p-4">
@@ -629,6 +664,7 @@ export function CustomerManager() {
         mode={formMode}
         form={form}
         formMessage={formMessage}
+        storeOptions={storeOptions}
         onChange={setForm}
         onClose={closeForm}
         onSubmit={saveForm}
@@ -704,7 +740,26 @@ function createBlankForm(): CustomerForm {
     caution: "",
     chartMemo: "",
     tagsText: "",
-    isActive: true
+    isActive: true,
+    membershipNumber: "",
+    phone2: "",
+    phone3: "",
+    email2: "",
+    postalCode: "",
+    prefecture: "",
+    addressLine1: "",
+    addressLine2: "",
+    acceptsEmail: true,
+    acceptsDm: true,
+    acceptsPush: false,
+    occupation: "",
+    rank: "",
+    comment: "",
+    note1: "",
+    note2: "",
+    homeStoreId: "",
+    effectiveStartDate: "",
+    effectiveEndDate: ""
   };
 }
 
@@ -722,7 +777,26 @@ function toForm(customer: Customer): CustomerForm {
     caution: customer.caution,
     chartMemo: customer.chartMemo,
     tagsText: customer.tags.join(", "),
-    isActive: customer.isActive
+    isActive: customer.isActive,
+    membershipNumber: customer.membershipNumber ?? "",
+    phone2: customer.phone2 ?? "",
+    phone3: customer.phone3 ?? "",
+    email2: customer.email2 ?? "",
+    postalCode: customer.postalCode ?? "",
+    prefecture: customer.prefecture ?? "",
+    addressLine1: customer.addressLine1 ?? "",
+    addressLine2: customer.addressLine2 ?? "",
+    acceptsEmail: customer.acceptsEmail ?? true,
+    acceptsDm: customer.acceptsDm ?? true,
+    acceptsPush: customer.acceptsPush ?? false,
+    occupation: customer.occupation ?? "",
+    rank: customer.rank ?? "",
+    comment: customer.comment ?? "",
+    note1: customer.note1 ?? "",
+    note2: customer.note2 ?? "",
+    homeStoreId: customer.homeStoreId ?? "",
+    effectiveStartDate: customer.effectiveStartDate ?? "",
+    effectiveEndDate: customer.effectiveEndDate ?? ""
   };
 }
 
@@ -740,7 +814,27 @@ function toCustomerPayload(form: CustomerForm): Omit<Customer, "id"> {
     caution: normalizeText(form.caution),
     chartMemo: normalizeText(form.chartMemo),
     tags: parseTags(form.tagsText),
-    isActive: form.isActive
+    isActive: form.isActive,
+    // --- T067 拡張項目（空文字は undefined にして非破壊）---
+    membershipNumber: normalizeText(form.membershipNumber) || undefined,
+    phone2: normalizeText(form.phone2) || undefined,
+    phone3: normalizeText(form.phone3) || undefined,
+    email2: normalizeText(form.email2) || undefined,
+    postalCode: normalizeText(form.postalCode) || undefined,
+    prefecture: normalizeText(form.prefecture) || undefined,
+    addressLine1: normalizeText(form.addressLine1) || undefined,
+    addressLine2: normalizeText(form.addressLine2) || undefined,
+    acceptsEmail: form.acceptsEmail,
+    acceptsDm: form.acceptsDm,
+    acceptsPush: form.acceptsPush,
+    occupation: normalizeText(form.occupation) || undefined,
+    rank: normalizeText(form.rank) || undefined,
+    comment: normalizeText(form.comment) || undefined,
+    note1: normalizeText(form.note1) || undefined,
+    note2: normalizeText(form.note2) || undefined,
+    homeStoreId: form.homeStoreId || undefined,
+    effectiveStartDate: form.effectiveStartDate || undefined,
+    effectiveEndDate: form.effectiveEndDate || undefined
   };
 }
 
@@ -866,6 +960,16 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+// 顧客フォームのセクション枠（T067）。
+function FormSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3 rounded-md border border-luxas-line bg-luxas-paper/40 p-4">
+      <p className="text-sm font-semibold text-luxas-ink">{title}</p>
+      {children}
+    </section>
+  );
+}
+
 function displayCustomerValue(value?: string) {
   return value && value.length > 0 ? value : "未設定";
 }
@@ -897,6 +1001,7 @@ function CustomerFormModal({
   mode,
   form,
   formMessage,
+  storeOptions,
   onChange,
   onClose,
   onSubmit
@@ -904,6 +1009,7 @@ function CustomerFormModal({
   mode: FormMode | null;
   form: CustomerForm;
   formMessage: StatusMessageValue | null;
+  storeOptions: Store[];
   onChange: (value: CustomerForm) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -1003,11 +1109,64 @@ function CustomerFormModal({
             placeholder="例: 初回, 肩, 再来"
           />
 
-          <ToggleField
-            label="有効顧客として扱う"
-            checked={form.isActive}
-            onChange={(value) => update("isActive", value)}
-          />
+          {/* --- 連絡先（T067）--- */}
+          <FormSection title="連絡先">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="会員番号" value={form.membershipNumber} onChange={(value) => update("membershipNumber", value)} placeholder="例: LX-000123" />
+              <Field label="郵便番号" value={form.postalCode} onChange={(value) => update("postalCode", value)} placeholder="例: 150-0001" />
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="電話番号2" value={form.phone2} onChange={(value) => update("phone2", value)} />
+              <Field label="電話番号3" value={form.phone3} onChange={(value) => update("phone3", value)} />
+              <Field label="メール2" value={form.email2} onChange={(value) => update("email2", value)} />
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="都道府県" value={form.prefecture} onChange={(value) => update("prefecture", value)} placeholder="例: 東京都" />
+              <Field label="住所1" value={form.addressLine1} onChange={(value) => update("addressLine1", value)} placeholder="市区町村・番地" />
+              <Field label="住所2" value={form.addressLine2} onChange={(value) => update("addressLine2", value)} placeholder="建物名など" />
+            </div>
+          </FormSection>
+
+          {/* --- 配信設定（T067）--- */}
+          <FormSection title="配信設定">
+            <div className="grid gap-3 md:grid-cols-3">
+              <ToggleField label="メール受け取り" checked={form.acceptsEmail} onChange={(value) => update("acceptsEmail", value)} />
+              <ToggleField label="DM受け取り" checked={form.acceptsDm} onChange={(value) => update("acceptsDm", value)} />
+              <ToggleField label="プッシュ通知受け取り" checked={form.acceptsPush} onChange={(value) => update("acceptsPush", value)} />
+            </div>
+            <p className="text-xs text-stone-500">※ 店舗別の配信設定は将来追加予定（現状は共通のON/OFF）。</p>
+          </FormSection>
+
+          {/* --- 顧客属性（T067）--- */}
+          <FormSection title="顧客属性">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="職業" value={form.occupation} onChange={(value) => update("occupation", value)} placeholder="例: 会社員" />
+              <Field label="顧客ランク" value={form.rank} onChange={(value) => update("rank", value)} placeholder="例: ゴールド" />
+              <SelectField label="母店（所属店舗）" value={form.homeStoreId} onChange={(value) => update("homeStoreId", value)}>
+                <option value="">未設定（既定店舗）</option>
+                {storeOptions.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name}
+                  </option>
+                ))}
+              </SelectField>
+            </div>
+            <Field label="コメント" value={form.comment} onChange={(value) => update("comment", value)} placeholder="一般コメント" />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="備考1" value={form.note1} onChange={(value) => update("note1", value)} />
+              <Field label="備考2" value={form.note2} onChange={(value) => update("note2", value)} />
+            </div>
+          </FormSection>
+
+          {/* --- 管理情報（T067）--- */}
+          <FormSection title="管理情報">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="適用開始日" type="date" value={form.effectiveStartDate} onChange={(value) => update("effectiveStartDate", value)} />
+              <Field label="適用終了日" type="date" value={form.effectiveEndDate} onChange={(value) => update("effectiveEndDate", value)} />
+            </div>
+            <ToggleField label="有効顧客として扱う" checked={form.isActive} onChange={(value) => update("isActive", value)} />
+            <p className="text-xs text-stone-500">※ 作成日時・更新日時は保存時に自動記録されます。作成者ID・更新者IDは認証導入後に対応予定。</p>
+          </FormSection>
 
           <StatusMessage message={formMessage} />
 
