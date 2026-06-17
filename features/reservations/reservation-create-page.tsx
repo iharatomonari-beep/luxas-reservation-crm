@@ -5,7 +5,7 @@ import { FormEvent, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Save, ChevronLeft } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
-import type { Customer } from "@/features/customers/types";
+import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
@@ -54,6 +54,8 @@ type ReservationForm = {
   endTime: string;
   memo: string;
   status: ReservationStatus;
+  // --- T067.5-A ゲスト予約の本人性別（空＝未設定）。preference とは別物 ---
+  guestGender: CustomerGender | "";
 };
 
 type ReservationCreatePrefill = {
@@ -340,6 +342,35 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
             />
           </div>
 
+          <div className="space-y-1.5">
+            <span className="block text-sm font-medium text-stone-700">性別</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {([
+                ["", "未設定"],
+                ["male", customerGenderLabels.male],
+                ["female", customerGenderLabels.female],
+                ["other", customerGenderLabels.other]
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value || "unset"}
+                  type="button"
+                  onClick={() => update("guestGender", value)}
+                  className={[
+                    "rounded-full border px-3 py-1 text-xs font-medium transition",
+                    form.guestGender === value
+                      ? "border-luxas-green bg-luxas-green text-white"
+                      : "border-luxas-line bg-white text-stone-600 hover:bg-luxas-paper"
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] leading-5 text-stone-500">
+              お客様本人の性別です（スタッフ指名希望ではありません）。既存顧客に紐づくと顧客マスタの性別が優先されます。
+            </p>
+          </div>
+
           {matchedCustomer ? (
             <section className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               <div className="flex items-center justify-between gap-3">
@@ -572,7 +603,8 @@ function createInitialForm(prefill: NormalizedReservationCreatePrefill, services
     startTime,
     endTime,
     memo: "",
-    status: "booked"
+    status: "booked",
+    guestGender: ""
   };
 }
 
@@ -718,7 +750,9 @@ function normalizeForm(form: ReservationForm): Omit<Reservation, "id"> {
     startTime: normalizeTimeInputValue(form.startTime) ?? form.startTime,
     endTime: normalizeTimeInputValue(form.endTime) ?? form.endTime,
     memo: normalizeText(form.memo),
-    status: form.status
+    status: form.status,
+    // --- T067.5-A ゲスト予約の本人性別（既存顧客紐づけ時は Customer.gender が優先される） ---
+    guestGender: form.guestGender || undefined
   };
 }
 

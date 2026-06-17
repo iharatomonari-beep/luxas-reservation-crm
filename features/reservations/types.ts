@@ -1,3 +1,5 @@
+import type { CustomerGender } from "@/features/customers/types";
+
 export type ReservationStatus = "booked" | "completed" | "canceled";
 
 export type Reservation = {
@@ -48,6 +50,15 @@ export type Reservation = {
   cancelReason?: string;
   /** キャンセル日時（ISO文字列） */
   canceledAt?: string;
+  // --- T067.5-A 顧客紐づけ・性別の土台（すべて任意・非破壊。既存予約は未設定のまま動く） ---
+  /** 紐づく既存顧客ID（T067.5-B の顧客検索で設定予定）。未設定＝ゲスト予約／電話・氏名照合 fallback。 */
+  customerId?: string;
+  /**
+   * ゲスト予約の本人性別（顧客未紐づけ時の補助表示用）。
+   * 正の性別は紐づく Customer.gender。これは Customer が取れないゲスト予約の fallback に留める。
+   * Reservation.preference（男性スタッフ希望）とは無関係。
+   */
+  guestGender?: CustomerGender;
 };
 
 export type CancelType = "none" | "cancel" | "no_show" | "void";

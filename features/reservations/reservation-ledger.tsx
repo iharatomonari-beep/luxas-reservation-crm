@@ -6,7 +6,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { Ban, BookMarked, CalendarDays, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Undo2, UserRound, Wallet, X } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
-import type { Customer } from "@/features/customers/types";
+import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
   hasBoothCapacity,
@@ -94,10 +94,17 @@ type ReservationForm = {
   isConsecutive: boolean;
   /** インターバル（分）。空＝0（T037） */
   intervalMinutes: string;
+  // --- T067.5-A 顧客紐づけ・性別 ---
+  /** 紐づく既存顧客ID（空＝未紐づけ。検索UIはT067.5-Bで追加） */
+  customerId: string;
+  /** ゲスト予約の本人性別（空＝未設定）。Customer.gender とは別物・preference は使わない */
+  guestGender: CustomerGender | "";
 };
 
 const emptyExtraForm = {
   preference: "none" as const,
+  customerId: "",
+  guestGender: "" as CustomerGender | "",
   bookingTagIds: [] as string[],
   optionIds: [] as string[],
   discountPercent: "",
@@ -787,6 +794,15 @@ export function ReservationLedger() {
       return null;
     }
 
+    // 1) customerId があれば最優先で直引き（T067.5-A）。見つからなければ従来の照合に落ちる。
+    if (reservation.customerId) {
+      const byId = customers.find((customer) => customer.id === reservation.customerId);
+      if (byId) {
+        return byId;
+      }
+    }
+
+    // 2) 既存予約のため、電話優先→氏名の照合 fallback は必ず維持する。
     const phone = normalizeText(reservation.phone ?? "");
     const customerName = normalizeText(reservation.customerName);
 
@@ -813,14 +829,11 @@ export function ReservationLedger() {
   function getReservationCardProps(reservation: Reservation) {
     const menu = services.find((s) => s.id === reservation.serviceMenuId);
     const matchedCustomer = getCustomerByReservation(reservation);
-    // 性別は顧客マスタの本人性別を使う（Reservation.preference は男性スタッフ希望なので使わない）。
-    const genderLabel = matchedCustomer
-      ? matchedCustomer.gender === "female"
-        ? "女"
-        : matchedCustomer.gender === "male"
-          ? "男"
-          : ""
-      : "";
+    // 性別の優先順位（T067.5-A）: customerId/照合で取れた Customer.gender を最優先、
+    // 取れないゲスト予約のみ reservation.guestGender を fallback。
+    // Reservation.preference は男性スタッフ希望なので絶対に使わない。
+    const effectiveGender = matchedCustomer?.gender ?? reservation.guestGender;
+    const genderLabel = effectiveGender === "female" ? "女" : effectiveGender === "male" ? "男" : "";
     const key = (reservation.phone || "").trim() || reservation.customerName.trim();
     // 新規はゲスト/未照合では出さない（誤表示回避）。照合できた顧客で過去の会計済来店が無ければ新規。
     const isNew = Boolean(matchedCustomer) && Boolean(key) && !cardHistoryKeys.has(key);
@@ -887,7 +900,9 @@ export function ReservationLedger() {
       bulkDiscountPercent: reservation.bulkDiscountPercent != null ? String(reservation.bulkDiscountPercent) : "",
       bulkDiscountYen: reservation.bulkDiscountYen != null ? String(reservation.bulkDiscountYen) : "",
       isConsecutive: reservation.isConsecutive ?? false,
-      intervalMinutes: reservation.intervalMinutes != null ? String(reservation.intervalMinutes) : ""
+      intervalMinutes: reservation.intervalMinutes != null ? String(reservation.intervalMinutes) : "",
+      customerId: reservation.customerId ?? "",
+      guestGender: reservation.guestGender ?? ""
     });
     setEditingReservationId(reservation.id);
     setSelectedReservationId(null);
@@ -2407,7 +2422,10 @@ function normalizeForm(form: ReservationForm): Omit<Reservation, "id"> {
     bulkDiscountPercent: parseOptionalNumber(form.bulkDiscountPercent),
     bulkDiscountYen: parseOptionalNumber(form.bulkDiscountYen),
     isConsecutive: form.isConsecutive || undefined,
-    intervalMinutes: parseOptionalNumber(form.intervalMinutes)
+    intervalMinutes: parseOptionalNumber(form.intervalMinutes),
+    // --- T067.5-A ---
+    customerId: normalizeText(form.customerId) || undefined,
+    guestGender: form.guestGender || undefined
   };
 }
 
@@ -2941,6 +2959,35 @@ function ReservationFormModal({
               onChange={(value) => update("phone", value)}
               placeholder="例: 090-1111-2222（任意）"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <span className="block text-sm font-medium text-stone-700">性別</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {([
+                ["", "未設定"],
+                ["male", customerGenderLabels.male],
+                ["female", customerGenderLabels.female],
+                ["other", customerGenderLabels.other]
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value || "unset"}
+                  type="button"
+                  onClick={() => update("guestGender", value)}
+                  className={[
+                    "rounded-full border px-3 py-1 text-xs font-medium transition",
+                    form.guestGender === value
+                      ? "border-luxas-green bg-luxas-green text-white"
+                      : "border-luxas-line bg-white text-stone-600 hover:bg-luxas-paper"
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] leading-5 text-stone-500">
+              お客様本人の性別です（スタッフ指名希望ではありません）。既存顧客に紐づくと顧客マスタの性別が優先されます。
+            </p>
           </div>
 
           {matchedCustomer ? (
