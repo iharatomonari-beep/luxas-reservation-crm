@@ -2619,9 +2619,9 @@ function ReservationDetailModal({
   return (
     // T067.5-B-1: 中央モーダル → 左スライドオーバー（左ドロワー）。タイムライン本体のレイアウトには影響しない。
     <div className="fixed inset-0 z-50 flex bg-stone-950/35">
-      <section className="relative flex h-full w-full max-w-[400px] flex-col overflow-y-auto border-r border-luxas-line bg-white shadow-soft">
-        {/* ヘッダ（タイトル＋閉じる） */}
-        <div className="flex items-center justify-between gap-3 border-b border-luxas-line px-4 py-3">
+      <section className="relative flex h-full w-full max-w-[400px] flex-col overflow-hidden border-r border-luxas-line bg-white shadow-soft">
+        {/* ヘッダ（タイトル＋閉じる）。固定。 */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-luxas-line px-4 py-3">
           <p className="text-sm font-semibold text-luxas-green">予約詳細</p>
           <button
             type="button"
@@ -2633,6 +2633,8 @@ function ReservationDetailModal({
           </button>
         </div>
 
+        {/* T067.5-C-2: ヘッダ／フッターは固定し、中央のみスクロール。削除/キャンセル導線は下部固定フッターで常時表示。 */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
         {/* 1. 顧客検索エリア（最上部・PeakManager風）。検索本体はT067.5-B-2で実装＝現状は準備中。 */}
         <div data-section="customer-search" className="border-b border-luxas-line bg-luxas-paper/60 px-4 py-3">
           <div className="flex items-center justify-between">
@@ -2930,9 +2932,10 @@ function ReservationDetailModal({
             ) : null}
           </div>
         </div>
+        </div>
 
         {showCancelPanel && !isCanceled ? (
-          <div className="border-t border-red-100 bg-red-50/60 px-5 py-4">
+          <div className="shrink-0 border-t border-red-100 bg-red-50/60 px-5 py-4">
             <p className="text-sm font-semibold text-red-800">キャンセル種別・理由</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {(["cancel", "no_show", "void"] as Exclude<CancelType, "none">[]).map((type) => (
@@ -2979,34 +2982,37 @@ function ReservationDetailModal({
           </div>
         ) : null}
 
-        {/* フッター操作。会計/返客/顧客は上部の操作ボタン群に集約済み。ここは編集・保留棚・キャンセルを残す。 */}
-        <div className="mt-auto flex flex-col gap-2 border-t border-luxas-line bg-luxas-paper px-5 py-4">
+        {/* フッター操作（固定・常時表示）。会計/返客/顧客は上部の操作ボタン群に集約済み。
+            ここは編集・保留棚・予約キャンセルを常時押せる位置に置く（物理削除はせず既存キャンセル処理に接続）。 */}
+        <div className="shrink-0 border-t border-luxas-line bg-luxas-paper px-4 py-3">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2.5 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"
+              onClick={() => onEdit(reservation)}
+            >
+              <Edit3 size={16} aria-hidden="true" />
+              編集
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:text-stone-400"
+              onClick={() => { onHold(reservation.id); onClose(); }}
+              disabled={isCanceled}
+              title="別の日に移動するために一時保管します"
+            >
+              <BookMarked size={16} aria-hidden="true" />
+              保留棚へ
+            </button>
+          </div>
           <button
             type="button"
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-luxas-line bg-white px-4 py-2.5 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"
-            onClick={() => onEdit(reservation)}
-          >
-            <Edit3 size={16} aria-hidden="true" />
-            編集
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:text-stone-400"
-            onClick={() => { onHold(reservation.id); onClose(); }}
-            disabled={isCanceled}
-            title="別の日に移動するために一時保管します"
-          >
-            <BookMarked size={16} aria-hidden="true" />
-            保留棚へ
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-stone-400"
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border border-red-300 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:border-red-200 disabled:bg-red-200"
             onClick={() => setShowCancelPanel(true)}
             disabled={isCanceled}
           >
             <Ban size={16} aria-hidden="true" />
-            キャンセル
+            予約をキャンセル / 削除
           </button>
         </div>
       </section>
@@ -3096,7 +3102,7 @@ function ReservationFormModal({
       <section
         className={[
           "w-full rounded-lg border border-luxas-line bg-white shadow-soft",
-          isCreate ? "flex max-h-[92vh] max-w-4xl flex-col overflow-hidden" : "max-h-[92vh] max-w-2xl overflow-y-auto"
+          isCreate ? "flex max-h-[92vh] max-w-5xl flex-col overflow-hidden" : "max-h-[92vh] max-w-2xl overflow-y-auto"
         ].join(" ")}
       >
         <div className="flex items-center justify-between gap-4 border-b border-luxas-line px-5 py-4">
@@ -3124,7 +3130,7 @@ function ReservationFormModal({
           <div
             className={
               isCreate
-                ? "grid min-h-0 flex-1 items-start gap-x-6 gap-y-5 overflow-y-auto px-5 py-5 lg:grid-cols-2"
+                ? "grid min-h-0 flex-1 items-start gap-x-5 gap-y-4 overflow-y-auto px-5 py-4 lg:grid-cols-3"
                 : "space-y-5 px-5 py-5"
             }
           >
