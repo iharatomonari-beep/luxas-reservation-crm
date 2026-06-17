@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Ban, BookMarked, CalendarDays, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Undo2, UserRound, Wallet, X } from "lucide-react";
+import { Ban, BookMarked, CalendarDays, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Search, Undo2, UserRound, Wallet, X } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
+import { searchCustomers } from "@/features/customers/customer-search";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
   hasBoothCapacity,
@@ -28,6 +29,7 @@ import {
 import type { MasterTag, RetailSale, ServiceMenu, ServiceOption, ServiceRoom, StaffMember, StaffShift } from "@/features/master-data/types";
 import { initialStoreSettings, useStoreSettings } from "@/features/master-data/store-settings";
 import { useCurrentStore } from "@/features/org/use-current-store";
+import type { Store } from "@/features/org/types";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import { filterMenusByStore } from "@/features/master-data/store-menu-scope";
@@ -318,7 +320,7 @@ export function ReservationLedger() {
   const activeOptions = useMemo(() => allOptions.filter((o) => o.isActive), [allOptions]);
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   // 現在店舗（T062）。新規予約への storeId 付与と表示の安全フィルタ（T063）に使う。
-  const { currentStoreId } = useCurrentStore();
+  const { currentStoreId, stores } = useCurrentStore();
   // 店舗設定（営業時間・時間きざみ）をランタイム参照する（T031）。設定画面の保存値が台帳に反映される。
   const [storeSettings] = useStoreSettings();
   const businessStart = storeSettings.businessStartTime;
@@ -1967,7 +1969,11 @@ export function ReservationLedger() {
       </div>
 
       <ReservationDetailModal
+        key={selectedReservationId ?? "none"}
         reservation={selectedReservation}
+        customers={customers}
+        stores={stores}
+        currentStoreId={currentStoreId}
         serviceName={selectedReservation ? getServiceName(selectedReservation.serviceMenuId) : ""}
         roomName={selectedReservation ? getBoothKindLabel(selectedReservation.serviceMenuId) : ""}
         staffName={selectedReservation ? getStaffName(selectedReservation.staffId) : ""}
@@ -2526,7 +2532,10 @@ function ReservationDetailModal({
   onNominate,
   onCheckout,
   routeTags,
-  options
+  options,
+  customers,
+  stores,
+  currentStoreId
 }: {
   reservation: Reservation | null;
   serviceName: string;
@@ -2544,10 +2553,52 @@ function ReservationDetailModal({
   onCheckout: (reservation: Reservation) => void;
   routeTags: MasterTag[];
   options: ServiceOption[];
+  customers: Customer[];
+  stores: Store[];
+  currentStoreId?: string;
 }) {
   const [showCancelPanel, setShowCancelPanel] = useState(false);
   const [cancelType, setCancelType] = useState<Exclude<CancelType, "none">>("cancel");
   const [cancelReason, setCancelReason] = useState("");
+  // T067.5-B-2a 顧客検索（表示のみ・customerId書き込みなし）。state は予約ごとに key で初期化される。
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [searchHomeOnly, setSearchHomeOnly] = useState(false);
+  const [searchResults, setSearchResults] = useState<Customer[]>([]);
+  const [searchMessage, setSearchMessage] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const storeName = (homeStoreId?: string) =>
+    homeStoreId ? stores.find((store) => store.id === homeStoreId)?.name ?? "未設定" : "未設定";
+
+  const runCustomerSearch = () => {
+    const trimmed = searchKeyword.trim();
+    if (trimmed.length === 0) {
+      setSearchResults([]);
+      setHasSearched(false);
+      setSearchMessage("検索項目を入力してください");
+      return;
+    }
+    if (trimmed.length < 2) {
+      setSearchResults([]);
+      setHasSearched(false);
+      setSearchMessage("2文字以上で検索してください");
+      return;
+    }
+    const { results, total, isLimited } = searchCustomers(customers, {
+      keyword: trimmed,
+      homeOnly: searchHomeOnly,
+      currentStoreId
+    });
+    setSearchResults(results);
+    setHasSearched(true);
+    if (total === 0) {
+      setSearchMessage("該当する顧客が見つかりません");
+    } else if (isLimited) {
+      setSearchMessage(`30件以上ヒットしました（${total}件）。条件を絞ってください`);
+    } else {
+      setSearchMessage(`${total}件ヒットしました`);
+    }
+  };
 
   if (!reservation) {
     return null;
@@ -2586,35 +2637,92 @@ function ReservationDetailModal({
         <div data-section="customer-search" className="border-b border-luxas-line bg-luxas-paper/60 px-4 py-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-luxas-ink">顧客検索</span>
-            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-500">準備中</span>
+            <span className="rounded-full bg-luxas-green/10 px-2 py-0.5 text-[10px] font-medium text-luxas-green">表示のみ</span>
           </div>
           <div className="mt-2 flex gap-2">
             <input
               type="text"
               name="customerSearchKeyword"
-              disabled
+              value={searchKeyword}
+              onChange={(event) => setSearchKeyword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  runCustomerSearch();
+                }
+              }}
               placeholder="顧客を検索"
-              className="min-w-0 flex-1 cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-2.5 py-1.5 text-xs text-stone-400 outline-none"
+              className="min-w-0 flex-1 rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-xs text-luxas-ink outline-none focus:border-luxas-green"
             />
             <button
               type="button"
-              disabled
-              className="cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-3 py-1.5 text-xs font-medium text-stone-400"
+              onClick={runCustomerSearch}
+              className="inline-flex items-center gap-1 rounded-md border border-luxas-green bg-luxas-mist px-3 py-1.5 text-xs font-semibold text-luxas-green transition hover:bg-luxas-mist/70"
             >
+              <Search size={13} aria-hidden="true" />
               検索
             </button>
             <button
               type="button"
               disabled
+              title="準備中（新規顧客作成は未実装）"
               className="cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-3 py-1.5 text-xs font-medium text-stone-400"
             >
               ＋新規
             </button>
           </div>
           <label className="mt-2 flex items-center gap-2 text-xs text-stone-600">
-            <input type="checkbox" name="customerSearchHomeOnly" disabled className="h-3.5 w-3.5 cursor-not-allowed accent-luxas-green" />
-            自店のみ
+            <input
+              type="checkbox"
+              name="customerSearchHomeOnly"
+              checked={searchHomeOnly}
+              onChange={(event) => setSearchHomeOnly(event.target.checked)}
+              className="h-3.5 w-3.5 cursor-pointer accent-luxas-green"
+            />
+            自店のみ（未設定の顧客も含む）
           </label>
+
+          {searchMessage ? (
+            <p className="mt-2 text-[11px] font-medium text-stone-500">{searchMessage}</p>
+          ) : null}
+
+          {hasSearched && searchResults.length > 0 ? (
+            <ul className="mt-2 max-h-64 space-y-1.5 overflow-y-auto">
+              {searchResults.map((result) => (
+                <li key={result.id}>
+                  <div className="rounded-md border border-luxas-line bg-white px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-luxas-green/10 px-2 py-0.5 text-[10px] font-semibold text-luxas-green">
+                        {result.rank || "—"}
+                      </span>
+                      <span className="text-sm font-semibold text-luxas-ink">{result.name || "—"}</span>
+                      <span className="rounded-full bg-luxas-paper px-2 py-0.5 text-[10px] font-medium text-stone-500">
+                        {customerGenderLabels[result.gender]}
+                      </span>
+                      <button
+                        type="button"
+                        disabled
+                        title="準備中（顧客紐づけは次工程で実装）"
+                        className="ml-auto cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-2 py-0.5 text-[10px] font-medium text-stone-400"
+                      >
+                        選択
+                      </button>
+                    </div>
+                    <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-stone-600">
+                      <div className="flex gap-1"><dt className="text-stone-400">店舗</dt><dd>{storeName(result.homeStoreId)}</dd></div>
+                      <div className="flex gap-1"><dt className="text-stone-400">フリガナ</dt><dd>{result.nameKana || "—"}</dd></div>
+                      <div className="flex gap-1"><dt className="text-stone-400">TEL</dt><dd>{result.phone || "—"}</dd></div>
+                      <div className="flex gap-1"><dt className="text-stone-400">会員番号</dt><dd>{result.membershipNumber || "—"}</dd></div>
+                      <div className="flex gap-1">
+                        <dt className="text-stone-400">来店</dt>
+                        <dd>{Number.isFinite(Number(result.totalVisits)) && result.totalVisits ? `${Number(result.totalVisits)}回` : "0回"}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
 
         {/* 2. 顧客サマリー（検索直下）。customerId優先→電話/氏名fallback の取得結果を表示するだけ。 */}
