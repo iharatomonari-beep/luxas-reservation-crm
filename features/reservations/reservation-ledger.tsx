@@ -3063,6 +3063,8 @@ function ReservationFormModal({
       )
     : null;
   const currentStaffName = staff.find((item) => item.id === form.staffId)?.displayName ?? "";
+  // T067.5-C: タイムラインからの新規予約だけ横長・スクロール不要レイアウトにする（編集モードは従来どおり）。
+  const isCreate = mode === "create";
 
   function update<K extends keyof ReservationForm>(key: K, value: ReservationForm[K]) {
     const nextForm: ReservationForm = { ...form, [key]: value };
@@ -3091,7 +3093,12 @@ function ReservationFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-8">
-      <section className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-luxas-line bg-white shadow-soft">
+      <section
+        className={[
+          "w-full rounded-lg border border-luxas-line bg-white shadow-soft",
+          isCreate ? "flex max-h-[92vh] max-w-4xl flex-col overflow-hidden" : "max-h-[92vh] max-w-2xl overflow-y-auto"
+        ].join(" ")}
+      >
         <div className="flex items-center justify-between gap-4 border-b border-luxas-line px-5 py-4">
           <div>
             <p className="text-sm font-medium text-luxas-green">Reservation Form</p>
@@ -3109,7 +3116,19 @@ function ReservationFormModal({
           </button>
         </div>
 
-        <form className="space-y-5 px-5 py-5" onSubmit={onSubmit} noValidate>
+        <form
+          onSubmit={onSubmit}
+          noValidate
+          className={isCreate ? "flex min-h-0 flex-1 flex-col" : ""}
+        >
+          <div
+            className={
+              isCreate
+                ? "grid min-h-0 flex-1 items-start gap-x-6 gap-y-5 overflow-y-auto px-5 py-5 lg:grid-cols-2"
+                : "space-y-5 px-5 py-5"
+            }
+          >
+          <div className="space-y-4">
           <FormSectionTitle index={1} title="顧客情報" />
           <div className="grid gap-4 md:grid-cols-2">
             <FormInput
@@ -3172,7 +3191,9 @@ function ReservationFormModal({
               顧客名または電話番号が一致すると、注意事項を表示します。
             </section>
           )}
+          </div>
 
+          <div className="space-y-3">
           <FormSectionTitle index={2} title="メニュー（コース）" />
           {(() => {
             const courseCategories = Array.from(
@@ -3241,7 +3262,9 @@ function ReservationFormModal({
               </div>
             );
           })()}
+          </div>
 
+          <div className="space-y-4">
           <FormSectionTitle index={3} title="ブース種別 / 指名" />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
@@ -3271,7 +3294,9 @@ function ReservationFormModal({
               </span>
             </div>
           </div>
+          </div>
 
+          <div className="space-y-4">
           <FormSectionTitle index={4} title="日時" />
           <div className="grid gap-4 md:grid-cols-3">
             <FormInput label="日付" type="date" value={form.date} onChange={(value) => update("date", value)} required />
@@ -3293,7 +3318,10 @@ function ReservationFormModal({
               hint={selectedService ? `${selectedService.durationMinutes}分から自動入力されます` : "メニュー選択後に自動入力されます"}
             />
           </div>
+          </div>
 
+          {!isCreate ? (
+          <div className="space-y-4">
           <section className="rounded-md border border-luxas-line bg-luxas-paper px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -3318,7 +3346,10 @@ function ReservationFormModal({
                 : "注意事項: 顧客の注意事項は未登録、またはまだ顧客情報が一致していません。"}
             </div>
           </section>
+          </div>
+          ) : null}
 
+          <div className="space-y-3">
           <FormSectionTitle index={5} title="オプション（PM準拠）" />
           <div className="space-y-3 rounded-md border border-luxas-line bg-luxas-paper/40 p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
@@ -3419,7 +3450,10 @@ function ReservationFormModal({
               </div>
             ) : null}
           </div>
+          </div>
 
+          {!isCreate ? (
+          <div className="space-y-4">
           <FormSectionTitle index={6} title="施術コメント / メモ" />
           <label className="block">
             <span className="flex items-center gap-2 text-sm font-medium text-stone-700">
@@ -3443,10 +3477,14 @@ function ReservationFormModal({
               ))}
             </FormSelect>
           </div>
+          </div>
+          ) : null}
+          </div>
 
-          <StatusMessage message={formMessage} />
-
-          <div className="flex flex-col gap-2 border-t border-luxas-line pt-4 sm:flex-row sm:justify-end">
+          {/* T067.5-C: 新規予約は固定フッターで保存ボタンを常時表示（スクロール不要）。編集は従来の末尾配置。 */}
+          <div className={isCreate ? "border-t border-luxas-line bg-white px-5 py-4" : "px-5 pb-5"}>
+            <StatusMessage message={formMessage} />
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               className="inline-flex items-center justify-center rounded-md border border-luxas-line bg-white px-4 py-2.5 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"
@@ -3461,6 +3499,7 @@ function ReservationFormModal({
               <Save size={16} aria-hidden="true" />
               保存
             </button>
+            </div>
           </div>
         </form>
       </section>
