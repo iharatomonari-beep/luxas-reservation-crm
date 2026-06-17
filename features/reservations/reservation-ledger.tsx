@@ -1481,66 +1481,8 @@ export function ReservationLedger() {
         </div>
       </section>
 
-      {selectedReservation ? (
-        <section className="order-6 rounded-lg border border-luxas-line bg-white px-4 py-4 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-semibold text-luxas-ink">選択中の予約</h2>
-                <ReservationStatusPill status={selectedReservation.status} />
-                <span className="rounded-full bg-luxas-paper px-2.5 py-1 text-xs font-medium text-stone-600">
-                  {selectedReservation.startTime} - {selectedReservation.endTime}
-                </span>
-              </div>
-              <p className="mt-2 truncate text-sm text-stone-700">
-                {selectedReservation.customerName} / {getServiceName(selectedReservation.serviceMenuId)} / {getStaffName(
-                  selectedReservation.staffId
-                )} / {getBoothKindLabel(selectedReservation.serviceMenuId)}
-              </p>
-              <p className="mt-1 text-xs text-stone-500">
-                {selectedReservationCustomer ? `顧客管理登録あり: ${selectedReservationCustomer.phone}` : "顧客管理未登録"}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href="/dashboard/customers"
-                className="inline-flex items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-luxas-ink transition hover:bg-luxas-paper"
-              >
-                <UserRound size={16} aria-hidden="true" />
-                顧客を確認
-              </Link>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:text-stone-400"
-                onClick={() => addToHoldShelf(selectedReservation.id)}
-                disabled={selectedReservation.status === "canceled"}
-                title="別の日に移動するために一時保管します"
-              >
-                <BookMarked size={16} aria-hidden="true" />
-                保留棚へ
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-luxas-ink transition hover:bg-luxas-paper"
-                onClick={() => openEditForm(selectedReservation)}
-              >
-                <Edit3 size={16} aria-hidden="true" />
-                編集
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-stone-400"
-                onClick={() => cancelReservation(selectedReservation)}
-                disabled={selectedReservation.status === "canceled"}
-              >
-                <Ban size={16} aria-hidden="true" />
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </section>
-      ) : null}
+      {/* T067.5-B-1: 選択中予約の詳細は左スライドオーバー（ReservationDetailModal）に一本化したため、
+          旧 order-6 サマリは削除（中央モーダルとの二重表示を解消）。 */}
 
       {heldReservations.length > 0 && (
         <section className="order-7 rounded-lg border border-amber-200 bg-amber-50 px-4 py-4">
@@ -2029,7 +1971,7 @@ export function ReservationLedger() {
         serviceName={selectedReservation ? getServiceName(selectedReservation.serviceMenuId) : ""}
         roomName={selectedReservation ? getBoothKindLabel(selectedReservation.serviceMenuId) : ""}
         staffName={selectedReservation ? getStaffName(selectedReservation.staffId) : ""}
-        customer={getCustomerByReservation(selectedReservation)}
+        customer={selectedReservationCustomer}
         onClose={() => setSelectedReservationId(null)}
         onEdit={openEditForm}
         onCancel={cancelReservation}
@@ -2608,8 +2550,9 @@ function ReservationDetailModal({
   const isCanceled = reservation.status === "canceled";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-8">
-      <section className="w-full max-w-lg rounded-lg border border-luxas-line bg-white shadow-soft">
+    // T067.5-B-1: 中央モーダル → 左スライドオーバー（左ドロワー）。タイムライン本体のレイアウトには影響しない。
+    <div className="fixed inset-0 z-50 flex bg-stone-950/35">
+      <section className="relative flex h-full w-full max-w-[400px] flex-col overflow-y-auto border-r border-luxas-line bg-white shadow-soft">
         <div className="flex items-center justify-between gap-4 border-b border-luxas-line px-5 py-4">
           <div>
             <p className="text-sm font-medium text-luxas-green">予約詳細</p>
@@ -2637,7 +2580,7 @@ function ReservationDetailModal({
           </div>
         </div>
 
-        <div className="grid gap-4 px-5 py-5 text-sm md:grid-cols-[1fr_0.95fr]">
+        <div className="grid gap-4 px-5 py-5 text-sm">
           <dl className="grid gap-3">
             <DetailRow label="日付" value={formatDayLabel(reservation.date)} />
             <DetailRow label="時間" value={`${reservation.startTime} - ${reservation.endTime}`} />
@@ -2676,18 +2619,91 @@ function ReservationDetailModal({
             ) : null}
           </dl>
 
-          <section className="rounded-md border border-luxas-line bg-luxas-paper p-4">
-            <div className="flex items-center gap-2">
-              <UserRound size={16} className="text-luxas-green" aria-hidden="true" />
-              <h3 className="text-sm font-semibold text-luxas-ink">顧客メモ</h3>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-stone-700">
-              {customer?.caution ? customer.caution : "注意事項は登録されていません。"}
-            </p>
-            <p className="mt-4 text-xs text-stone-500">
-              {customer ? "顧客情報を確認してから必要なら予約を編集できます。" : "顧客情報は顧客管理画面で確認してください。"}
-            </p>
-          </section>
+          {customer ? (
+            // 既存顧客に紐づく場合: 顧客情報カード（編集せず確認できる・T067.5-B-1）。
+            <section className="rounded-md border border-luxas-line bg-luxas-paper p-4">
+              <div className="flex items-center gap-2">
+                <UserRound size={16} className="text-luxas-green" aria-hidden="true" />
+                <h3 className="text-sm font-semibold text-luxas-ink">顧客情報</h3>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-stone-500">顧客管理と連動</span>
+              </div>
+              <dl className="mt-3 grid gap-2">
+                <DetailRow label="氏名" value={customer.name || "未入力"} />
+                <DetailRow label="フリガナ" value={customer.nameKana || "未入力"} />
+                <DetailRow label="性別" value={customerGenderLabels[customer.gender]} />
+                <DetailRow label="会員番号" value={customer.membershipNumber || "—"} />
+                <DetailRow label="電話番号" value={customer.phone || "未入力"} />
+                <DetailRow label="顧客ランク" value={customer.rank || "—"} />
+                <DetailRow label="来店回数" value={customer.totalVisits ? `${customer.totalVisits}回` : "—"} />
+              </dl>
+              {customer.caution || customer.chartMemo ? (
+                <p className="mt-3 line-clamp-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                  {customer.caution || customer.chartMemo}
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-stone-500">注意事項・メモは登録されていません。</p>
+              )}
+            </section>
+          ) : (
+            // ゲスト予約（顧客未紐づけ）: ゲスト表示＋「顧客を検索」枠（検索ロジックはT067.5-B-2）。
+            <section className="rounded-md border border-dashed border-luxas-line bg-luxas-paper p-4">
+              <div className="flex items-center gap-2">
+                <UserRound size={16} className="text-stone-400" aria-hidden="true" />
+                <h3 className="text-sm font-semibold text-luxas-ink">ゲスト予約</h3>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-stone-500">顧客未紐づけ</span>
+              </div>
+              <dl className="mt-3 grid gap-2">
+                <DetailRow label="顧客名" value={reservation.customerName || "ゲスト"} />
+                <DetailRow label="電話番号" value={reservation.phone || "未入力"} />
+                <DetailRow
+                  label="性別"
+                  value={
+                    reservation.guestGender === "female"
+                      ? "女"
+                      : reservation.guestGender === "male"
+                        ? "男"
+                        : "未設定"
+                  }
+                />
+              </dl>
+
+              <div className="mt-4 rounded-md border border-luxas-line bg-white p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-luxas-ink">顧客を検索して紐づけ</p>
+                  <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-500">準備中</span>
+                </div>
+                <label className="mt-2 flex items-center gap-2 text-xs text-stone-600">
+                  <input type="checkbox" disabled className="h-3.5 w-3.5 cursor-not-allowed accent-luxas-green" />
+                  自店のみ
+                </label>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="text"
+                    disabled
+                    placeholder="氏名・カナ・電話・会員番号"
+                    className="min-w-0 flex-1 cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-2.5 py-1.5 text-xs text-stone-400 outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled
+                    className="cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-3 py-1.5 text-xs font-medium text-stone-400"
+                  >
+                    検索
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    className="cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-3 py-1.5 text-xs font-medium text-stone-400"
+                  >
+                    ＋新規
+                  </button>
+                </div>
+                <div className="mt-2 rounded-md border border-dashed border-luxas-line bg-luxas-paper px-3 py-4 text-center text-[11px] text-stone-400">
+                  検索結果はここに表示されます（検索・紐づけは次工程で実装）
+                </div>
+              </div>
+            </section>
+          )}
         </div>
 
         <div className="border-t border-luxas-line px-5 py-4">
@@ -2799,7 +2815,7 @@ function ReservationDetailModal({
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-2 border-t border-luxas-line bg-luxas-paper px-5 py-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-2 border-t border-luxas-line bg-luxas-paper px-5 py-4">
           <Link
             href="/dashboard/customers"
             className="inline-flex items-center justify-center gap-2 rounded-md border border-luxas-line bg-white px-4 py-2.5 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"
