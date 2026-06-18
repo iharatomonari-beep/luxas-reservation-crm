@@ -410,15 +410,17 @@ export function ReservationLedger() {
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
   // 現在時刻（HH:mm・JST）。1分ごとに更新する表示専用。
   const [currentTime, setCurrentTime] = useState("");
+  const [nowMinutes, setNowMinutes] = useState<number | null>(null);
   useEffect(() => {
     function updateClock() {
-      setCurrentTime(
-        new Date().toLocaleTimeString("ja-JP", {
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "Asia/Tokyo"
-        })
-      );
+      const hhmm = new Date().toLocaleTimeString("ja-JP", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Tokyo"
+      });
+      setCurrentTime(hhmm);
+      const m = timeToMinutes(hhmm);
+      setNowMinutes(Number.isFinite(m) ? m : null);
     }
     updateClock();
     const timer = window.setInterval(updateClock, 60_000);
@@ -432,8 +434,29 @@ export function ReservationLedger() {
       : slotWidth;
   const cellWidth = timelineView === "full" ? fullCellWidth : slotWidth;
   const timelineWidth = slots.length * cellWidth;
+  // 末尾の時間（22時・23時等）でもスタッフ名の真横（左端）に寄せられるよう、右側に空白の余白を足す。
+  // 基本表示のみ（全体表示は画面に収まるため不要）。
+  const trailingPad =
+    timelineView === "full" ? 0 : Math.max(0, timelineViewportWidth - staffColumnWidth - cellWidth * slotsPerHour);
   const timelineTotalWidth = staffColumnWidth + timelineWidth;
+  const timelineContentWidth = timelineTotalWidth + trailingPad;
   const selectedDateIsToday = selectedDate === getTodayDate();
+  // 各時間帯（時）の予約件数（ジャンプバーの小さい数字用）。キャンセル除外。
+  const hourReservationCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const r of dayReservationsForTimeline) {
+      const h = Math.floor(timeToMinutes(r.startTime) / 60);
+      if (Number.isFinite(h)) {
+        counts[h] = (counts[h] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [dayReservationsForTimeline]);
+  // 現在時刻の赤い縦線（本日のみ・営業時間内）。1分ごとに nowMinutes 更新で自動移動。
+  const tlStartMin = timeToMinutes(businessStart);
+  const tlEndMin = timeToMinutes(businessEnd);
+  const showNowLine = selectedDateIsToday && nowMinutes != null && nowMinutes >= tlStartMin && nowMinutes <= tlEndMin;
+  const nowLineLeft = showNowLine && nowMinutes != null ? ((nowMinutes - tlStartMin) / slotMinutes) * cellWidth + 3 : 0;
   const reservationStats = useMemo(
     () =>
       dayReservations.reduce(
@@ -1031,7 +1054,8 @@ export function ReservationLedger() {
     const start = timeToMinutes(startTime);
     const tlStart = timeToMinutes(businessStart);
     if (!Number.isFinite(start) || !Number.isFinite(tlStart)) return;
-    const x = Math.max(0, ((start - tlStart) / slotMinutes) * cellWidth - 120);
+    // その時刻をスタッフ名列の真横（タイムライン左端）にぴったり合わせる（オフセットなし）。
+    const x = Math.max(0, ((start - tlStart) / slotMinutes) * cellWidth);
     timelineScrollRef.current.scrollTo({ left: x, behavior: "smooth" });
   }
 
@@ -1732,6 +1756,38 @@ export function ReservationLedger() {
           </p>
         </div>
 
+        {/* 時間ジャンプバー（PM準拠）。クリックでその時間へスクロール。小さい数字＝その時間帯の予約件数。 */}
+        <div className="flex flex-wrap items-center gap-1 border-b border-luxas-line bg-luxas-paper/50 px-3 py-1.5">
+          {hourSlots.map((slot) => {
+            const hour = Math.floor(timeToMinutes(slot) / 60);
+            const count = hourReservationCounts[hour] ?? 0;
+            const isCurrentHour = selectedDateIsToday && nowMinutes != null && Math.floor(nowMinutes / 60) === hour;
+            return (
+              <button
+                key={slot}
+                type="button"
+                onClick={() => scrollTimelineToTime(slot)}
+                title={`${hour}時へ移動（予約${count}件）`}
+                className={[
+                  "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold transition",
+                  isCurrentHour
+                    ? "border-red-400 bg-red-50 text-red-700"
+                    : "border-luxas-line bg-white text-stone-600 hover:bg-luxas-mist"
+                ].join(" ")}
+              >
+                <span>{hour}</span>
+                {count > 0 ? (
+                  <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-luxas-green px-1 text-[10px] font-bold leading-4 text-white">
+                    {count}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-medium text-stone-300">0</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {timelineStaff.length === 0 ? (
           <div className="px-5 py-6 text-sm text-stone-600">この日に表示できるシフト中スタッフがいません。</div>
         ) : (
@@ -1740,7 +1796,7 @@ export function ReservationLedger() {
             ref={timelineScrollRef}
             style={{ touchAction: dragState ? "none" : undefined }}
           >
-            <div className="min-w-full" style={{ width: timelineTotalWidth }}>
+            <div className="min-w-full" style={{ width: timelineContentWidth }}>
             <div className="flex border-b border-luxas-line">
               <div
                 className="sticky left-0 z-30 flex shrink-0 items-center border-r border-luxas-line bg-white px-4 text-xs font-semibold text-stone-500 shadow-[1px_0_0_0_#e7e5e4]"
@@ -1813,6 +1869,13 @@ export function ReservationLedger() {
                     ].join(" ")}
                     style={{ width: timelineWidth, height: timelineRowHeight }}
                   >
+                    {showNowLine ? (
+                      <div
+                        className="pointer-events-none absolute top-0 z-20 w-0.5 bg-red-500"
+                        style={{ left: nowLineLeft, height: timelineRowHeight }}
+                        aria-hidden="true"
+                      />
+                    ) : null}
                     {slots.map((slot, index) => {
                       const endTime = slotEndTime(slot, slotMinutes) ?? slot;
                       const occupied = dayReservationsForTimeline.some(
