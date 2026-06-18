@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Ban, BookMarked, CalendarDays, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Search, Undo2, UserRound, Wallet, X } from "lucide-react";
+import { Ban, BookMarked, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Search, Undo2, UserRound, Wallet, X } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
 import { searchCustomers } from "@/features/customers/customer-search";
@@ -362,7 +362,8 @@ export function ReservationLedger() {
   const hourSlots = useMemo(() => buildTimeSlots(businessStart, businessEnd, 60), [businessStart, businessEnd]);
   const dayReservations = normalizedReservations.filter((reservation) => reservation.date === selectedDate);
   const dayReservationsForTimeline = useMemo(
-    () => dayReservations.filter((r) => !holdShelf.includes(r.id)),
+    // キャンセル/削除した予約はタイムラインに薄枠を残さず消す（記録は返客情報タブに残る）。
+    () => dayReservations.filter((r) => !holdShelf.includes(r.id) && r.status !== "canceled"),
     [dayReservations, holdShelf]
   );
   const heldReservations = useMemo(
@@ -1096,6 +1097,19 @@ export function ReservationLedger() {
       )
     );
     setMessage({ type: "success", text: `ステータスを「${reservationStatusLabels[status]}」に変更しました。` });
+  }
+
+  // 左パネルの顧客検索から既存顧客を予約に紐づける（customerId を保存し、表示名・電話も顧客に合わせる）。
+  // 顧客マスタ自体は変更しない（予約側だけ更新）。
+  function linkCustomerToReservation(reservationId: string, customer: Customer) {
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservationId
+          ? { ...item, customerId: customer.id, customerName: customer.name, phone: customer.phone }
+          : item
+      )
+    );
+    setMessage({ type: "success", text: `「${customer.name}」を予約に紐づけました。` });
   }
 
   function beginReservationDrag(event: ReactPointerEvent<HTMLButtonElement>, reservation: Reservation) {
@@ -1998,6 +2012,7 @@ export function ReservationLedger() {
         }}
         routeTags={routeTags}
         options={activeOptions}
+        onLinkCustomer={linkCustomerToReservation}
       />
 
       <CheckoutModal
@@ -2552,7 +2567,8 @@ function ReservationDetailModal({
   options,
   customers,
   stores,
-  currentStoreId
+  currentStoreId,
+  onLinkCustomer
 }: {
   reservation: Reservation | null;
   serviceName: string;
@@ -2573,6 +2589,7 @@ function ReservationDetailModal({
   customers: Customer[];
   stores: Store[];
   currentStoreId?: string;
+  onLinkCustomer: (reservationId: string, customer: Customer) => void;
 }) {
   const [showCancelPanel, setShowCancelPanel] = useState(false);
   const [cancelType, setCancelType] = useState<Exclude<CancelType, "none">>("cancel");
@@ -2720,9 +2737,9 @@ function ReservationDetailModal({
                       </span>
                       <button
                         type="button"
-                        disabled
-                        title="準備中（顧客紐づけは次工程で実装）"
-                        className="ml-auto cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-2 py-0.5 text-[10px] font-medium text-stone-400"
+                        onClick={() => onLinkCustomer(reservation.id, result)}
+                        title="この顧客を予約に紐づける"
+                        className="ml-auto rounded-md border border-luxas-green bg-luxas-mist px-2.5 py-0.5 text-[10px] font-semibold text-luxas-green transition hover:bg-luxas-mist/70"
                       >
                         選択
                       </button>
@@ -3025,6 +3042,15 @@ function ReservationDetailModal({
               保留棚へ
             </button>
           </div>
+          <button
+            type="button"
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border border-luxas-green bg-luxas-green px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#285f51] disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-200"
+            onClick={() => { onStatusChange(reservation, "completed"); onClose(); }}
+            disabled={isCanceled}
+          >
+            <Check size={16} aria-hidden="true" />
+            完了
+          </button>
           <button
             type="button"
             className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border border-red-300 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:border-red-200 disabled:bg-red-200"
