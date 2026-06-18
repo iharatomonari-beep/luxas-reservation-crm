@@ -260,7 +260,7 @@ export function ServiceManager() {
 
             <div>
               <SelectField
-                label="予約カード色"
+                label="コース色（予約カード・コース選択に反映）"
                 value={form.color}
                 onChange={(value) => setForm((current) => ({ ...current, color: value }))}
               >
@@ -271,10 +271,15 @@ export function ServiceManager() {
                 ))}
               </SelectField>
               <div className="mt-2 flex items-center gap-2 text-xs text-stone-500">
-                <span>予約枠の背景色:</span>
+                <span>背景色:</span>
                 <span className={["inline-block h-4 w-8 rounded border", menuColorStyle(form.color).bg, menuColorStyle(form.color).border].join(" ")} />
-                <span>（会計済みの予約はグレー優先で表示されます）</span>
+                <span>（会計済みの予約はグレー優先）</span>
               </div>
+              <p className="mt-1 text-xs text-stone-500">
+                {form.storeScope === "selected"
+                  ? "店舗独自コースのため、色は店舗で設定できます。"
+                  : "全店共通コースのため、色は本部で設定します（全店に反映）。"}
+              </p>
             </div>
 
             <section className="rounded-md border border-luxas-line bg-white p-3">

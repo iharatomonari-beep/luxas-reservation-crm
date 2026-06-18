@@ -8,11 +8,21 @@ export type MenuColorStyle = { bg: string; text: string; border: string; swatch:
 // 色キー → カード配色（薄い背景＋読みやすい濃色文字＋枠線）＋一覧スウォッチ。
 const MENU_COLOR_STYLES: Record<string, MenuColorStyle> = {
   green: { bg: "bg-luxas-mist", text: "text-luxas-ink", border: "border-luxas-green/50", swatch: "bg-luxas-green" },
-  rose: { bg: "bg-rose-50", text: "text-rose-900", border: "border-rose-300", swatch: "bg-rose-500" },
-  sky: { bg: "bg-sky-50", text: "text-sky-900", border: "border-sky-300", swatch: "bg-sky-500" },
-  amber: { bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-300", swatch: "bg-amber-500" },
-  violet: { bg: "bg-violet-50", text: "text-violet-900", border: "border-violet-300", swatch: "bg-violet-500" },
+  emerald: { bg: "bg-emerald-50", text: "text-emerald-900", border: "border-emerald-300", swatch: "bg-emerald-500" },
+  lime: { bg: "bg-lime-50", text: "text-lime-900", border: "border-lime-300", swatch: "bg-lime-500" },
   teal: { bg: "bg-teal-50", text: "text-teal-900", border: "border-teal-300", swatch: "bg-teal-500" },
+  cyan: { bg: "bg-cyan-50", text: "text-cyan-900", border: "border-cyan-300", swatch: "bg-cyan-500" },
+  sky: { bg: "bg-sky-50", text: "text-sky-900", border: "border-sky-300", swatch: "bg-sky-500" },
+  blue: { bg: "bg-blue-50", text: "text-blue-900", border: "border-blue-300", swatch: "bg-blue-500" },
+  indigo: { bg: "bg-indigo-50", text: "text-indigo-900", border: "border-indigo-300", swatch: "bg-indigo-500" },
+  violet: { bg: "bg-violet-50", text: "text-violet-900", border: "border-violet-300", swatch: "bg-violet-500" },
+  fuchsia: { bg: "bg-fuchsia-50", text: "text-fuchsia-900", border: "border-fuchsia-300", swatch: "bg-fuchsia-500" },
+  pink: { bg: "bg-pink-50", text: "text-pink-900", border: "border-pink-300", swatch: "bg-pink-500" },
+  rose: { bg: "bg-rose-50", text: "text-rose-900", border: "border-rose-300", swatch: "bg-rose-500" },
+  red: { bg: "bg-red-50", text: "text-red-900", border: "border-red-300", swatch: "bg-red-500" },
+  orange: { bg: "bg-orange-50", text: "text-orange-900", border: "border-orange-300", swatch: "bg-orange-500" },
+  amber: { bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-300", swatch: "bg-amber-500" },
+  yellow: { bg: "bg-yellow-50", text: "text-yellow-900", border: "border-yellow-300", swatch: "bg-yellow-400" },
   stone: { bg: "bg-stone-100", text: "text-stone-700", border: "border-stone-300", swatch: "bg-stone-500" }
 };
 
@@ -20,11 +30,21 @@ const MENU_COLOR_STYLES: Record<string, MenuColorStyle> = {
 export const MENU_COLOR_OPTIONS: { key: string; label: string }[] = [
   { key: "", label: "デフォルト" },
   { key: "green", label: "グリーン" },
-  { key: "rose", label: "ローズ" },
-  { key: "sky", label: "スカイ" },
-  { key: "amber", label: "アンバー" },
-  { key: "violet", label: "バイオレット" },
+  { key: "emerald", label: "エメラルド" },
+  { key: "lime", label: "ライム" },
   { key: "teal", label: "ティール" },
+  { key: "cyan", label: "シアン" },
+  { key: "sky", label: "スカイ" },
+  { key: "blue", label: "ブルー" },
+  { key: "indigo", label: "インディゴ" },
+  { key: "violet", label: "バイオレット" },
+  { key: "fuchsia", label: "フューシャ" },
+  { key: "pink", label: "ピンク" },
+  { key: "rose", label: "ローズ" },
+  { key: "red", label: "レッド" },
+  { key: "orange", label: "オレンジ" },
+  { key: "amber", label: "アンバー" },
+  { key: "yellow", label: "イエロー" },
   { key: "stone", label: "ストーン" }
 ];
 
