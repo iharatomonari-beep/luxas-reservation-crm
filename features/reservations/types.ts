@@ -89,6 +89,27 @@ export type ReservationPayment = {
   amount: number;
 };
 
+/** 返客記録（電話・飛び込みで受けられなかったお客様）。予約とは別の集計用。 */
+export type TurnawayRecord = {
+  id: string;
+  date: string;
+  startTime: string;
+  /** 返客 / キャンセル待ち */
+  kind: string;
+  /** "male" | "female" | "" */
+  gender: "male" | "female" | "";
+  reason: string;
+  comment: string;
+  serviceMenuId?: string;
+  optionIds?: string[];
+  /** こだわり: none=希望なし / male=男性希望 / female=女性希望 */
+  preference?: string;
+  /** 指名スタッフID */
+  nominatedStaffId?: string;
+  storeId?: string;
+  createdAt?: string;
+};
+
 export const paymentMethodLabels: Record<PaymentMethod, string> = {
   cash: "現金",
   credit: "クレジット",

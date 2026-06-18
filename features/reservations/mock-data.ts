@@ -3,6 +3,8 @@ import type { Reservation } from "@/features/reservations/types";
 export const reservationsStorageKey = "luxas-reservations-v2";
 export const reservationLedgerDateStorageKey = "luxas-reservations-ledger-date";
 export const reservationLedgerUpdateStorageKey = "luxas-reservations-ledger-update";
+/** 返客（電話・飛び込みで受けられなかったお客様）の記録。予約とは別管理。 */
+export const turnawaysStorageKey = "luxas-turnaways";
 
 export const initialReservations: Reservation[] = [
   // 2026-05-30（今日）

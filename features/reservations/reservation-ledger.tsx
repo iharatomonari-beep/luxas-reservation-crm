@@ -49,7 +49,8 @@ import {
   initialReservations,
   reservationLedgerDateStorageKey,
   reservationLedgerUpdateStorageKey,
-  reservationsStorageKey
+  reservationsStorageKey,
+  turnawaysStorageKey
 } from "@/features/reservations/mock-data";
 import {
   cancelTypeLabels,
@@ -58,7 +59,8 @@ import {
   type PaymentMethod,
   type Reservation,
   type ReservationStatus,
-  type ReservationPayment
+  type ReservationPayment,
+  type TurnawayRecord
 } from "@/features/reservations/types";
 import { CheckoutModal } from "@/features/reservations/checkout-modal";
 import { compareBySortOrder } from "@/features/master-data/utils";
@@ -308,6 +310,8 @@ export function ReservationLedger() {
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   // 会計モーダル対象の予約ID（T022）
   const [checkoutReservationId, setCheckoutReservationId] = useState<string | null>(null);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [turnaways, setTurnaways] = useLocalCollection<TurnawayRecord>(turnawaysStorageKey, []);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [rooms] = useLocalCollection<ServiceRoom>(roomsStorageKey, initialRooms);
@@ -507,6 +511,11 @@ export function ReservationLedger() {
   const dayCanceledReservations = useMemo(
     () => dayReservations.filter((r) => r.status === "canceled").sort((a, b) => a.startTime.localeCompare(b.startTime)),
     [dayReservations]
+  );
+  // 返客記録（電話・飛び込みで受けられなかったお客様）。選択日の分。
+  const dayTurnaways = useMemo(
+    () => turnaways.filter((t) => t.date === selectedDate).sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    [turnaways, selectedDate]
   );
   const staffReservationCountMap = useMemo(
     () =>
@@ -1479,26 +1488,23 @@ export function ReservationLedger() {
           ) : null}
 
           {dayPanelTab === "return" ? (
-            dayCanceledReservations.length > 0 ? (
-              <ul className="divide-y divide-luxas-line">
-                {dayCanceledReservations.map((reservation) => (
-                  <li key={reservation.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedReservationId(reservation.id)}
-                      className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 text-left transition hover:bg-luxas-paper"
-                    >
-                      <span className="font-mono text-xs text-stone-500">{reservation.startTime}-{reservation.endTime}</span>
-                      <span className="font-semibold text-luxas-ink">{reservation.customerName || "（無名）"}</span>
-                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">{cancelTypeLabels[reservation.cancelType ?? "cancel"]}</span>
-                      {reservation.cancelReason ? <span className="text-xs text-stone-500">理由: {reservation.cancelReason}</span> : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-stone-500">当日の返客・キャンセルはありません。</p>
-            )
+            <>
+              <p className="mb-2 text-xs text-stone-500">返客（受けられなかったお客様）{dayTurnaways.length}件 ／ キャンセル {dayCanceledReservations.length}件</p>
+              {dayTurnaways.length > 0 ? (
+                <ul className="divide-y divide-luxas-line">
+                  {dayTurnaways.map((t) => (
+                    <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-2">
+                      <span className="font-mono text-xs text-stone-500">{t.startTime}</span>
+                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">{t.kind}</span>
+                      <span className="text-xs text-stone-600">{t.gender === "male" ? "男性" : t.gender === "female" ? "女性" : "—"}</span>
+                      {t.reason ? <span className="text-xs text-stone-500">理由: {t.reason}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-stone-500">当日の返客記録はありません（左の「返客」ボタンから登録）。</p>
+              )}
+            </>
           ) : null}
         </div>
       </section>
@@ -1571,8 +1577,16 @@ export function ReservationLedger() {
                 setSelectedReservationId(selectedReservation.id);
               }
             },
-            // 返客=返客一覧へ。
-            { key: "返客", icon: Undo2, enabled: true, href: "/dashboard/reservations/returns" },
+            // 返客=電話・飛び込みで受けられなかったお客様の記録（予約とは別）。予約選択は不要・常に空フォームを開く。
+            {
+              key: "返客",
+              icon: Undo2,
+              enabled: true,
+              onClick: () => {
+                setSelectedReservationId(null);
+                setIsReturnModalOpen(true);
+              }
+            },
             // 会計=選択中予約の会計モーダルを開く（未選択なら案内・落ちない）。
             {
               key: "会計",
@@ -1693,7 +1707,7 @@ export function ReservationLedger() {
             <span>客単価 <b className="text-luxas-ink">¥{checkoutSummary.avgPerCustomer.toLocaleString()}</b></span>
             <span>取消 <b className="text-luxas-ink">{reservationStats.canceled}件</b></span>
             <span>無断キャンセル <b className="text-luxas-ink">{cancelStats.noShow}件</b></span>
-            <span>返客 <b className="text-stone-400">0件</b></span>
+            <span>返客 <b className="text-luxas-ink">{dayTurnaways.length}件</b></span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>施術売上 <b className="text-luxas-ink">¥{checkoutSummary.totalSales.toLocaleString()}</b></span>
@@ -2019,6 +2033,25 @@ export function ReservationLedger() {
         reservation={normalizedReservations.find((r) => r.id === checkoutReservationId) ?? null}
         onClose={() => setCheckoutReservationId(null)}
         onSave={completeCheckout}
+      />
+
+      <ReturnModal
+        key={isReturnModalOpen ? "open" : "closed"}
+        isOpen={isReturnModalOpen}
+        defaultDate={selectedDate}
+        defaultTime={initialStoreSettings.reservationAcceptStartTime}
+        services={services}
+        options={activeOptions}
+        staff={staff}
+        onClose={() => setIsReturnModalOpen(false)}
+        onSubmit={(record) => {
+          setTurnaways((current) => [
+            { ...record, id: makeLocalId("turnaway"), storeId: currentStoreId, createdAt: new Date().toISOString() },
+            ...current
+          ]);
+          setIsReturnModalOpen(false);
+          setMessage({ type: "success", text: "返客を登録しました。" });
+        }}
       />
 
       <ReservationFormModal
@@ -3059,6 +3092,279 @@ function ReservationDetailModal({
           >
             <Ban size={16} aria-hidden="true" />
             予約をキャンセル / 削除
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// 返客登録モーダル（PM準拠）。選択中予約を「返客 / キャンセル待ち」として登録（＝既存のキャンセル処理に接続）。
+const RETURN_REASONS = [
+  "スタッフに空きがない",
+  "指名スタッフに空きがない",
+  "男女希望スタッフに空きがない",
+  "ベットに空きがない",
+  "商品欠品",
+  "時間外",
+  "その他"
+];
+
+function ReturnModal({
+  isOpen,
+  defaultDate,
+  defaultTime,
+  services,
+  options,
+  staff,
+  onClose,
+  onSubmit
+}: {
+  isOpen: boolean;
+  defaultDate: string;
+  defaultTime: string;
+  services: ServiceMenu[];
+  options: ServiceOption[];
+  staff: StaffMember[];
+  onClose: () => void;
+  onSubmit: (record: Omit<TurnawayRecord, "id" | "storeId" | "createdAt">) => void;
+}) {
+  const [date, setDate] = useState(defaultDate);
+  const [time, setTime] = useState(defaultTime);
+  const [gender, setGender] = useState<"male" | "female" | "">("");
+  const [kind, setKind] = useState<"返客" | "キャンセル待ち">("返客");
+  const [reason, setReason] = useState("");
+  const [comment, setComment] = useState("");
+  const [serviceMenuId, setServiceMenuId] = useState("");
+  const [optionIds, setOptionIds] = useState<string[]>([]);
+  const [courseTab, setCourseTab] = useState("");
+  const [preference, setPreference] = useState("none");
+  const [nominatedStaffId, setNominatedStaffId] = useState("");
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const courseCategories = Array.from(new Set(services.filter((s) => s.isActive).map((s) => s.category || "未分類")));
+  const activeTab = courseTab && courseCategories.includes(courseTab) ? courseTab : courseCategories[0] || "";
+  const tabServices = services.filter((s) => s.isActive && (s.category || "未分類") === activeTab);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-8">
+      <section className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-luxas-line bg-white shadow-soft">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-luxas-line px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-luxas-green">返客登録</p>
+            <h2 className="mt-1 text-lg font-semibold text-luxas-ink">受けられなかったお客様を記録</h2>
+            <p className="mt-1 text-xs text-stone-500">電話・飛び込みで満席等により受付できなかったお客様をカウントします（予約とは別管理）。</p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-luxas-line text-stone-600 hover:bg-luxas-paper"
+            onClick={onClose}
+            aria-label="閉じる"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 text-sm">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <span className="block font-medium text-stone-600">開始日時</span>
+              <div className="flex gap-2">
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="flex-1 rounded-md border border-luxas-line bg-white px-3 py-2.5 text-sm text-luxas-ink outline-none focus:border-luxas-green" />
+                <input type="time" step={300} value={time} onChange={(e) => setTime(e.target.value)} className="w-28 rounded-md border border-luxas-line bg-white px-3 py-2.5 text-sm text-luxas-ink outline-none focus:border-luxas-green" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <span className="block font-medium text-stone-600">性別<span className="ml-1 text-red-600">*</span></span>
+              <div className="flex gap-2">
+                {([["male", "男性"], ["female", "女性"]] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setGender(v)}
+                    className={[
+                      "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition",
+                      gender === v ? "border-luxas-green bg-luxas-green text-white" : "border-luxas-line bg-white text-stone-700 hover:bg-luxas-paper"
+                    ].join(" ")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <span className="block font-medium text-stone-600">種別</span>
+              <div className="flex gap-2">
+                {(["返客", "キャンセル待ち"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setKind(k)}
+                    className={[
+                      "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition",
+                      kind === k ? "border-luxas-green bg-luxas-green text-white" : "border-luxas-line bg-white text-stone-700 hover:bg-luxas-paper"
+                    ].join(" ")}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <span className="block font-medium text-stone-600">返客理由 / キャンセル待ちステータス</span>
+              <select
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-full rounded-md border border-luxas-line bg-white px-3 py-2.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+              >
+                <option value="">選択してください</option>
+                {RETURN_REASONS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <span className="block font-medium text-stone-600">コメント</span>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              className="min-h-16 w-full rounded-md border border-luxas-line bg-white px-3 py-2.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+              placeholder="補足があれば入力"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <span className="block font-medium text-stone-600">希望コース（任意）</span>
+            <div className="flex flex-wrap gap-1.5">
+              {courseCategories.map((category) => {
+                const color = categoryColorClass(category);
+                const isActive = category === activeTab;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setCourseTab(category)}
+                    className={[
+                      "rounded-full border px-3 py-1 text-xs font-semibold transition",
+                      isActive ? `${color.activeBg} border-transparent text-white` : `bg-white ${color.text} ${color.border} hover:bg-luxas-paper`
+                    ].join(" ")}
+                  >
+                    {category}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {tabServices.map((service) => {
+                const color = categoryColorClass(service.category || "未分類");
+                const active = serviceMenuId === service.id;
+                return (
+                  <button
+                    key={service.id}
+                    type="button"
+                    onClick={() => setServiceMenuId(active ? "" : service.id)}
+                    className={[
+                      "rounded-md border px-3 py-1.5 text-left text-xs font-semibold transition",
+                      active ? `${color.activeBg} border-transparent text-white` : `bg-white ${color.text} ${color.border} hover:bg-luxas-paper`
+                    ].join(" ")}
+                  >
+                    {service.name}
+                  </button>
+                );
+              })}
+              {tabServices.length === 0 ? <p className="text-xs text-stone-500">有効なコースがありません。</p> : null}
+            </div>
+          </div>
+
+          {options.length > 0 ? (
+            <div className="space-y-2">
+              <span className="block font-medium text-stone-600">オプション（任意）</span>
+              <div className="flex flex-wrap gap-1.5">
+                {options.map((opt) => {
+                  const on = optionIds.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setOptionIds((prev) => (on ? prev.filter((id) => id !== opt.id) : [...prev, opt.id]))}
+                      className={[
+                        "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                        on ? "border-amber-400 bg-amber-50 text-amber-700" : "border-luxas-line bg-white text-stone-600 hover:bg-luxas-paper"
+                      ].join(" ")}
+                    >
+                      {opt.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <span className="block font-medium text-stone-600">こだわり</span>
+              <select
+                value={preference}
+                onChange={(e) => setPreference(e.target.value)}
+                className="w-full rounded-md border border-luxas-line bg-white px-3 py-2.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+              >
+                <option value="none">希望なし</option>
+                <option value="male">男性希望</option>
+                <option value="female">女性希望</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <span className="block font-medium text-stone-600">指名スタッフ</span>
+              <select
+                value={nominatedStaffId}
+                onChange={(e) => setNominatedStaffId(e.target.value)}
+                className="w-full rounded-md border border-luxas-line bg-white px-3 py-2.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+              >
+                <option value="">指名なし</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.displayName}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-luxas-line bg-luxas-paper px-5 py-4">
+          <button
+            type="button"
+            className="rounded-md border border-luxas-line bg-white px-4 py-2.5 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"
+            onClick={onClose}
+          >
+            閉じる
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-md bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700"
+            onClick={() =>
+              onSubmit({
+                date,
+                startTime: time,
+                kind,
+                gender,
+                reason,
+                comment: comment.trim(),
+                serviceMenuId: serviceMenuId || undefined,
+                optionIds: optionIds.length ? optionIds : undefined,
+                preference: preference !== "none" ? preference : undefined,
+                nominatedStaffId: nominatedStaffId || undefined
+              })
+            }
+          >
+            <Undo2 size={16} aria-hidden="true" />
+            登録
           </button>
         </div>
       </section>
