@@ -43,6 +43,8 @@ export type Reservation = {
   isConsecutive?: boolean;
   /** インターバル（施術後に空ける分数）。同一スタッフの占有・重複判定に加算する（T037） */
   intervalMinutes?: number;
+  /** インターバル（施術前に空ける分数）。開始時刻の前に占有を広げ、重複・空き判定に反映する（任意・非破壊） */
+  intervalBeforeMinutes?: number;
   // --- T035 キャンセル管理（すべて任意・未設定は none 相当） ---
   /** キャンセル種別。none=未キャンセル / cancel=通常キャンセル / no_show=無断キャンセル / void=取消 */
   cancelType?: CancelType;

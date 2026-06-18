@@ -94,8 +94,10 @@ type ReservationForm = {
   bulkDiscountPercent: string;
   bulkDiscountYen: string;
   isConsecutive: boolean;
-  /** インターバル（分）。空＝0（T037） */
+  /** インターバル：施術後に空ける分（分）。空＝0（T037） */
   intervalMinutes: string;
+  /** インターバル：施術前に空ける分（分）。空＝0 */
+  intervalBeforeMinutes: string;
   // --- T067.5-A 顧客紐づけ・性別 ---
   /** 紐づく既存顧客ID（空＝未紐づけ。検索UIはT067.5-Bで追加） */
   customerId: string;
@@ -114,7 +116,8 @@ const emptyExtraForm = {
   bulkDiscountPercent: "",
   bulkDiscountYen: "",
   isConsecutive: false,
-  intervalMinutes: ""
+  intervalMinutes: "",
+  intervalBeforeMinutes: ""
 };
 
 type FormMode = "create" | "edit";
@@ -903,6 +906,7 @@ export function ReservationLedger() {
       bulkDiscountYen: reservation.bulkDiscountYen != null ? String(reservation.bulkDiscountYen) : "",
       isConsecutive: reservation.isConsecutive ?? false,
       intervalMinutes: reservation.intervalMinutes != null ? String(reservation.intervalMinutes) : "",
+      intervalBeforeMinutes: reservation.intervalBeforeMinutes != null ? String(reservation.intervalBeforeMinutes) : "",
       customerId: reservation.customerId ?? "",
       guestGender: reservation.guestGender ?? ""
     });
@@ -1248,7 +1252,9 @@ export function ReservationLedger() {
     // スタッフ重複（同一スタッフ・時間重複）は従来どおりブロックする。
     // 新規/編集予約・既存予約の双方のインターバルを占有時間に含める（T037）。
     const newInterval = parseOptionalNumber(value.intervalMinutes) ?? 0;
+    const newIntervalBefore = parseOptionalNumber(value.intervalBeforeMinutes) ?? 0;
     const effectiveEnd = end + newInterval;
+    const effectiveStart = start - newIntervalBefore;
     const staffOverlap = currentReservations.find((reservation) => {
       if (
         reservation.id === currentReservationId ||
@@ -1258,9 +1264,9 @@ export function ReservationLedger() {
         return false;
       }
 
-      const reservationStart = timeToMinutes(reservation.startTime);
+      const reservationStart = effectiveStartMinutes(reservation);
       const reservationEnd = effectiveEndMinutes(reservation);
-      const overlaps = start < reservationEnd && reservationStart < effectiveEnd;
+      const overlaps = effectiveStart < reservationEnd && reservationStart < effectiveEnd;
 
       return overlaps && reservation.staffId === value.staffId;
     });
@@ -2100,8 +2106,8 @@ function reservationOverlapsMinutes(
     return false;
   }
 
-  const reservationStart = timeToMinutes(reservation.startTime);
-  // 既存予約のインターバルを占有時間に含める（T037）。
+  // 既存予約の前後インターバルを占有時間に含める（T037＋前インターバル）。
+  const reservationStart = effectiveStartMinutes(reservation);
   const reservationEnd = effectiveEndMinutes(reservation);
 
   if (!Number.isFinite(reservationStart) || !Number.isFinite(reservationEnd)) {
@@ -2241,13 +2247,14 @@ function validateDraggedReservation({
 
   // スタッフ重複（同一スタッフ・時間重複）は従来どおりブロックする。
   const currentReservationsWithoutSelf = currentReservations.filter((item) => item.id !== reservation.id);
-  // 移動中の予約のインターバルも占有に含める（T037）。
+  // 移動中の予約の前後インターバルも占有に含める（T037＋前インターバル）。
   const draggedEffectiveEnd = end + (reservation.intervalMinutes ?? 0);
+  const draggedEffectiveStart = start - (reservation.intervalBeforeMinutes ?? 0);
   const staffConflict = currentReservationsWithoutSelf.find(
     (item) =>
       item.date === reservation.date &&
       item.staffId === reservation.staffId &&
-      reservationOverlapsMinutes(item, start, draggedEffectiveEnd)
+      reservationOverlapsMinutes(item, draggedEffectiveStart, draggedEffectiveEnd)
   );
 
   if (staffConflict) {
@@ -2373,6 +2380,7 @@ function normalizeForm(form: ReservationForm): Omit<Reservation, "id"> {
     bulkDiscountYen: parseOptionalNumber(form.bulkDiscountYen),
     isConsecutive: form.isConsecutive || undefined,
     intervalMinutes: parseOptionalNumber(form.intervalMinutes),
+    intervalBeforeMinutes: parseOptionalNumber(form.intervalBeforeMinutes),
     // --- T067.5-A ---
     customerId: normalizeText(form.customerId) || undefined,
     guestGender: form.guestGender || undefined
@@ -2406,6 +2414,15 @@ function effectiveEndMinutes(reservation: Reservation) {
     return end;
   }
   return end + (reservation.intervalMinutes ?? 0);
+}
+
+// 施術前インターバルを差し引いた実効開始（分）。占有・重複判定に使う。
+function effectiveStartMinutes(reservation: Reservation) {
+  const start = timeToMinutes(reservation.startTime);
+  if (!Number.isFinite(start)) {
+    return start;
+  }
+  return start - (reservation.intervalBeforeMinutes ?? 0);
 }
 
 function parseOptionalNumber(value: string): number | undefined {
@@ -2860,8 +2877,11 @@ function ReservationDetailModal({
             {expectedSale != null ? (
               <DetailRow label="売上見込（割引反映）" value={`¥${expectedSale.toLocaleString()}`} />
             ) : null}
-            {reservation.intervalMinutes ? (
-              <DetailRow label="インターバル" value={`${reservation.intervalMinutes}分`} />
+            {reservation.intervalBeforeMinutes || reservation.intervalMinutes ? (
+              <DetailRow
+                label="インターバル"
+                value={`前${reservation.intervalBeforeMinutes ?? 0}分 / 後${reservation.intervalMinutes ?? 0}分`}
+              />
             ) : null}
             {isCanceled && reservation.canceledAt ? (
               <DetailRow label="キャンセル日時" value={formatDateTimeLabel(reservation.canceledAt)} />
@@ -3130,13 +3150,13 @@ function ReservationFormModal({
           <div
             className={
               isCreate
-                ? "grid min-h-0 flex-1 items-start gap-x-5 gap-y-4 overflow-y-auto px-5 py-4 lg:grid-cols-3"
+                ? "grid min-h-0 flex-1 content-start auto-rows-min gap-x-5 gap-y-3 overflow-y-auto px-4 py-3 lg:grid-cols-3"
                 : "space-y-5 px-5 py-5"
             }
           >
           <div className="space-y-4">
-          <FormSectionTitle index={1} title="顧客情報" />
-          <div className="grid gap-4 md:grid-cols-2">
+          <FormSectionTitle index={1} title="顧客情報" compact={isCreate} />
+          <div className={isCreate ? "grid gap-3" : "grid gap-4 md:grid-cols-2"}>
             <FormInput
               label="顧客名"
               value={form.customerName}
@@ -3175,32 +3195,34 @@ function ReservationFormModal({
                 </button>
               ))}
             </div>
-            <p className="text-[11px] leading-5 text-stone-500">
-              お客様本人の性別です（スタッフ指名希望ではありません）。既存顧客に紐づくと顧客マスタの性別が優先されます。
-            </p>
+            {!isCreate ? (
+              <p className="text-[11px] leading-5 text-stone-500">
+                お客様本人の性別です（スタッフ指名希望ではありません）。既存顧客に紐づくと顧客マスタの性別が優先されます。
+              </p>
+            ) : null}
           </div>
 
           {matchedCustomer ? (
-            <section className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <section className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-950">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-semibold">顧客の注意事項</p>
                 <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-amber-800">
                   顧客管理と連動
                 </span>
               </div>
-              <p className="mt-2 leading-6">
+              <p className="mt-1.5 leading-6">
                 {matchedCustomer.caution ? matchedCustomer.caution : "注意事項は登録されていません。"}
               </p>
             </section>
-          ) : (
+          ) : !isCreate ? (
             <section className="rounded-md border border-dashed border-luxas-line bg-luxas-paper px-4 py-3 text-sm text-stone-600">
               顧客名または電話番号が一致すると、注意事項を表示します。
             </section>
-          )}
+          ) : null}
           </div>
 
           <div className="space-y-3">
-          <FormSectionTitle index={2} title="メニュー（コース）" />
+          <FormSectionTitle index={2} title="メニュー（コース）" compact={isCreate} />
           {(() => {
             const courseCategories = Array.from(
               new Set(services.filter((s) => s.isActive).map((s) => s.category || "未分類"))
@@ -3238,7 +3260,7 @@ function ReservationFormModal({
                   })}
                 </div>
                 {/* 選択中カテゴリのコース一覧（名前/料金/時間） */}
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className={isCreate ? "grid grid-cols-2 gap-2" : "grid gap-2 sm:grid-cols-2"}>
                   {tabServices.map((service) => {
                     const color = categoryColorClass(service.category || "未分類");
                     const active = form.serviceMenuId === service.id;
@@ -3271,14 +3293,16 @@ function ReservationFormModal({
           </div>
 
           <div className="space-y-4">
-          <FormSectionTitle index={3} title="ブース種別 / 指名" />
-          <div className="grid gap-4 md:grid-cols-2">
+          <FormSectionTitle index={3} title="ブース種別 / 指名" compact={isCreate} />
+          <div className={isCreate ? "grid gap-3" : "grid gap-4 md:grid-cols-2"}>
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-luxas-ink">ブース種別</span>
               <div className="rounded-md border border-luxas-line bg-luxas-paper px-3 py-2.5 text-sm text-stone-700">
                 {selectedService ? (selectedService.requiresPrivateRoom ? "個室" : "施術ブース") : "メニュー選択後に自動で決まります"}
               </div>
-              <span className="text-xs text-stone-500">ブースは空き状況に応じて自動で割り当てられます（個別指定は不要）。</span>
+              {!isCreate ? (
+                <span className="text-xs text-stone-500">ブースは空き状況に応じて自動で割り当てられます（個別指定は不要）。</span>
+              ) : null}
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-luxas-ink">指名</span>
@@ -3295,16 +3319,18 @@ function ReservationFormModal({
               >
                 {form.nominatedStaffId ? `★ 指名あり${currentStaffName ? `（${currentStaffName}）` : ""}` : "指名なし（押すと指名）"}
               </button>
-              <span className="text-xs text-stone-500">
-                指名すると現在の担当スタッフで固定され、タイムラインで担当変更できなくなります（時刻移動は可）。
-              </span>
+              {!isCreate ? (
+                <span className="text-xs text-stone-500">
+                  指名すると現在の担当スタッフで固定され、タイムラインで担当変更できなくなります（時刻移動は可）。
+                </span>
+              ) : null}
             </div>
           </div>
           </div>
 
           <div className="space-y-4">
-          <FormSectionTitle index={4} title="日時" />
-          <div className="grid gap-4 md:grid-cols-3">
+          <FormSectionTitle index={4} title="日時" compact={isCreate} />
+          <div className={isCreate ? "grid gap-3" : "grid gap-4 md:grid-cols-3"}>
             <FormInput label="日付" type="date" value={form.date} onChange={(value) => update("date", value)} required />
             <FormInput
               label="開始時刻"
@@ -3356,7 +3382,7 @@ function ReservationFormModal({
           ) : null}
 
           <div className="space-y-3">
-          <FormSectionTitle index={5} title="オプション（PM準拠）" />
+          <FormSectionTitle index={5} title="オプション（PM準拠）" compact={isCreate} />
           <div className="space-y-3 rounded-md border border-luxas-line bg-luxas-paper/40 p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-stone-600">こだわり:</span>
@@ -3426,24 +3452,33 @@ function ReservationFormModal({
                 )}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-stone-600">個別割引</span>
-              <input type="number" min="0" placeholder="%" value={form.discountPercent} onChange={(e) => update("discountPercent", e.target.value)} className="w-16 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
-              <input type="number" min="0" placeholder="円" value={form.discountYen} onChange={(e) => update("discountYen", e.target.value)} className="w-20 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
-              <span className="text-stone-600">一括割引</span>
-              <input type="number" min="0" placeholder="%" value={form.bulkDiscountPercent} onChange={(e) => update("bulkDiscountPercent", e.target.value)} className="w-16 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
-              <input type="number" min="0" placeholder="円" value={form.bulkDiscountYen} onChange={(e) => update("bulkDiscountYen", e.target.value)} className="w-20 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
-            </div>
+            {!isCreate ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-stone-600">個別割引</span>
+                <input type="number" min="0" placeholder="%" value={form.discountPercent} onChange={(e) => update("discountPercent", e.target.value)} className="w-16 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
+                <input type="number" min="0" placeholder="円" value={form.discountYen} onChange={(e) => update("discountYen", e.target.value)} className="w-20 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
+                <span className="text-stone-600">一括割引</span>
+                <input type="number" min="0" placeholder="%" value={form.bulkDiscountPercent} onChange={(e) => update("bulkDiscountPercent", e.target.value)} className="w-16 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
+                <input type="number" min="0" placeholder="円" value={form.bulkDiscountYen} onChange={(e) => update("bulkDiscountYen", e.target.value)} className="w-20 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-stone-600">インターバル</span>
+              <span className="text-xs text-stone-500">施術前</span>
+              <input type="number" min="0" step="5" placeholder="分" value={form.intervalBeforeMinutes} onChange={(e) => update("intervalBeforeMinutes", e.target.value)} className="w-20 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
+              <span className="text-xs text-stone-500">施術後</span>
               <input type="number" min="0" step="5" placeholder="分" value={form.intervalMinutes} onChange={(e) => update("intervalMinutes", e.target.value)} className="w-20 rounded-md border border-luxas-line bg-white px-2 py-1 text-xs" />
-              <span className="text-xs text-stone-400">施術後に空ける時間（同一担当の重複判定に加算）</span>
+              {!isCreate ? (
+                <span className="text-xs text-stone-400">前後に空ける時間（同一担当の占有・重複判定に加算）</span>
+              ) : null}
             </div>
-            <label className="flex w-fit items-center gap-2 text-stone-700">
-              <input type="checkbox" className="h-4 w-4 accent-luxas-green" checked={form.isConsecutive} onChange={(e) => update("isConsecutive", e.target.checked)} />
-              連続予約（保存後に同じ顧客で次の枠を続けて作成）
-            </label>
-            {pricing ? (
+            {!isCreate ? (
+              <label className="flex w-fit items-center gap-2 text-stone-700">
+                <input type="checkbox" className="h-4 w-4 accent-luxas-green" checked={form.isConsecutive} onChange={(e) => update("isConsecutive", e.target.checked)} />
+                連続予約（保存後に同じ顧客で次の枠を続けて作成）
+              </label>
+            ) : null}
+            {!isCreate && pricing ? (
               <div className="rounded-md border border-luxas-line bg-white px-3 py-2 text-xs text-stone-600">
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
                   <span>コース ¥{pricing.coursePrice.toLocaleString()}</span>
@@ -3601,15 +3636,18 @@ function SummaryLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FormSectionTitle({ index, title }: { index: number; title: string }) {
+function FormSectionTitle({ index, title, compact = false }: { index: number; title: string; compact?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-luxas-mist text-sm font-semibold text-luxas-green">
+    <div className={compact ? "flex items-center gap-2" : "flex items-center gap-3"}>
+      <span
+        className={[
+          "inline-flex items-center justify-center rounded-full bg-luxas-mist font-semibold text-luxas-green",
+          compact ? "h-5 w-5 text-xs" : "h-7 w-7 text-sm"
+        ].join(" ")}
+      >
         {index}
       </span>
-      <div>
-        <p className="text-sm font-semibold text-luxas-ink">{title}</p>
-      </div>
+      <p className="text-sm font-semibold text-luxas-ink">{title}</p>
     </div>
   );
 }
