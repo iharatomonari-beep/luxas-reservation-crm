@@ -3591,8 +3591,8 @@ function ReservationFormModal({
                     );
                   })}
                 </div>
-                {/* 選択中カテゴリのコース一覧（名前/料金/時間） */}
-                <div className={isCreate ? "grid grid-cols-2 gap-2" : "grid gap-2 sm:grid-cols-2"}>
+                {/* PM準拠：カテゴリ色のソリッドボタンが折り返すグリッド。選択中はリングで強調。 */}
+                <div className="flex flex-wrap gap-1.5">
                   {tabServices.map((service) => {
                     const color = categoryColorClass(service.category || "未分類");
                     const active = form.serviceMenuId === service.id;
@@ -3601,17 +3601,15 @@ function ReservationFormModal({
                         key={service.id}
                         type="button"
                         onClick={() => update("serviceMenuId", service.id)}
+                        title={`¥${service.price.toLocaleString()} / ${service.durationMinutes}分`}
                         className={[
-                          "flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition",
-                          active
-                            ? `${color.activeBg} border-transparent text-white`
-                            : `bg-white ${color.text} ${color.border} hover:bg-luxas-paper`
+                          "rounded-md px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition",
+                          color.activeBg,
+                          active ? "ring-2 ring-luxas-ink ring-offset-1" : "opacity-95 hover:opacity-100"
                         ].join(" ")}
                       >
-                        <span className="text-sm font-semibold">{service.name}</span>
-                        <span className={["text-xs", active ? "text-white/85" : "text-stone-500"].join(" ")}>
-                          ¥{service.price.toLocaleString()} / {service.durationMinutes}分
-                        </span>
+                        <span>{service.name}</span>
+                        <span className="ml-1 font-medium text-white/85">¥{service.price.toLocaleString()}</span>
                       </button>
                     );
                   })}
