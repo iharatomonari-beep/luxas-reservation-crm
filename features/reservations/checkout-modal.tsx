@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Wallet, X } from "lucide-react";
+import { Wallet, X } from "lucide-react";
 import {
-  paymentMethodLabels,
   type PaymentMethod,
   type Reservation,
   type ReservationPayment
@@ -23,7 +22,10 @@ import {
 import type { CreditCardCompany, EmoneyBrand, ServiceMenu, ServiceOption } from "@/features/master-data/types";
 import { compareBySortOrder } from "@/features/master-data/utils";
 
-const METHOD_ORDER: PaymentMethod[] = ["cash", "credit", "emoney", "ticket", "prepaid", "point", "giftcard", "epark"];
+function toNum(value: string): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 export function CheckoutModal({
   reservation,
@@ -34,30 +36,46 @@ export function CheckoutModal({
   onClose: () => void;
   onSave: (reservationId: string, saleAmount: number, payments: ReservationPayment[]) => void;
 }) {
-  const [saleAmount, setSaleAmount] = useState<string>("0");
-  const [payments, setPayments] = useState<ReservationPayment[]>([{ method: "cash", amount: 0 }]);
+  // 登録済みコース合計（売上見込をプリフィル・編集可）。
+  const [courseTotal, setCourseTotal] = useState("0");
+  // 各支払方法の利用額（PM準拠）。
+  const [ticket, setTicket] = useState("0"); // 回数券利用
+  const [prepaid, setPrepaid] = useState("0"); // プリペイド利用
+  const [point, setPoint] = useState("0"); // ポイント利用
+  const [giftcard, setGiftcard] = useState("0"); // 商品券利用
+  const [credit, setCredit] = useState("0");
+  const [creditBrand, setCreditBrand] = useState("");
+  const [emoney, setEmoney] = useState("0");
+  const [emoneyBrand, setEmoneyBrand] = useState("");
+  const [epark, setEpark] = useState("0");
+  const [cashReceived, setCashReceived] = useState("0"); // お預かり
   const [error, setError] = useState<string | null>(null);
-  // 支払種類（クレカ/電子マネー）は決済マスタ（T029）の有効項目から選ぶ（T033）。
+
   const [creditCards] = useLocalCollection<CreditCardCompany>(creditCardsStorageKey, initialCreditCards);
   const [emoneyBrands] = useLocalCollection<EmoneyBrand>(emoneyStorageKey, initialEmoney);
-  // 売上見込のプリフィル（T041）に使うメニュー/オプションマスタ。
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [options] = useLocalCollection<ServiceOption>(optionsStorageKey, initialOptions);
   const activeCards = [...creditCards].sort(compareBySortOrder).filter((c) => c.isActive);
   const activeEmoney = [...emoneyBrands].sort(compareBySortOrder).filter((c) => c.isActive);
 
-  // 会計を開いたら売上額を初期化（T041）。会計済の修正時は既存値を復元、未会計は売上見込（T037と一致）をプリフィル。
   useEffect(() => {
     if (!reservation) {
       return;
     }
     if (reservation.paymentStatus === "paid" && reservation.saleAmount != null) {
-      setSaleAmount(String(reservation.saleAmount));
-      setPayments(
-        reservation.payments && reservation.payments.length > 0
-          ? reservation.payments
-          : [{ method: "cash", amount: reservation.saleAmount }]
-      );
+      setCourseTotal(String(reservation.saleAmount));
+      const p = reservation.payments ?? [];
+      const sum = (m: PaymentMethod) => p.filter((x) => x.method === m).reduce((s, x) => s + x.amount, 0);
+      setTicket(String(sum("ticket")));
+      setPrepaid(String(sum("prepaid")));
+      setPoint(String(sum("point")));
+      setGiftcard(String(sum("giftcard")));
+      setCredit(String(sum("credit")));
+      setCreditBrand(p.find((x) => x.method === "credit")?.cardBrand ?? "");
+      setEmoney(String(sum("emoney")));
+      setEmoneyBrand(p.find((x) => x.method === "emoney")?.emoneyBrand ?? "");
+      setEpark(String(sum("epark")));
+      setCashReceived(String(sum("cash")));
       return;
     }
     const pricing = computeReservationPricing(
@@ -69,60 +87,56 @@ export function CheckoutModal({
       reservation.bulkDiscountPercent,
       reservation.bulkDiscountYen
     );
-    setSaleAmount(String(pricing.net));
-    setPayments([{ method: "cash", amount: pricing.net }]);
+    setCourseTotal(String(pricing.net));
+    setCashReceived(String(pricing.net));
   }, [reservation, services, options]);
 
   if (!reservation) {
     return null;
   }
 
-  const paymentsTotal = payments.reduce((sum, p) => sum + (Number.isFinite(p.amount) ? p.amount : 0), 0);
-
-  function updatePayment(index: number, patch: Partial<ReservationPayment>) {
-    setPayments((current) => current.map((p, i) => (i === index ? { ...p, ...patch } : p)));
-  }
-
-  // 支払方法を切り替えたら、対応しないブランド指定はクリアする。
-  function changeMethod(index: number, method: PaymentMethod) {
-    updatePayment(index, {
-      method,
-      cardBrand: method === "credit" ? activeCards[0]?.name : undefined,
-      emoneyBrand: method === "emoney" ? activeEmoney[0]?.name : undefined
-    });
-  }
+  const totalSales = toNum(courseTotal);
+  const otherPaid = toNum(ticket) + toNum(prepaid) + toNum(point) + toNum(giftcard) + toNum(credit) + toNum(emoney) + toNum(epark);
+  const cashDue = Math.max(0, totalSales - otherPaid); // 現金支払額
+  const change = Math.max(0, toNum(cashReceived) - cashDue); // お釣り
 
   function handleSave() {
     if (!reservation) {
       return;
     }
-    const sale = Number(saleAmount);
-    if (!Number.isFinite(sale) || sale < 0) {
-      setError("売上額は0以上の数値で入力してください。");
+    if (otherPaid > totalSales) {
+      setError(`現金以外の支払合計(¥${otherPaid.toLocaleString()})が総販売額(¥${totalSales.toLocaleString()})を超えています。`);
       return;
     }
-    if (payments.some((p) => !Number.isFinite(p.amount) || p.amount < 0)) {
-      setError("支払金額は0以上の数値で入力してください。");
-      return;
-    }
-    if (paymentsTotal !== sale) {
-      setError(`支払合計(¥${paymentsTotal.toLocaleString()})が売上額(¥${sale.toLocaleString()})と一致しません。`);
-      return;
-    }
-    onSave(reservation.id, sale, payments);
+    const payments: ReservationPayment[] = [];
+    if (cashDue > 0) payments.push({ method: "cash", amount: cashDue });
+    if (toNum(credit) > 0) payments.push({ method: "credit", amount: toNum(credit), cardBrand: creditBrand || undefined });
+    if (toNum(emoney) > 0) payments.push({ method: "emoney", amount: toNum(emoney), emoneyBrand: emoneyBrand || undefined });
+    if (toNum(ticket) > 0) payments.push({ method: "ticket", amount: toNum(ticket) });
+    if (toNum(prepaid) > 0) payments.push({ method: "prepaid", amount: toNum(prepaid) });
+    if (toNum(point) > 0) payments.push({ method: "point", amount: toNum(point) });
+    if (toNum(giftcard) > 0) payments.push({ method: "giftcard", amount: toNum(giftcard) });
+    if (toNum(epark) > 0) payments.push({ method: "epark", amount: toNum(epark) });
+    if (payments.length === 0) payments.push({ method: "cash", amount: 0 });
+    onSave(reservation.id, totalSales, payments);
   }
 
+  const selectedService = services.find((s) => s.id === reservation.serviceMenuId);
+  const courseOptionNames = (reservation.optionIds ?? [])
+    .map((id) => options.find((o) => o.id === id)?.name)
+    .filter((n): n is string => Boolean(n));
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-950/35 px-4 py-8">
-      <section className="w-full max-w-md rounded-lg border border-luxas-line bg-white shadow-soft">
-        <div className="flex items-center justify-between border-b border-luxas-line px-5 py-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-950/35 px-4 py-6">
+      <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-luxas-line bg-white shadow-soft">
+        <div className="flex shrink-0 items-center justify-between border-b border-luxas-line px-5 py-3">
           <div className="flex items-center gap-2">
             <Wallet size={18} className="text-luxas-green" aria-hidden="true" />
-            <h2 className="text-base font-semibold text-luxas-ink">会計：{reservation.customerName}</h2>
+            <h2 className="text-base font-semibold text-luxas-ink">{reservation.customerName || "ゲスト"} 様</h2>
           </div>
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-luxas-line text-stone-600 hover:bg-luxas-paper"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-luxas-line text-stone-600 hover:bg-luxas-paper"
             onClick={onClose}
             aria-label="閉じる"
           >
@@ -130,117 +144,157 @@ export function CheckoutModal({
           </button>
         </div>
 
-        <div className="space-y-4 px-5 py-5">
-          <label className="block">
-            <span className="text-sm font-medium text-stone-700">売上額（円）</span>
-            <input
-              type="number"
-              min="0"
-              value={saleAmount}
-              onChange={(event) => setSaleAmount(event.target.value)}
-              className="mt-2 w-full rounded-md border border-luxas-line bg-white px-3 py-2.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
-            />
-          </label>
+        <div className="grid min-h-0 flex-1 gap-0 overflow-y-auto md:grid-cols-[1fr_320px]">
+          {/* 左：登録済みコース / 物販購入 */}
+          <div className="space-y-4 border-luxas-line p-5 md:border-r">
+            <section className="rounded-md border border-amber-200">
+              <div className="flex items-center justify-between gap-2 rounded-t-md bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-900">
+                <span>登録済みコース</span>
+                <span className="text-xs font-medium text-amber-800">コース個別値引一括設定</span>
+              </div>
+              <div className="space-y-2 bg-amber-50/40 p-4">
+                <div className="min-h-24 rounded-md border border-luxas-line bg-white p-3 text-sm text-stone-700">
+                  {selectedService ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <span>
+                        {selectedService.name}
+                        {courseOptionNames.length ? `（${courseOptionNames.join("、")}）` : ""}
+                      </span>
+                      <span className="font-medium text-luxas-ink">¥{(selectedService.price ?? 0).toLocaleString()}</span>
+                    </div>
+                  ) : (
+                    <span className="text-stone-400">コース未選択</span>
+                  )}
+                </div>
+                <div className="flex items-center justify-end gap-2 text-sm">
+                  <span className="text-stone-600">合計:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={courseTotal}
+                    onChange={(e) => setCourseTotal(e.target.value)}
+                    className="w-32 rounded-md border border-luxas-line bg-white px-2 py-1.5 text-right text-luxas-ink outline-none focus:border-luxas-green"
+                  />
+                  <span className="text-stone-600">円</span>
+                </div>
+              </div>
+            </section>
 
-          <div className="space-y-2">
-            <span className="text-sm font-medium text-stone-700">支払方法（複数可）</span>
-            {payments.map((payment, index) => (
-              <div key={index} className="flex flex-wrap items-center gap-2">
-                <select
-                  className="rounded-md border border-luxas-line bg-white px-2 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
-                  value={payment.method}
-                  onChange={(event) => changeMethod(index, event.target.value as PaymentMethod)}
-                >
-                  {METHOD_ORDER.map((method) => (
-                    <option key={method} value={method}>
-                      {paymentMethodLabels[method]}
-                    </option>
-                  ))}
-                </select>
-                {payment.method === "credit" ? (
-                  <select
-                    className="rounded-md border border-luxas-line bg-white px-2 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
-                    value={payment.cardBrand ?? ""}
-                    onChange={(event) => updatePayment(index, { cardBrand: event.target.value || undefined })}
-                    aria-label="クレジット会社"
-                  >
-                    <option value="">カード会社</option>
-                    {activeCards.map((card) => (
-                      <option key={card.id} value={card.name}>
-                        {card.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                {payment.method === "emoney" ? (
-                  <select
-                    className="rounded-md border border-luxas-line bg-white px-2 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
-                    value={payment.emoneyBrand ?? ""}
-                    onChange={(event) => updatePayment(index, { emoneyBrand: event.target.value || undefined })}
-                    aria-label="電子マネー種類"
-                  >
-                    <option value="">電子マネー</option>
-                    {activeEmoney.map((brand) => (
-                      <option key={brand.id} value={brand.name}>
-                        {brand.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
+            <section className="rounded-md border border-amber-200">
+              <div className="flex items-center gap-2 rounded-t-md bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-900">
+                <span>物販購入</span>
+                <span className="rounded bg-white/70 px-2 py-0.5 text-[10px] font-medium text-amber-800">準備中</span>
+              </div>
+              <div className="bg-amber-50/40 p-4 text-sm text-stone-400">
+                <div className="min-h-16 rounded-md border border-luxas-line bg-white p-3">物販の追加は次工程で対応します。</div>
+              </div>
+            </section>
+          </div>
+
+          {/* 右：支払方法内訳 */}
+          <div className="space-y-2.5 bg-luxas-paper/40 p-5 text-sm">
+            <PayRow label="回数券利用" value={ticket} onChange={setTicket} />
+            <PayRow label="プリペイド利用" value={prepaid} onChange={setPrepaid} />
+            <PayRow label="ポイント利用" value={point} onChange={setPoint} />
+            <PayRow label="商品券利用" value={giftcard} onChange={setGiftcard} />
+            <PayRow
+              label="クレジット"
+              value={credit}
+              onChange={setCredit}
+              brand={{ value: creditBrand, onChange: setCreditBrand, options: activeCards.map((c) => c.name) }}
+            />
+            <PayRow
+              label="電子マネー"
+              value={emoney}
+              onChange={setEmoney}
+              brand={{ value: emoneyBrand, onChange: setEmoneyBrand, options: activeEmoney.map((b) => b.name) }}
+            />
+            <PayRow label="EPARKサービス" value={epark} onChange={setEpark} />
+
+            <div className="my-2 border-t border-luxas-line" />
+
+            <SummaryRow label="総販売額" value={totalSales} strong />
+            <SummaryRow label="現金支払額" value={cashDue} strong />
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-luxas-ink">お預かり</span>
+              <div className="flex items-center gap-1">
                 <input
                   type="number"
                   min="0"
-                  value={payment.amount}
-                  onChange={(event) => updatePayment(index, { amount: Number(event.target.value) })}
-                  className="w-28 rounded-md border border-luxas-line bg-white px-2 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
-                  placeholder="金額"
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                  className="w-28 rounded-md border border-luxas-line bg-white px-2 py-1.5 text-right text-luxas-ink outline-none focus:border-luxas-green"
                 />
-                {payments.length > 1 ? (
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 text-red-600 hover:bg-red-50"
-                    onClick={() => setPayments((current) => current.filter((_, i) => i !== index))}
-                    aria-label="削除"
-                  >
-                    <Trash2 size={14} aria-hidden="true" />
-                  </button>
-                ) : null}
+                <span className="text-stone-600">円</span>
               </div>
-            ))}
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-luxas-ink">お釣り</span>
+              <span className="font-bold text-red-600">{change.toLocaleString()}円</span>
+            </div>
+
+            {error ? <p className="text-xs font-medium text-red-600">{error}</p> : null}
+
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-md border border-luxas-line px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-luxas-paper"
-              onClick={() => setPayments((current) => [...current, { method: "cash", amount: 0 }])}
+              onClick={handleSave}
+              className="mt-2 w-full rounded-md bg-red-500 px-4 py-3 text-base font-bold text-white transition hover:bg-red-600"
             >
-              <Plus size={14} aria-hidden="true" />
-              支払方法を追加
+              会計
             </button>
           </div>
-
-          <p className="text-sm text-stone-600">
-            支払合計: <b className="text-luxas-ink">¥{paymentsTotal.toLocaleString()}</b>
-          </p>
-          {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-luxas-line bg-luxas-paper px-5 py-4">
-          <button
-            type="button"
-            className="rounded-md border border-luxas-line bg-white px-4 py-2.5 text-sm font-semibold text-luxas-ink hover:bg-luxas-mist"
-            onClick={onClose}
-          >
-            キャンセル
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md bg-luxas-green px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#285f51]"
-            onClick={handleSave}
-          >
-            <Wallet size={16} aria-hidden="true" />
-            会計を確定
-          </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function PayRow({
+  label,
+  value,
+  onChange,
+  brand
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  brand?: { value: string; onChange: (v: string) => void; options: string[] };
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-stone-700">{label}:</span>
+      <div className="flex items-center gap-1">
+        {brand ? (
+          <select
+            value={brand.value}
+            onChange={(e) => brand.onChange(e.target.value)}
+            className="w-24 rounded-md border border-luxas-line bg-white px-1.5 py-1.5 text-xs text-luxas-ink outline-none focus:border-luxas-green"
+            aria-label={`${label}種類`}
+          >
+            <option value="">種類</option>
+            {brand.options.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+        ) : null}
+        <input
+          type="number"
+          min="0"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-24 rounded-md border border-luxas-line bg-white px-2 py-1.5 text-right text-luxas-ink outline-none focus:border-luxas-green"
+        />
+        <span className="text-stone-600">円</span>
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, strong }: { label: string; value: number; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className={strong ? "font-semibold text-luxas-ink" : "text-stone-700"}>{label}</span>
+      <span className={strong ? "text-base font-bold text-luxas-ink" : "text-luxas-ink"}>{value.toLocaleString()} 円</span>
     </div>
   );
 }
