@@ -318,7 +318,7 @@ export function ReservationLedger() {
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [rooms] = useLocalCollection<ServiceRoom>(roomsStorageKey, initialRooms);
   const [shifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
-  const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
+  const [customers, setCustomers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [allTags] = useLocalCollection<MasterTag>(tagsStorageKey, initialTags);
   const [allOptions] = useLocalCollection<ServiceOption>(optionsStorageKey, initialOptions);
   const [retailSales] = useLocalCollection<RetailSale>(retailSalesStorageKey, initialRetailSales);
@@ -1157,6 +1157,32 @@ export function ReservationLedger() {
       )
     );
     setMessage({ type: "success", text: "顧客の紐づけを解除しました（ゲストに戻しました）。" });
+  }
+
+  // 左パネルの「＋新規」から最小項目で新規顧客を作成し、その予約に紐づける（顧客マスタへ非破壊追加）。
+  function createCustomerAndLink(reservationId: string, draft: { name: string; phone: string; gender: CustomerGender }) {
+    const now = new Date().toISOString();
+    const newCustomer: Customer = {
+      id: makeLocalId("customer"),
+      name: draft.name,
+      nameKana: "",
+      phone: draft.phone,
+      email: "",
+      birthDate: "",
+      gender: draft.gender,
+      address: "",
+      firstVisitDate: "",
+      lastVisitDate: "",
+      caution: "",
+      chartMemo: "",
+      tags: [],
+      isActive: true,
+      homeStoreId: currentStoreId,
+      createdAt: now,
+      updatedAt: now
+    };
+    setCustomers((current) => [newCustomer, ...current]);
+    linkCustomerToReservation(reservationId, newCustomer);
   }
 
   function beginReservationDrag(event: ReactPointerEvent<HTMLButtonElement>, reservation: Reservation) {
@@ -2105,6 +2131,7 @@ export function ReservationLedger() {
         options={activeOptions}
         onLinkCustomer={linkCustomerToReservation}
         onUnlinkCustomer={unlinkCustomerFromReservation}
+        onCreateCustomer={createCustomerAndLink}
       />
 
       <CheckoutModal
@@ -2732,7 +2759,8 @@ function ReservationDetailModal({
   stores,
   currentStoreId,
   onLinkCustomer,
-  onUnlinkCustomer
+  onUnlinkCustomer,
+  onCreateCustomer
 }: {
   reservation: Reservation | null;
   serviceName: string;
@@ -2755,6 +2783,7 @@ function ReservationDetailModal({
   currentStoreId?: string;
   onLinkCustomer: (reservationId: string, customer: Customer) => void;
   onUnlinkCustomer: (reservationId: string) => void;
+  onCreateCustomer: (reservationId: string, draft: { name: string; phone: string; gender: CustomerGender }) => void;
 }) {
   const [showCancelPanel, setShowCancelPanel] = useState(false);
   const [cancelType, setCancelType] = useState<Exclude<CancelType, "none">>("cancel");
@@ -2765,6 +2794,11 @@ function ReservationDetailModal({
   const [searchResults, setSearchResults] = useState<Customer[]>([]);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  // 新規顧客ミニフォーム（＋新規）。
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newGender, setNewGender] = useState<CustomerGender>("unspecified");
 
   const storeName = (homeStoreId?: string) =>
     homeStoreId ? stores.find((store) => store.id === homeStoreId)?.name ?? "未設定" : "未設定";
@@ -2865,9 +2899,13 @@ function ReservationDetailModal({
             </button>
             <button
               type="button"
-              disabled
-              title="準備中（新規顧客作成は未実装）"
-              className="cursor-not-allowed rounded-md border border-luxas-line bg-luxas-paper px-3 py-1.5 text-xs font-medium text-stone-400"
+              onClick={() => {
+                setShowNewCustomer((v) => !v);
+                if (!newName) setNewName(reservation.customerName && reservation.customerName !== "ゲスト" ? reservation.customerName : "");
+                if (!newPhone) setNewPhone(reservation.phone ?? "");
+              }}
+              title="新規顧客を作成してこの予約に紐づける"
+              className="rounded-md border border-luxas-green bg-white px-3 py-1.5 text-xs font-semibold text-luxas-green transition hover:bg-luxas-mist"
             >
               ＋新規
             </button>
@@ -2882,6 +2920,70 @@ function ReservationDetailModal({
             />
             自店のみ（未設定の顧客も含む）
           </label>
+
+          {showNewCustomer ? (
+            <div className="mt-2 rounded-md border border-luxas-green/40 bg-white p-3">
+              <p className="text-[11px] font-semibold text-luxas-ink">新規顧客を作成して紐づけ</p>
+              <div className="mt-2 space-y-2">
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="氏名（必須）"
+                  className="w-full rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-xs text-luxas-ink outline-none focus:border-luxas-green"
+                />
+                <input
+                  type="text"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  placeholder="電話番号（任意）"
+                  className="w-full rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-xs text-luxas-ink outline-none focus:border-luxas-green"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    ["male", customerGenderLabels.male],
+                    ["female", customerGenderLabels.female],
+                    ["unspecified", "未設定"]
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setNewGender(value)}
+                      className={[
+                        "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition",
+                        newGender === value ? "border-luxas-green bg-luxas-green text-white" : "border-luxas-line bg-white text-stone-600 hover:bg-luxas-paper"
+                      ].join(" ")}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCustomer(false)}
+                    className="rounded-md border border-luxas-line bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-luxas-paper"
+                  >
+                    閉じる
+                  </button>
+                  <button
+                    type="button"
+                    disabled={newName.trim().length === 0}
+                    onClick={() => {
+                      onCreateCustomer(reservation.id, { name: newName.trim(), phone: newPhone.trim(), gender: newGender });
+                      setShowNewCustomer(false);
+                      setNewName("");
+                      setNewPhone("");
+                      setNewGender("unspecified");
+                    }}
+                    className="rounded-md bg-luxas-green px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#285f51] disabled:cursor-not-allowed disabled:bg-stone-300"
+                  >
+                    作成して紐づけ
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {searchMessage ? (
             <p className="mt-2 text-[11px] font-medium text-stone-500">{searchMessage}</p>
