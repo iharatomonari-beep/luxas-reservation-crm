@@ -60,6 +60,7 @@ import {
   type Reservation,
   type ReservationStatus,
   type ReservationPayment,
+  type RetailLine,
   type TurnawayRecord
 } from "@/features/reservations/types";
 import { CheckoutModal } from "@/features/reservations/checkout-modal";
@@ -1047,11 +1048,11 @@ export function ReservationLedger() {
   }
 
   // 会計を確定（T022）。売上額・支払明細を保存し paymentStatus を paid に。
-  function completeCheckout(reservationId: string, saleAmount: number, payments: ReservationPayment[]) {
+  function completeCheckout(reservationId: string, saleAmount: number, payments: ReservationPayment[], retailLines: RetailLine[]) {
     setReservations((current) =>
       current.map((reservation) =>
         reservation.id === reservationId
-          ? { ...reservation, paymentStatus: "paid", saleAmount, payments }
+          ? { ...reservation, paymentStatus: "paid", saleAmount, payments, retailLines: retailLines.length ? retailLines : undefined }
           : reservation
       )
     );

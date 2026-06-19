@@ -66,6 +66,19 @@ export type Reservation = {
    * Reservation.preference（男性スタッフ希望）とは無関係。
    */
   guestGender?: CustomerGender;
+  /** 会計の物販購入明細（任意・非破壊）。saleAmount にはコース＋物販の合計が入る。 */
+  retailLines?: RetailLine[];
+};
+
+/** 会計の物販購入1行（マスタ商品 or 手入力）。 */
+export type RetailLine = {
+  /** マスタ商品ID（手入力は未設定）。 */
+  itemId?: string;
+  name: string;
+  /** 単価（円・税込）。 */
+  price: number;
+  /** 数量。 */
+  qty: number;
 };
 
 export type CancelType = "none" | "cancel" | "no_show" | "void";
