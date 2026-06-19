@@ -1147,6 +1147,18 @@ export function ReservationLedger() {
     setMessage({ type: "success", text: `「${customer.name}」を予約に紐づけました。` });
   }
 
+  // 既存顧客の紐づけを解除し、予約を再びゲストに戻す（customerId/氏名/電話をクリア）。顧客マスタは変更しない。
+  function unlinkCustomerFromReservation(reservationId: string) {
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservationId
+          ? { ...item, customerId: undefined, customerName: "ゲスト", phone: "" }
+          : item
+      )
+    );
+    setMessage({ type: "success", text: "顧客の紐づけを解除しました（ゲストに戻しました）。" });
+  }
+
   function beginReservationDrag(event: ReactPointerEvent<HTMLButtonElement>, reservation: Reservation) {
     if (event.button !== 0 || reservation.status === "canceled") {
       return;
@@ -2092,6 +2104,7 @@ export function ReservationLedger() {
         routeTags={routeTags}
         options={activeOptions}
         onLinkCustomer={linkCustomerToReservation}
+        onUnlinkCustomer={unlinkCustomerFromReservation}
       />
 
       <CheckoutModal
@@ -2718,7 +2731,8 @@ function ReservationDetailModal({
   customers,
   stores,
   currentStoreId,
-  onLinkCustomer
+  onLinkCustomer,
+  onUnlinkCustomer
 }: {
   reservation: Reservation | null;
   serviceName: string;
@@ -2740,6 +2754,7 @@ function ReservationDetailModal({
   stores: Store[];
   currentStoreId?: string;
   onLinkCustomer: (reservationId: string, customer: Customer) => void;
+  onUnlinkCustomer: (reservationId: string) => void;
 }) {
   const [showCancelPanel, setShowCancelPanel] = useState(false);
   const [cancelType, setCancelType] = useState<Exclude<CancelType, "none">>("cancel");
@@ -2924,7 +2939,16 @@ function ReservationDetailModal({
                   {customerGenderLabels[customer.gender]}
                 </span>
                 <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-stone-400">顧客管理と連動</span>
+                <button
+                  type="button"
+                  onClick={() => onUnlinkCustomer(reservation.id)}
+                  title="この顧客の紐づけを解除してゲストに戻す"
+                  className="rounded-md border border-stone-300 bg-white px-2 py-0.5 text-[10px] font-medium text-stone-600 transition hover:bg-stone-100"
+                >
+                  解除
+                </button>
               </div>
+              <p className="mt-1 text-[10px] text-stone-400">別の顧客にする場合は上の「顧客検索」から選び直してください（付け替え）。</p>
               <dl className="mt-2 grid gap-1.5">
                 <DetailRow label="フリガナ" value={customer.nameKana || "未入力"} />
                 <DetailRow label="会員番号" value={customer.membershipNumber || "—"} />
@@ -2949,7 +2973,7 @@ function ReservationDetailModal({
                 <DetailRow label="性別" value={guestGenderLabel} />
               </dl>
               <div className="mt-2 rounded-md border border-dashed border-luxas-line bg-white px-3 py-3 text-center text-[11px] text-stone-400">
-                上の「顧客検索」から既存顧客を紐づけできます（検索・紐づけは次工程で実装）
+                上の「顧客検索」で既存顧客を探し、「選択」で紐づけできます。
               </div>
             </div>
           )}
