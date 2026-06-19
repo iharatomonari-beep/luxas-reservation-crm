@@ -3688,6 +3688,12 @@ function ReservationFormModal({
       if (nextStaffOptions.length > 0 && !nextStaffOptions.some((item) => item.id === nextForm.staffId)) {
         nextForm.staffId = nextStaffOptions[0].id;
       }
+
+      // コース選択時に前後インターバルを初期反映（PM §4-1）。
+      // メニューに個別設定があれば優先、無ければ既定（施術前5分／施術後10分）。
+      const pickedMenu = services.find((s) => s.id === String(value));
+      nextForm.intervalBeforeMinutes = String(pickedMenu?.prepMinutes ?? 5);
+      nextForm.intervalMinutes = String(pickedMenu?.cleanupMinutes ?? 10);
     }
 
     onChange(nextForm);

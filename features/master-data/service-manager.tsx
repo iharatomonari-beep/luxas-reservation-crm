@@ -25,6 +25,9 @@ type ServiceForm = {
   // 性別可否（PM §4-1）。既定はどちらも可。
   maleAllowed: boolean;
   femaleAllowed: boolean;
+  // 事前準備時間 / 片付け時間（分・PM §4-1）。空＝0。コース選択時に予約の前後インターバルへ反映。
+  prepMinutes: string;
+  cleanupMinutes: string;
   // 提供店舗範囲（T065）。"all"=全店共通／"selected"=指定店舗のみ。
   storeScope: "all" | "selected";
   storeIds: string[];
@@ -43,6 +46,8 @@ const emptyForm: ServiceForm = {
   onlineBooking: false,
   maleAllowed: true,
   femaleAllowed: true,
+  prepMinutes: "5",
+  cleanupMinutes: "10",
   storeScope: "all",
   storeIds: [],
   color: ""
@@ -124,6 +129,8 @@ export function ServiceManager() {
       onlineBooking: form.onlineBooking,
       maleAllowed: form.maleAllowed,
       femaleAllowed: form.femaleAllowed,
+      prepMinutes: form.prepMinutes.trim() ? Number(form.prepMinutes) : undefined,
+      cleanupMinutes: form.cleanupMinutes.trim() ? Number(form.cleanupMinutes) : undefined,
       // 提供店舗範囲（T065）。全店共通は storeIds を空に。
       storeScope: form.storeScope,
       storeIds: form.storeScope === "selected" ? form.storeIds : [],
@@ -155,6 +162,8 @@ export function ServiceManager() {
       onlineBooking: item.onlineBooking ?? false,
       maleAllowed: item.maleAllowed ?? true,
       femaleAllowed: item.femaleAllowed ?? true,
+      prepMinutes: item.prepMinutes != null ? String(item.prepMinutes) : "",
+      cleanupMinutes: item.cleanupMinutes != null ? String(item.cleanupMinutes) : "",
       // 未設定の既存メニューは「全店共通」として表示（保存するまでバックフィルしない）。
       storeScope: item.storeScope === "selected" ? "selected" : "all",
       storeIds: item.storeIds ?? [],
@@ -230,6 +239,24 @@ export function ServiceManager() {
               min="0"
               required
             />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField
+                label="事前準備時間（分）"
+                value={form.prepMinutes}
+                onChange={(value) => setForm((current) => ({ ...current, prepMinutes: value }))}
+                type="number"
+                min="0"
+                hint="コース選択時に予約の施術前インターバルへ反映"
+              />
+              <TextField
+                label="片付け時間（分）"
+                value={form.cleanupMinutes}
+                onChange={(value) => setForm((current) => ({ ...current, cleanupMinutes: value }))}
+                type="number"
+                min="0"
+                hint="コース選択時に予約の施術後インターバルへ反映"
+              />
             </div>
             <TextField
               label="表示順"
