@@ -52,6 +52,11 @@ export type Reservation = {
   cancelReason?: string;
   /** キャンセル日時（ISO文字列） */
   canceledAt?: string;
+  /**
+   * 予約以外のブロック（PM §2-3）。未設定=通常予約。
+   * "break"=休憩 / "business"=業務。タイムラインの枠は占有するが、来店・売上・施術件数などの集計には含めない。
+   */
+  blockType?: "break" | "business";
   // --- T067.5-A 顧客紐づけ・性別の土台（すべて任意・非破壊。既存予約は未設定のまま動く） ---
   /** 紐づく既存顧客ID（T067.5-B の顧客検索で設定予定）。未設定＝ゲスト予約／電話・氏名照合 fallback。 */
   customerId?: string;

@@ -313,6 +313,7 @@ export function ReservationLedger() {
   // 会計モーダル対象の予約ID（T022）
   const [checkoutReservationId, setCheckoutReservationId] = useState<string | null>(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isBlockFormOpen, setIsBlockFormOpen] = useState(false);
   const [turnaways, setTurnaways] = useLocalCollection<TurnawayRecord>(turnawaysStorageKey, EMPTY_TURNAWAYS);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
@@ -367,6 +368,8 @@ export function ReservationLedger() {
   const slots = useMemo(() => buildTimeSlots(businessStart, businessEnd, slotMinutes), [businessStart, businessEnd, slotMinutes]);
   const hourSlots = useMemo(() => buildTimeSlots(businessStart, businessEnd, 60), [businessStart, businessEnd]);
   const dayReservations = normalizedReservations.filter((reservation) => reservation.date === selectedDate);
+  // 集計用：休憩/業務ブロックを除いた当日予約（来店・売上・件数などの集計はこちらを使う）。
+  const dayCustomerReservations = useMemo(() => dayReservations.filter((r) => !r.blockType), [dayReservations]);
   const dayReservationsForTimeline = useMemo(
     // キャンセル/削除した予約はタイムラインに薄枠を残さず消す（記録は返客情報タブに残る）。
     () => dayReservations.filter((r) => !holdShelf.includes(r.id) && r.status !== "canceled"),
@@ -445,6 +448,7 @@ export function ReservationLedger() {
   const hourReservationCounts = useMemo(() => {
     const counts: Record<number, number> = {};
     for (const r of dayReservationsForTimeline) {
+      if (r.blockType) continue;
       const h = Math.floor(timeToMinutes(r.startTime) / 60);
       if (Number.isFinite(h)) {
         counts[h] = (counts[h] ?? 0) + 1;
@@ -459,19 +463,19 @@ export function ReservationLedger() {
   const nowLineLeft = showNowLine && nowMinutes != null ? ((nowMinutes - tlStartMin) / slotMinutes) * cellWidth + 3 : 0;
   const reservationStats = useMemo(
     () =>
-      dayReservations.reduce(
+      dayCustomerReservations.reduce(
         (result, reservation) => {
           result[reservation.status] += 1;
           return result;
         },
         { booked: 0, completed: 0, canceled: 0 } as Record<ReservationStatus, number>
       ),
-    [dayReservations]
+    [dayCustomerReservations]
   );
   // 会計（T022）確定データから当日の売上・支払方法別内訳・客単価・新規/リピートを集計（T033）。
   const checkoutSummary = useMemo(() => {
     const reservationKey = (r: Reservation) => r.phone.trim() || r.customerName.trim();
-    const paidToday = dayReservations.filter((r) => r.paymentStatus === "paid");
+    const paidToday = dayCustomerReservations.filter((r) => r.paymentStatus === "paid");
     const totalSales = paidToday.reduce((sum, r) => sum + (r.saleAmount ?? 0), 0);
     const methodTotals: Record<PaymentMethod, number> = {
       cash: 0,
@@ -501,7 +505,7 @@ export function ReservationLedger() {
         .filter(Boolean)
     );
     const todayVisitKeys = new Set(
-      dayReservations.filter((r) => r.status !== "canceled").map(reservationKey).filter(Boolean)
+      dayCustomerReservations.filter((r) => r.status !== "canceled").map(reservationKey).filter(Boolean)
     );
     let newCount = 0;
     let repeatCount = 0;
@@ -510,18 +514,18 @@ export function ReservationLedger() {
       else newCount += 1;
     }
     return { totalSales, methodTotals, avgPerCustomer, newCount, repeatCount };
-  }, [dayReservations, normalizedReservations, selectedDate]);
+  }, [dayCustomerReservations, normalizedReservations, selectedDate]);
   // キャンセル種別別の件数（T035）。無断キャンセル/取消を集計バーに実値表示。
   const cancelStats = useMemo(() => {
     let noShow = 0;
     let voided = 0;
-    for (const reservation of dayReservations) {
+    for (const reservation of dayCustomerReservations) {
       if (reservation.status !== "canceled") continue;
       if (reservation.cancelType === "no_show") noShow += 1;
       else if (reservation.cancelType === "void") voided += 1;
     }
     return { noShow, voided };
-  }, [dayReservations]);
+  }, [dayCustomerReservations]);
   // 当日情報パネル（T036）用の派生データ。
   const dayRetailTotal = useMemo(
     () => retailSales.filter((s) => s.saleDate === selectedDate).reduce((sum, s) => sum + s.quantity * s.unitPrice, 0),
@@ -529,13 +533,13 @@ export function ReservationLedger() {
   );
   const dayPanelReservations = useMemo(() => {
     const keyword = dayPanelSearch.trim().toLowerCase();
-    return [...dayReservations]
+    return [...dayCustomerReservations]
       .filter((r) => (keyword ? r.customerName.toLowerCase().includes(keyword) : true))
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
-  }, [dayReservations, dayPanelSearch]);
+  }, [dayCustomerReservations, dayPanelSearch]);
   const dayCanceledReservations = useMemo(
-    () => dayReservations.filter((r) => r.status === "canceled").sort((a, b) => a.startTime.localeCompare(b.startTime)),
-    [dayReservations]
+    () => dayCustomerReservations.filter((r) => r.status === "canceled").sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    [dayCustomerReservations]
   );
   // 返客記録（電話・飛び込みで受けられなかったお客様）。選択日の分。
   const dayTurnaways = useMemo(
@@ -547,10 +551,10 @@ export function ReservationLedger() {
       new Map(
         timelineStaff.map((item) => [
           item.id,
-          dayReservations.filter((reservation) => reservation.staffId === item.id).length
+          dayCustomerReservations.filter((reservation) => reservation.staffId === item.id).length
         ])
       ),
-    [dayReservations, timelineStaff]
+    [dayCustomerReservations, timelineStaff]
   );
   const formServiceOptions = useMemo(
     () => buildSelectableServices(activeServices, services, form.serviceMenuId, reservationFormMode),
@@ -867,6 +871,10 @@ export function ReservationLedger() {
 
   // 予約カードの追加表示プロップ（メニュー色・性別ラベル・新規・個室名）を算出する。
   function getReservationCardProps(reservation: Reservation) {
+    // 休憩/業務ブロックはグレー固定・性別/新規/個室ラベルなし（顧客予約ではない）。
+    if (reservation.blockType) {
+      return { menuColorKey: "stone", genderLabel: "", isNew: false, privateRoomLabel: "" };
+    }
     const menu = services.find((s) => s.id === reservation.serviceMenuId);
     const matchedCustomer = getCustomerByReservation(reservation);
     // 性別の優先順位（T067.5-A）: customerId/照合で取れた Customer.gender を最優先、
@@ -958,6 +966,71 @@ export function ReservationLedger() {
     setReservationFormMode(null);
     setEditingReservationId(null);
     setFormMessage(null);
+  }
+
+  // 予約以外のブロック（休憩/業務）を登録（PM §2-3）。左レールの専用フォームから種別・担当・開始・分数を受け取る。
+  function createTimeBlock(draft: { type: "break" | "business"; staffId: string; date: string; startTime: string; durationMinutes: number }) {
+    const staffId = normalizeText(draft.staffId);
+    const date = normalizeDateInputValue(draft.date) ?? draft.date;
+    const startTime = normalizeTimeInputValue(draft.startTime) ?? draft.startTime;
+    const startMin = timeToMinutes(startTime);
+    if (!staffId) {
+      setMessage({ type: "error", text: "担当スタッフを選択してください。" });
+      return;
+    }
+    if (!date || !Number.isFinite(startMin) || !(draft.durationMinutes > 0)) {
+      setMessage({ type: "error", text: "日付・開始時刻・所要時間を正しく入力してください。" });
+      return;
+    }
+    const endTime = minutesToTime(startMin + draft.durationMinutes);
+    const label = draft.type === "break" ? "休憩" : "業務";
+    setReservations((current) => [
+      {
+        id: makeLocalId("reservation"),
+        customerName: label,
+        phone: "",
+        serviceMenuId: "",
+        staffId,
+        roomId: "",
+        date,
+        startTime,
+        endTime,
+        status: "booked",
+        memo: "",
+        blockType: draft.type,
+        storeId: currentStoreId
+      },
+      ...current
+    ]);
+    setSelectedDate(date);
+    setIsBlockFormOpen(false);
+    setMessage({ type: "success", text: `${label}を登録しました。` });
+    scrollTimelineToTime(startTime);
+  }
+
+  // 休憩/業務ブロックの編集（種別・開始/終了時刻）。左パネルから呼ぶ。
+  function updateTimeBlock(reservationId: string, patch: { blockType: "break" | "business"; startTime: string; endTime: string }) {
+    const startTime = normalizeTimeInputValue(patch.startTime) ?? patch.startTime;
+    const endTime = normalizeTimeInputValue(patch.endTime) ?? patch.endTime;
+    if (!(timeToMinutes(endTime) > timeToMinutes(startTime))) {
+      setMessage({ type: "error", text: "終了時刻は開始時刻より後にしてください。" });
+      return;
+    }
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === reservationId
+          ? { ...item, blockType: patch.blockType, customerName: patch.blockType === "break" ? "休憩" : "業務", startTime, endTime }
+          : item
+      )
+    );
+    setMessage({ type: "success", text: "ブロックを更新しました。" });
+  }
+
+  // 休憩/業務ブロックの削除（顧客予約ではないので物理削除でよい）。
+  function deleteTimeBlock(reservationId: string) {
+    setReservations((current) => current.filter((item) => item.id !== reservationId));
+    setSelectedReservationId(null);
+    setMessage({ type: "success", text: "ブロックを削除しました。" });
   }
 
   function addToHoldShelf(reservationId: string) {
@@ -1536,7 +1609,7 @@ export function ReservationLedger() {
           {dayPanelTab === "sales" ? (
             <div className="space-y-1.5 text-stone-700">
               <p>会計売上（当日）<b className="ml-1 text-luxas-ink">¥{checkoutSummary.totalSales.toLocaleString()}</b>
-                <span className="ml-1 text-xs text-stone-500">（会計済 {dayReservations.filter((r) => r.paymentStatus === "paid").length}件）</span>
+                <span className="ml-1 text-xs text-stone-500">（会計済 {dayCustomerReservations.filter((r) => r.paymentStatus === "paid").length}件）</span>
               </p>
               <p>物販売上（当日）<b className="ml-1 text-luxas-ink">¥{dayRetailTotal.toLocaleString()}</b>
                 <span className="ml-1 text-xs text-stone-500">（物販販売画面の当日分）</span>
@@ -1666,6 +1739,16 @@ export function ReservationLedger() {
               }
             },
             { key: "顧客", icon: UserRound, enabled: true, href: "/dashboard/customers" },
+            // 休憩/業務=予約以外のブロックを登録（種別・担当・開始・分数を専用フォームで指定）。
+            {
+              key: "休憩/業務",
+              icon: Clock3,
+              enabled: true,
+              onClick: () => {
+                setSelectedReservationId(null);
+                setIsBlockFormOpen(true);
+              }
+            },
             // カード=回数券・プリペイド管理は未実装のため準備中（別タスクで対応）。
             { key: "カード", icon: CreditCard, enabled: false }
           ].map((item) => {
@@ -1766,7 +1849,7 @@ export function ReservationLedger() {
             <span>総販売額 <b className="text-luxas-ink">¥{checkoutSummary.totalSales.toLocaleString()}</b></span>
             <span>新規 <b className="text-luxas-ink">{checkoutSummary.newCount}名</b></span>
             <span>リピート <b className="text-luxas-ink">{checkoutSummary.repeatCount}名</b></span>
-            <span>総来店 <b className="text-luxas-ink">{new Set(dayReservations.filter((r) => r.status !== "canceled").map((r) => r.customerName.trim()).filter(Boolean)).size}名</b></span>
+            <span>総来店 <b className="text-luxas-ink">{new Set(dayCustomerReservations.filter((r) => r.status !== "canceled").map((r) => r.customerName.trim()).filter(Boolean)).size}名</b></span>
             <span>施術件数 <b className="text-luxas-ink">{reservationStats.booked + reservationStats.completed}件</b></span>
             <span>客単価 <b className="text-luxas-ink">¥{checkoutSummary.avgPerCustomer.toLocaleString()}</b></span>
             <span>取消 <b className="text-luxas-ink">{reservationStats.canceled}件</b></span>
@@ -2132,6 +2215,8 @@ export function ReservationLedger() {
         onLinkCustomer={linkCustomerToReservation}
         onUnlinkCustomer={unlinkCustomerFromReservation}
         onCreateCustomer={createCustomerAndLink}
+        onUpdateBlock={updateTimeBlock}
+        onDeleteBlock={deleteTimeBlock}
       />
 
       <CheckoutModal
@@ -2157,6 +2242,16 @@ export function ReservationLedger() {
           setIsReturnModalOpen(false);
           setMessage({ type: "success", text: "返客を登録しました。" });
         }}
+      />
+
+      <BlockFormModal
+        key={isBlockFormOpen ? "block-open" : "block-closed"}
+        isOpen={isBlockFormOpen}
+        staff={timelineStaff.length ? timelineStaff : activeStaff}
+        defaultDate={selectedDate}
+        defaultTime={initialStoreSettings.reservationAcceptStartTime}
+        onClose={() => setIsBlockFormOpen(false)}
+        onSubmit={createTimeBlock}
       />
 
       <ReservationFormModal
@@ -2760,7 +2855,9 @@ function ReservationDetailModal({
   currentStoreId,
   onLinkCustomer,
   onUnlinkCustomer,
-  onCreateCustomer
+  onCreateCustomer,
+  onUpdateBlock,
+  onDeleteBlock
 }: {
   reservation: Reservation | null;
   serviceName: string;
@@ -2784,6 +2881,8 @@ function ReservationDetailModal({
   onLinkCustomer: (reservationId: string, customer: Customer) => void;
   onUnlinkCustomer: (reservationId: string) => void;
   onCreateCustomer: (reservationId: string, draft: { name: string; phone: string; gender: CustomerGender }) => void;
+  onUpdateBlock: (reservationId: string, patch: { blockType: "break" | "business"; startTime: string; endTime: string }) => void;
+  onDeleteBlock: (reservationId: string) => void;
 }) {
   const [showCancelPanel, setShowCancelPanel] = useState(false);
   const [cancelType, setCancelType] = useState<Exclude<CancelType, "none">>("cancel");
@@ -2799,6 +2898,10 @@ function ReservationDetailModal({
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newGender, setNewGender] = useState<CustomerGender>("unspecified");
+  // 休憩/業務ブロック編集用（key で予約ごとに初期化される）。
+  const [blockType, setBlockType] = useState<"break" | "business">(reservation?.blockType ?? "break");
+  const [blockStart, setBlockStart] = useState(reservation?.startTime ?? "");
+  const [blockEnd, setBlockEnd] = useState(reservation?.endTime ?? "");
 
   const storeName = (homeStoreId?: string) =>
     homeStoreId ? stores.find((store) => store.id === homeStoreId)?.name ?? "未設定" : "未設定";
@@ -2835,6 +2938,100 @@ function ReservationDetailModal({
 
   if (!reservation) {
     return null;
+  }
+
+  // 休憩/業務ブロックは専用の編集パネル（顧客/コース/会計は出さない）。
+  if (reservation.blockType) {
+    const label = reservation.blockType === "break" ? "休憩" : "業務";
+    return (
+      <div className="fixed inset-0 z-50 flex bg-stone-950/35">
+        <section className="relative flex h-full w-full max-w-[400px] flex-col overflow-hidden border-r border-luxas-line bg-white shadow-soft">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-luxas-line px-4 py-3">
+            <p className="text-sm font-semibold text-luxas-green">{label}（予約以外）</p>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-luxas-line text-stone-600 hover:bg-luxas-paper"
+              onClick={onClose}
+              aria-label="閉じる"
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 text-sm">
+            <div className="space-y-1.5">
+              <span className="block font-medium text-stone-600">種別</span>
+              <div className="flex gap-2">
+                {(["break", "business"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setBlockType(t)}
+                    className={[
+                      "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition",
+                      blockType === t ? "border-luxas-green bg-luxas-green text-white" : "border-luxas-line bg-white text-stone-700 hover:bg-luxas-paper"
+                    ].join(" ")}
+                  >
+                    {t === "break" ? "休憩" : "業務"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <dl className="grid gap-2">
+              <DetailRow label="担当スタッフ" value={staffName} />
+              <DetailRow label="日付" value={formatDayLabel(reservation.date)} />
+            </dl>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <span className="block font-medium text-stone-600">開始時刻</span>
+                <input
+                  type="time"
+                  step={300}
+                  value={blockStart}
+                  onChange={(e) => setBlockStart(e.target.value)}
+                  className="w-full rounded-md border border-luxas-line bg-white px-2.5 py-2 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <span className="block font-medium text-stone-600">終了時刻</span>
+                <input
+                  type="time"
+                  step={300}
+                  value={blockEnd}
+                  onChange={(e) => setBlockEnd(e.target.value)}
+                  className="w-full rounded-md border border-luxas-line bg-white px-2.5 py-2 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-stone-400">時刻は5分単位。タイムライン上のドラッグでも移動できます。集計（来店・売上など）には含まれません。</p>
+          </div>
+
+          <div className="shrink-0 border-t border-luxas-line bg-luxas-paper px-4 py-3">
+            <button
+              type="button"
+              onClick={() => {
+                onUpdateBlock(reservation.id, { blockType, startTime: blockStart, endTime: blockEnd });
+                onClose();
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-luxas-green px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#285f51]"
+            >
+              <Save size={16} aria-hidden="true" />
+              保存
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteBlock(reservation.id)}
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border border-red-300 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700"
+            >
+              <Ban size={16} aria-hidden="true" />
+              削除
+            </button>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   const isCanceled = reservation.status === "canceled";
@@ -3335,6 +3532,144 @@ function ReservationDetailModal({
           >
             <Ban size={16} aria-hidden="true" />
             予約をキャンセル / 削除
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// 休憩/業務ブロック登録モーダル（左レールの「休憩/業務」から開く）。種別・担当・開始・所要(分)を指定。
+const BLOCK_DURATIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
+
+function BlockFormModal({
+  isOpen,
+  staff,
+  defaultDate,
+  defaultTime,
+  onClose,
+  onSubmit
+}: {
+  isOpen: boolean;
+  staff: StaffMember[];
+  defaultDate: string;
+  defaultTime: string;
+  onClose: () => void;
+  onSubmit: (draft: { type: "break" | "business"; staffId: string; date: string; startTime: string; durationMinutes: number }) => void;
+}) {
+  const [type, setType] = useState<"break" | "business">("break");
+  const [staffId, setStaffId] = useState(staff[0]?.id ?? "");
+  const [date, setDate] = useState(defaultDate);
+  const [startTime, setStartTime] = useState(defaultTime);
+  const [duration, setDuration] = useState(60);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-8">
+      <section className="w-full max-w-md rounded-lg border border-luxas-line bg-white shadow-soft">
+        <div className="flex items-center justify-between border-b border-luxas-line px-5 py-4">
+          <div className="flex items-center gap-2">
+            <Clock3 size={18} className="text-luxas-green" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-luxas-ink">休憩 / 業務の登録</h2>
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-luxas-line text-stone-600 hover:bg-luxas-paper"
+            onClick={onClose}
+            aria-label="閉じる"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-5 text-sm">
+          <div className="space-y-1.5">
+            <span className="block font-medium text-stone-600">種別</span>
+            <div className="flex gap-2">
+              {(["break", "business"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setType(t)}
+                  className={[
+                    "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition",
+                    type === t ? "border-luxas-green bg-luxas-green text-white" : "border-luxas-line bg-white text-stone-700 hover:bg-luxas-paper"
+                  ].join(" ")}
+                >
+                  {t === "break" ? "休憩" : "業務"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="block space-y-1.5">
+            <span className="block font-medium text-stone-600">担当スタッフ</span>
+            <select
+              value={staffId}
+              onChange={(e) => setStaffId(e.target.value)}
+              className="w-full rounded-md border border-luxas-line bg-white px-3 py-2 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+            >
+              {staff.length === 0 ? <option value="">（出勤スタッフなし）</option> : null}
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>{s.displayName}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid grid-cols-3 gap-3">
+            <label className="col-span-2 block space-y-1.5">
+              <span className="block font-medium text-stone-600">開始時刻</span>
+              <input
+                type="time"
+                step={300}
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full rounded-md border border-luxas-line bg-white px-3 py-2 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="block font-medium text-stone-600">所要(分)</span>
+              <select
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value))}
+                className="w-full rounded-md border border-luxas-line bg-white px-2 py-2 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+              >
+                {BLOCK_DURATIONS.map((d) => (
+                  <option key={d} value={d}>{d}分</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="block space-y-1.5">
+            <span className="block font-medium text-stone-600">日付</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-md border border-luxas-line bg-white px-3 py-2 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+            />
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-luxas-line bg-luxas-paper px-5 py-4">
+          <button
+            type="button"
+            className="rounded-md border border-luxas-line bg-white px-4 py-2.5 text-sm font-semibold text-luxas-ink hover:bg-luxas-mist"
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={!staffId}
+            onClick={() => onSubmit({ type, staffId, date, startTime, durationMinutes: duration })}
+            className="inline-flex items-center gap-2 rounded-md bg-luxas-green px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#285f51] disabled:cursor-not-allowed disabled:bg-stone-300"
+          >
+            <Save size={16} aria-hidden="true" />
+            登録
           </button>
         </div>
       </section>
