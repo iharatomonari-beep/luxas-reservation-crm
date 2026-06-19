@@ -3841,17 +3841,28 @@ function ReservationFormModal({
                     // コース個別色（マスタの color）を反映。未設定はカテゴリ由来色にフォールバック（白回避）。タイムラインカードと同じ配色。
                     const style = menuColorStyle(menuColorKeyFor(service));
                     const active = form.serviceMenuId === service.id;
+                    // 選択中の性別に対してメニューが不可なら抑止（PM §4-1 男性可/女性可）。未設定=可。
+                    const genderDisallowed =
+                      (form.guestGender === "male" && service.maleAllowed === false) ||
+                      (form.guestGender === "female" && service.femaleAllowed === false);
                     return (
                       <button
                         key={service.id}
                         type="button"
+                        disabled={genderDisallowed && !active}
                         onClick={() => update("serviceMenuId", service.id)}
-                        title={`¥${service.price.toLocaleString()} / ${service.durationMinutes}分`}
+                        title={
+                          genderDisallowed
+                            ? `${form.guestGender === "male" ? "男性" : "女性"}は対象外のコースです`
+                            : `¥${service.price.toLocaleString()} / ${service.durationMinutes}分`
+                        }
                         className={[
                           "rounded-md border px-2.5 py-1.5 text-xs font-bold shadow-sm transition",
-                          active
-                            ? `${style.swatch} border-transparent text-white ring-2 ring-luxas-ink ring-offset-1`
-                            : `${style.bg} ${style.text} ${style.border} hover:brightness-95`
+                          genderDisallowed && !active
+                            ? "cursor-not-allowed border-luxas-line bg-stone-100 text-stone-400 line-through"
+                            : active
+                              ? `${style.swatch} border-transparent text-white ring-2 ring-luxas-ink ring-offset-1`
+                              : `${style.bg} ${style.text} ${style.border} hover:brightness-95`
                         ].join(" ")}
                       >
                         <span>{service.name}</span>

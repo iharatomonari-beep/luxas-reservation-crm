@@ -35,6 +35,10 @@ export type ServiceMenu = {
   requiresPrivateRoom?: boolean;
   /** オンライン予約に掲載するか（PM準拠・T053）。任意・未設定は非掲載扱い。 */
   onlineBooking?: boolean;
+  /** 男性可（PM §4-1・任意）。未設定=可。新規予約で性別=男性のとき不可コースを抑止する。 */
+  maleAllowed?: boolean;
+  /** 女性可（PM §4-1・任意）。未設定=可。新規予約で性別=女性のとき不可コースを抑止する。 */
+  femaleAllowed?: boolean;
   /**
    * 提供店舗範囲（T065・任意）。未設定 or "all" =全店共通。"selected" のとき storeIds の店舗のみで提供。
    * 予約作成の「選択候補」だけを店舗で絞るために使う。過去予約のメニュー名 lookup（full配列）には使わない（履歴を壊さない）。

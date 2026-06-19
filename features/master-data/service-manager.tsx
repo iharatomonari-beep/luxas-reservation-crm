@@ -22,6 +22,9 @@ type ServiceForm = {
   isActive: boolean;
   requiresPrivateRoom: boolean;
   onlineBooking: boolean;
+  // 性別可否（PM §4-1）。既定はどちらも可。
+  maleAllowed: boolean;
+  femaleAllowed: boolean;
   // 提供店舗範囲（T065）。"all"=全店共通／"selected"=指定店舗のみ。
   storeScope: "all" | "selected";
   storeIds: string[];
@@ -38,6 +41,8 @@ const emptyForm: ServiceForm = {
   isActive: true,
   requiresPrivateRoom: false,
   onlineBooking: false,
+  maleAllowed: true,
+  femaleAllowed: true,
   storeScope: "all",
   storeIds: [],
   color: ""
@@ -117,6 +122,8 @@ export function ServiceManager() {
       isActive: form.isActive,
       requiresPrivateRoom: form.requiresPrivateRoom,
       onlineBooking: form.onlineBooking,
+      maleAllowed: form.maleAllowed,
+      femaleAllowed: form.femaleAllowed,
       // 提供店舗範囲（T065）。全店共通は storeIds を空に。
       storeScope: form.storeScope,
       storeIds: form.storeScope === "selected" ? form.storeIds : [],
@@ -146,6 +153,8 @@ export function ServiceManager() {
       isActive: item.isActive,
       requiresPrivateRoom: item.requiresPrivateRoom ?? false,
       onlineBooking: item.onlineBooking ?? false,
+      maleAllowed: item.maleAllowed ?? true,
+      femaleAllowed: item.femaleAllowed ?? true,
       // 未設定の既存メニューは「全店共通」として表示（保存するまでバックフィルしない）。
       storeScope: item.storeScope === "selected" ? "selected" : "all",
       storeIds: item.storeIds ?? [],
@@ -251,6 +260,16 @@ export function ServiceManager() {
               label="オンライン予約に掲載"
               checked={form.onlineBooking}
               onChange={(value) => setForm((current) => ({ ...current, onlineBooking: value }))}
+            />
+            <ToggleField
+              label="男性可（新規予約で性別=男性のとき選択可）"
+              checked={form.maleAllowed}
+              onChange={(value) => setForm((current) => ({ ...current, maleAllowed: value }))}
+            />
+            <ToggleField
+              label="女性可（新規予約で性別=女性のとき選択可）"
+              checked={form.femaleAllowed}
+              onChange={(value) => setForm((current) => ({ ...current, femaleAllowed: value }))}
             />
             <ToggleField
               label="有効にする"
