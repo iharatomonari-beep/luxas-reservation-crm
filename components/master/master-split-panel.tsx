@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Search } from "lucide-react";
 
 export type MasterColumn<T> = {
@@ -28,7 +28,9 @@ export function MasterSplitPanel<T extends { id: string }>({
   emptyListLabel = "該当する項目がありません。",
   emptyDetail = "左の一覧から選択するか「新規作成」を押してください。",
   gridClassName = "grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]",
-  listMaxHeightClassName
+  listMaxHeightClassName,
+  filterSlot,
+  detailTitle = "明細設定"
 }: {
   items: T[];
   columns: MasterColumn<T>[];
@@ -45,8 +47,20 @@ export function MasterSplitPanel<T extends { id: string }>({
   gridClassName?: string;
   /** 一覧テーブルを縦スクロールにする最大高さクラス（任意・例: "max-h-[70vh]"）。 */
   listMaxHeightClassName?: string;
+  /** 検索バーに差し込む追加フィルタUI（任意・例: カテゴリ絞り込み select）。 */
+  filterSlot?: ReactNode;
+  /** 右ペインの見出し（任意・既定「明細設定」）。 */
+  detailTitle?: string;
 }) {
   const [query, setQuery] = useState("");
+  const detailRef = useRef<HTMLElement | null>(null);
+
+  // 行を選択（または新規）したら、明細ペインを画面内へスクロールする（編集導線を見失わないため）。
+  useEffect(() => {
+    if (selectedId != null && typeof window !== "undefined" && window.innerWidth < 1280) {
+      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -73,6 +87,7 @@ export function MasterSplitPanel<T extends { id: string }>({
               className="w-full bg-transparent text-sm text-luxas-ink outline-none placeholder:text-stone-400"
             />
           </label>
+          {filterSlot}
           <button
             type="button"
             disabled
@@ -138,8 +153,8 @@ export function MasterSplitPanel<T extends { id: string }>({
       </section>
 
       {/* 右: 明細設定 */}
-      <section className="rounded-lg border border-luxas-line bg-white">
-        <div className="border-b border-luxas-line px-4 py-2.5 text-sm font-semibold text-luxas-ink">明細設定</div>
+      <section ref={detailRef} className="rounded-lg border border-luxas-line bg-white">
+        <div className="border-b border-luxas-line px-4 py-2.5 text-sm font-semibold text-luxas-ink">{detailTitle}</div>
         <div className="px-4 py-4">
           {selected || selectedId === "" ? (
             renderDetail(selected)

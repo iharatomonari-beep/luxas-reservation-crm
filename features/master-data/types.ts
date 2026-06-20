@@ -83,6 +83,27 @@ export type ServiceMenu = {
   storeIds?: string[];
   /** 予約カードの背景色（T066・任意・色キー: green/rose/sky/amber/violet/teal/stone）。未設定はカテゴリ色→デフォルト。 */
   color?: string;
+  // --- PM通常商品マスタ準拠の追加項目（表示・管理用・任意）---
+  /** 管理コード（バーコード）。 */
+  managementCode?: string;
+  /** 略称（一覧・カードの短縮表示用）。 */
+  shortName?: string;
+  /** 施術料金（税抜・円）。 */
+  priceExcludingTax?: number;
+  /** 通常価格（円）。割引前の定価。 */
+  regularPrice?: number;
+  /** 必要なトレーナ人数（0〜3）。 */
+  requiredTrainers?: number;
+  /** 説明（100字程度）。 */
+  description?: string;
+  /** 掲載: 予約端末。未設定=掲載扱い。 */
+  reservationTerminal?: boolean;
+  /** 掲載: Google予約。 */
+  googleBooking?: boolean;
+  /** 掲載: お店アプリ。 */
+  storeApp?: boolean;
+  /** 掲載: EPARK。 */
+  eparkListing?: boolean;
   /** 作成日時（ISO・任意・T064.5）。保存時に自動付与（表示のみ）。 */
   createdAt?: string;
   /** 最終更新日時（ISO・任意・T064.5）。保存時に自動更新（表示のみ）。 */

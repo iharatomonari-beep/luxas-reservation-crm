@@ -2699,6 +2699,21 @@ function categoryToColorKey(category?: string): string {
       return "sky";
     case "オプション":
       return "amber";
+    // PM実データのカテゴリ（2026-06-20）
+    case "ヘッド・頭ほぐし":
+      return "violet";
+    case "特別・スペシャル":
+      return "rose";
+    case "寄附金付き":
+      return "amber";
+    case "インバウンド":
+      return "sky";
+    case "外国人向け":
+      return "teal";
+    case "マタニティ":
+      return "pink";
+    case "鍼":
+      return "stone";
     default:
       return "teal";
   }
@@ -2718,6 +2733,21 @@ function categoryColorClass(category: string): { tag: string; text: string; bord
       return { tag: "bg-sky-50 text-sky-700", text: "text-sky-700", border: "border-sky-300", activeBg: "bg-sky-600" };
     case "オプション":
       return { tag: "bg-amber-50 text-amber-700", text: "text-amber-700", border: "border-amber-300", activeBg: "bg-amber-600" };
+    // PM実データのカテゴリ（2026-06-20）
+    case "ヘッド・頭ほぐし":
+      return { tag: "bg-violet-50 text-violet-700", text: "text-violet-700", border: "border-violet-300", activeBg: "bg-violet-600" };
+    case "特別・スペシャル":
+      return { tag: "bg-rose-50 text-rose-700", text: "text-rose-700", border: "border-rose-300", activeBg: "bg-rose-600" };
+    case "寄附金付き":
+      return { tag: "bg-amber-50 text-amber-700", text: "text-amber-700", border: "border-amber-300", activeBg: "bg-amber-600" };
+    case "インバウンド":
+      return { tag: "bg-sky-50 text-sky-700", text: "text-sky-700", border: "border-sky-300", activeBg: "bg-sky-600" };
+    case "外国人向け":
+      return { tag: "bg-teal-50 text-teal-700", text: "text-teal-700", border: "border-teal-300", activeBg: "bg-teal-600" };
+    case "マタニティ":
+      return { tag: "bg-pink-50 text-pink-700", text: "text-pink-700", border: "border-pink-300", activeBg: "bg-pink-600" };
+    case "鍼":
+      return { tag: "bg-stone-100 text-stone-600", text: "text-stone-700", border: "border-stone-300", activeBg: "bg-stone-600" };
     default:
       return { tag: "bg-stone-100 text-stone-600", text: "text-stone-700", border: "border-luxas-line", activeBg: "bg-stone-600" };
   }

@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { FormEvent, useMemo, useState } from "react";
+import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { SelectField, TextField, ToggleField } from "@/features/master-data/form-controls";
-import { initialServices, servicesStorageKey } from "@/features/master-data/mock-data";
+import { initialCategories, initialServices, servicesStorageKey } from "@/features/master-data/mock-data";
 import { ActiveBadge, MasterPage } from "@/features/master-data/master-page";
+import { MasterSplitPanel, type MasterColumn } from "@/components/master/master-split-panel";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import type { ServiceMenu } from "@/features/master-data/types";
 import { compareBySortOrder, formatCurrency, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
@@ -33,6 +34,17 @@ type ServiceForm = {
   storeIds: string[];
   // 予約カード背景色（T066）。空＝デフォルト。
   color: string;
+  // --- PM通常商品マスタ準拠の追加項目 ---
+  managementCode: string;
+  shortName: string;
+  priceExcludingTax: string;
+  regularPrice: string;
+  requiredTrainers: string;
+  description: string;
+  reservationTerminal: boolean;
+  googleBooking: boolean;
+  storeApp: boolean;
+  eparkListing: boolean;
 };
 
 const emptyForm: ServiceForm = {
@@ -50,20 +62,38 @@ const emptyForm: ServiceForm = {
   cleanupMinutes: "10",
   storeScope: "all",
   storeIds: [],
-  color: ""
+  color: "",
+  managementCode: "",
+  shortName: "",
+  priceExcludingTax: "",
+  regularPrice: "",
+  requiredTrainers: "1",
+  description: "",
+  reservationTerminal: true,
+  googleBooking: false,
+  storeApp: false,
+  eparkListing: false
 };
-
-const categories = ["ボディケア", "フェイシャル", "カウンセリング", "オプション", "その他"];
 
 export function ServiceManager() {
   const [services, setServices] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [form, setForm] = useState<ServiceForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
+  // PM準拠の「全カテゴリ」絞り込み（一覧上部）。""=全件。
+  const [categoryFilter, setCategoryFilter] = useState("");
   // 提供店舗の選択肢（T065）。localStorage補正後の有効な店舗一覧を参照。
   const { stores } = useCurrentStore();
   const storeOptions = [...stores].filter((s) => s.isActive).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? id;
+
+  // カテゴリ選択肢＝カテゴリマスタ ∪ 既存メニューのカテゴリ（重複排除・表示順）。
+  const categoryOptions = useMemo(() => {
+    const fromMaster = [...initialCategories].sort(compareBySortOrder).map((c) => c.name);
+    const fromServices = services.map((s) => s.category).filter(Boolean);
+    return [...new Set([...fromMaster, ...fromServices])];
+  }, [services]);
+
   function scopeLabel(item: ServiceMenu): string {
     if (item.storeScope !== "selected") {
       return "全店共通";
@@ -72,9 +102,21 @@ export function ServiceManager() {
     return names.length ? names.join("、") : "（店舗未選択）";
   }
 
+  // 一覧（表示順）＋カテゴリ絞り込み。名前検索は MasterSplitPanel が担当。
+  const visibleServices = useMemo(() => {
+    const sorted = [...services].sort(compareBySortOrder);
+    return categoryFilter ? sorted.filter((s) => s.category === categoryFilter) : sorted;
+  }, [services, categoryFilter]);
+
   function resetForm() {
     setForm(emptyForm);
     setEditingId(null);
+  }
+
+  function startCreate() {
+    setForm(emptyForm);
+    setEditingId("");
+    setMessage(null);
   }
 
   function validate() {
@@ -135,7 +177,18 @@ export function ServiceManager() {
       storeScope: form.storeScope,
       storeIds: form.storeScope === "selected" ? form.storeIds : [],
       // 予約カード色（T066）。未設定は undefined（デフォルト色）。
-      color: form.color || undefined
+      color: form.color || undefined,
+      // PM通常商品マスタ準拠の追加項目（空は undefined で保存）。
+      managementCode: form.managementCode.trim() || undefined,
+      shortName: form.shortName.trim() || undefined,
+      priceExcludingTax: form.priceExcludingTax.trim() ? Number(form.priceExcludingTax) : undefined,
+      regularPrice: form.regularPrice.trim() ? Number(form.regularPrice) : undefined,
+      requiredTrainers: form.requiredTrainers.trim() ? Number(form.requiredTrainers) : undefined,
+      description: form.description.trim() || undefined,
+      reservationTerminal: form.reservationTerminal,
+      googleBooking: form.googleBooking,
+      storeApp: form.storeApp,
+      eparkListing: form.eparkListing
     };
 
     if (editingId) {
@@ -167,7 +220,17 @@ export function ServiceManager() {
       // 未設定の既存メニューは「全店共通」として表示（保存するまでバックフィルしない）。
       storeScope: item.storeScope === "selected" ? "selected" : "all",
       storeIds: item.storeIds ?? [],
-      color: item.color ?? ""
+      color: item.color ?? "",
+      managementCode: item.managementCode ?? "",
+      shortName: item.shortName ?? "",
+      priceExcludingTax: item.priceExcludingTax != null ? String(item.priceExcludingTax) : "",
+      regularPrice: item.regularPrice != null ? String(item.regularPrice) : "",
+      requiredTrainers: item.requiredTrainers != null ? String(item.requiredTrainers) : "1",
+      description: item.description ?? "",
+      reservationTerminal: item.reservationTerminal ?? true,
+      googleBooking: item.googleBooking ?? false,
+      storeApp: item.storeApp ?? false,
+      eparkListing: item.eparkListing ?? false
     });
     setMessage(null);
   }
@@ -180,41 +243,70 @@ export function ServiceManager() {
     setMessage({ type: "success", text: "メニューを提供停止（無効）にしました。過去予約のメニュー名は引き続き表示されます。" });
   }
 
-  return (
-    <MasterPage
-      title="メニュー管理"
-      description="予約作成時に使う施術メニューの名称、所要時間、価格、カテゴリを管理します。"
-    >
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <section className="rounded-lg border border-luxas-line bg-white p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-luxas-ink">
-              {editingId ? "メニューを編集" : "メニューを追加"}
-            </h2>
-            {editingId ? (
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-md border border-luxas-line px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-luxas-paper"
-                onClick={resetForm}
-              >
-                <RotateCcw size={14} aria-hidden="true" />
-                解除
-              </button>
-            ) : null}
-          </div>
+  // PM準拠の一覧列: ID / カテゴリ / 名前 / 施術料金（税込） / 表示順序 / オンライン予約 / 状態。
+  const columns: MasterColumn<ServiceMenu>[] = [
+    { key: "id", header: "ID", render: (s) => <span className="font-mono text-xs text-stone-400">{s.id.replace(/^service-?/, "")}</span> },
+    { key: "category", header: "カテゴリ", render: (s) => <span className="text-stone-700">{s.category}</span> },
+    {
+      key: "name",
+      header: "名前",
+      render: (s) => (
+        <span className="inline-flex items-center gap-2">
+          <span className={["inline-block h-3 w-3 shrink-0 rounded-sm border", menuColorStyle(s.color).bg, menuColorStyle(s.color).border].join(" ")} aria-hidden="true" />
+          <span className="font-medium text-rose-600 underline-offset-2 hover:underline">{s.name}</span>
+        </span>
+      )
+    },
+    { key: "price", header: "施術料金（税込）", className: "text-right", render: (s) => <span className="text-stone-700">{formatCurrency(s.price)}</span> },
+    { key: "sortOrder", header: "表示順序", className: "text-right", render: (s) => <span className="text-stone-600">{s.sortOrder ?? 0}</span> },
+    { key: "online", header: "オンライン予約", className: "text-center", render: (s) => <span className={s.onlineBooking ? "text-luxas-green" : "text-stone-300"}>{s.onlineBooking ? "○" : "×"}</span> },
+    { key: "status", header: "状態", render: (s) => <ActiveBadge isActive={s.isActive} /> }
+  ];
 
-          {editingId ? (
-            (() => {
-              const editingService = services.find((s) => s.id === editingId);
-              return editingService ? (
-                <p className="mb-3 text-[11px] text-stone-400">
-                  作成日: {formatTimestamp(editingService.createdAt)} ／ 最終更新日: {formatTimestamp(editingService.updatedAt)}
-                </p>
-              ) : null;
-            })()
+  function renderDetail() {
+    const editingService = editingId ? services.find((s) => s.id === editingId) ?? null : null;
+    return (
+      <div>
+        {editingService ? (
+          <p className="mb-3 text-[11px] text-stone-400">
+            作成日: {formatTimestamp(editingService.createdAt)} ／ 最終更新日: {formatTimestamp(editingService.updatedAt)}
+          </p>
+        ) : null}
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-luxas-ink">{editingId ? "メニューを編集" : "メニューを追加"}</h2>
+          {editingId !== null ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md border border-luxas-line px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-luxas-paper"
+              onClick={resetForm}
+            >
+              <RotateCcw size={14} aria-hidden="true" />
+              閉じる
+            </button>
           ) : null}
+        </div>
 
-          <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="管理コード（バーコード）"
+              value={form.managementCode}
+              onChange={(value) => setForm((current) => ({ ...current, managementCode: value }))}
+              placeholder="任意"
+            />
+            <SelectField
+              label="カテゴリ（商品の紐付け先）"
+              value={form.category}
+              onChange={(value) => setForm((current) => ({ ...current, category: value }))}
+            >
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </SelectField>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
             <TextField
               label="メニュー名"
               value={form.name}
@@ -222,44 +314,51 @@ export function ServiceManager() {
               placeholder="例: ボディケア 60分"
               required
             />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                label="所要時間（分）"
-                value={form.durationMinutes}
-                onChange={(value) => setForm((current) => ({ ...current, durationMinutes: value }))}
-                type="number"
-                min="1"
-                required
-              />
-              <TextField
-                label="価格（円）"
-                value={form.price}
-                onChange={(value) => setForm((current) => ({ ...current, price: value }))}
-                type="number"
+            <TextField
+              label="略称"
+              value={form.shortName}
+              onChange={(value) => setForm((current) => ({ ...current, shortName: value }))}
+              placeholder="一覧・カード短縮表示用（任意）"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <TextField
+              label="施術料金（税込・円）"
+              value={form.price}
+              onChange={(value) => setForm((current) => ({ ...current, price: value }))}
+              type="number"
               min="0"
               required
             />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                label="事前準備時間（分）"
-                value={form.prepMinutes}
-                onChange={(value) => setForm((current) => ({ ...current, prepMinutes: value }))}
-                type="number"
-                min="0"
-                hint="コース選択時に予約の施術前インターバルへ反映"
-              />
-              <TextField
-                label="片付け時間（分）"
-                value={form.cleanupMinutes}
-                onChange={(value) => setForm((current) => ({ ...current, cleanupMinutes: value }))}
-                type="number"
-                min="0"
-                hint="コース選択時に予約の施術後インターバルへ反映"
-              />
-            </div>
             <TextField
-              label="表示順"
+              label="施術料金（税抜・円）"
+              value={form.priceExcludingTax}
+              onChange={(value) => setForm((current) => ({ ...current, priceExcludingTax: value }))}
+              type="number"
+              min="0"
+            />
+            <TextField
+              label="通常価格（円）"
+              value={form.regularPrice}
+              onChange={(value) => setForm((current) => ({ ...current, regularPrice: value }))}
+              type="number"
+              min="0"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField
+              label="必要なトレーナ"
+              value={form.requiredTrainers}
+              onChange={(value) => setForm((current) => ({ ...current, requiredTrainers: value }))}
+            >
+              {["0", "1", "2", "3"].map((n) => (
+                <option key={n} value={n}>
+                  {n}人
+                </option>
+              ))}
+            </SelectField>
+            <TextField
+              label="表示順序"
               value={form.sortOrder}
               onChange={(value) => setForm((current) => ({ ...current, sortOrder: value }))}
               type="number"
@@ -267,21 +366,61 @@ export function ServiceManager() {
               required
               hint="数値が小さいほど上に表示します"
             />
-            <SelectField
-              label="カテゴリ"
-              value={form.category}
-              onChange={(value) => setForm((current) => ({ ...current, category: value }))}
-            >
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </SelectField>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <TextField
+              label="施術時間（分）"
+              value={form.durationMinutes}
+              onChange={(value) => setForm((current) => ({ ...current, durationMinutes: value }))}
+              type="number"
+              min="1"
+              required
+            />
+            <TextField
+              label="事前準備時間（分）"
+              value={form.prepMinutes}
+              onChange={(value) => setForm((current) => ({ ...current, prepMinutes: value }))}
+              type="number"
+              min="0"
+              hint="施術前インターバルへ反映"
+            />
+            <TextField
+              label="片付け時間（分）"
+              value={form.cleanupMinutes}
+              onChange={(value) => setForm((current) => ({ ...current, cleanupMinutes: value }))}
+              type="number"
+              min="0"
+              hint="施術後インターバルへ反映"
+            />
+          </div>
+
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-stone-700">説明（100字程度）</span>
+            <textarea
+              value={form.description}
+              onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+              rows={2}
+              maxLength={200}
+              className="w-full rounded-md border border-luxas-line bg-white px-3 py-2 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+              placeholder="コースの説明（任意）"
+            />
+          </label>
+
+          <div className="grid gap-3 rounded-md border border-luxas-line bg-luxas-paper/40 p-3 sm:grid-cols-2">
             <ToggleField
-              label="個室必須メニュー"
-              checked={form.requiresPrivateRoom}
-              onChange={(value) => setForm((current) => ({ ...current, requiresPrivateRoom: value }))}
+              label="男性可"
+              checked={form.maleAllowed}
+              onChange={(value) => setForm((current) => ({ ...current, maleAllowed: value }))}
+            />
+            <ToggleField
+              label="女性可"
+              checked={form.femaleAllowed}
+              onChange={(value) => setForm((current) => ({ ...current, femaleAllowed: value }))}
+            />
+            <ToggleField
+              label="予約端末に掲載"
+              checked={form.reservationTerminal}
+              onChange={(value) => setForm((current) => ({ ...current, reservationTerminal: value }))}
             />
             <ToggleField
               label="オンライン予約に掲載"
@@ -289,194 +428,174 @@ export function ServiceManager() {
               onChange={(value) => setForm((current) => ({ ...current, onlineBooking: value }))}
             />
             <ToggleField
-              label="男性可（新規予約で性別=男性のとき選択可）"
-              checked={form.maleAllowed}
-              onChange={(value) => setForm((current) => ({ ...current, maleAllowed: value }))}
+              label="Google予約に掲載"
+              checked={form.googleBooking}
+              onChange={(value) => setForm((current) => ({ ...current, googleBooking: value }))}
             />
             <ToggleField
-              label="女性可（新規予約で性別=女性のとき選択可）"
-              checked={form.femaleAllowed}
-              onChange={(value) => setForm((current) => ({ ...current, femaleAllowed: value }))}
+              label="お店アプリに掲載"
+              checked={form.storeApp}
+              onChange={(value) => setForm((current) => ({ ...current, storeApp: value }))}
+            />
+            <ToggleField
+              label="EPARK掲載"
+              checked={form.eparkListing}
+              onChange={(value) => setForm((current) => ({ ...current, eparkListing: value }))}
+            />
+            <ToggleField
+              label="個室必須メニュー"
+              checked={form.requiresPrivateRoom}
+              onChange={(value) => setForm((current) => ({ ...current, requiresPrivateRoom: value }))}
             />
             <ToggleField
               label="有効にする"
               checked={form.isActive}
               onChange={(value) => setForm((current) => ({ ...current, isActive: value }))}
             />
+          </div>
 
-            <div>
-              <SelectField
-                label="コース色（予約カード・コース選択に反映）"
-                value={form.color}
-                onChange={(value) => setForm((current) => ({ ...current, color: value }))}
-              >
-                {MENU_COLOR_OPTIONS.map((option) => (
-                  <option key={option.key || "default"} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </SelectField>
-              <div className="mt-2 flex items-center gap-2 text-xs text-stone-500">
-                <span>背景色:</span>
-                <span className={["inline-block h-4 w-8 rounded border", menuColorStyle(form.color).bg, menuColorStyle(form.color).border].join(" ")} />
-                <span>（会計済みの予約はグレー優先）</span>
-              </div>
-              <p className="mt-1 text-xs text-stone-500">
-                {form.storeScope === "selected"
-                  ? "店舗独自コースのため、色は店舗で設定できます。"
-                  : "全店共通コースのため、色は本部で設定します（全店に反映）。"}
-              </p>
+          <div>
+            <SelectField
+              label="ボタンの色（予約カード・コース選択に反映）"
+              value={form.color}
+              onChange={(value) => setForm((current) => ({ ...current, color: value }))}
+            >
+              {MENU_COLOR_OPTIONS.map((option) => (
+                <option key={option.key || "default"} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectField>
+            <div className="mt-2 flex items-center gap-2 text-xs text-stone-500">
+              <span>背景色:</span>
+              <span className={["inline-block h-4 w-8 rounded border", menuColorStyle(form.color).bg, menuColorStyle(form.color).border].join(" ")} />
+              <span>（会計済みの予約はグレー優先）</span>
             </div>
+          </div>
 
-            <section className="rounded-md border border-luxas-line bg-white p-3">
-              <p className="text-sm font-medium text-stone-700">提供店舗</p>
-              <p className="mt-1 text-xs text-stone-500">
-                未設定は全店共通です。予約作成の選択候補だけを店舗で絞ります（過去予約のメニュー名表示には影響しません）。
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(["all", "selected"] as const).map((scope) => (
-                  <label
-                    key={scope}
-                    className={[
-                      "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
-                      form.storeScope === scope ? "border-luxas-green bg-luxas-mist text-luxas-green" : "border-luxas-line bg-white text-stone-700"
-                    ].join(" ")}
-                  >
-                    <input
-                      type="radio"
-                      name="storeScope"
-                      className="h-4 w-4 accent-luxas-green"
-                      checked={form.storeScope === scope}
-                      onChange={() => setForm((current) => ({ ...current, storeScope: scope }))}
-                    />
-                    {scope === "all" ? "全店共通" : "指定店舗のみ"}
-                  </label>
-                ))}
+          <section className="rounded-md border border-luxas-line bg-white p-3">
+            <p className="text-sm font-medium text-stone-700">提供店舗</p>
+            <p className="mt-1 text-xs text-stone-500">
+              未設定は全店共通です。予約作成の選択候補だけを店舗で絞ります（過去予約のメニュー名表示には影響しません）。
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(["all", "selected"] as const).map((scope) => (
+                <label
+                  key={scope}
+                  className={[
+                    "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                    form.storeScope === scope ? "border-luxas-green bg-luxas-mist text-luxas-green" : "border-luxas-line bg-white text-stone-700"
+                  ].join(" ")}
+                >
+                  <input
+                    type="radio"
+                    name="storeScope"
+                    className="h-4 w-4 accent-luxas-green"
+                    checked={form.storeScope === scope}
+                    onChange={() => setForm((current) => ({ ...current, storeScope: scope }))}
+                  />
+                  {scope === "all" ? "全店共通" : "指定店舗のみ"}
+                </label>
+              ))}
+            </div>
+            {form.storeScope === "selected" ? (
+              <div className="mt-3 grid gap-2">
+                {storeOptions.length === 0 ? (
+                  <p className="text-sm text-stone-500">有効な店舗がありません（組織管理で店舗を有効化してください）。</p>
+                ) : (
+                  storeOptions.map((store) => {
+                    const checked = form.storeIds.includes(store.id);
+                    return (
+                      <label
+                        key={store.id}
+                        className={[
+                          "flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm",
+                          checked ? "border-luxas-green bg-luxas-mist" : "border-luxas-line bg-white"
+                        ].join(" ")}
+                      >
+                        <span className="font-medium text-luxas-ink">{store.name}</span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-luxas-green"
+                          checked={checked}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              storeIds: event.target.checked
+                                ? [...current.storeIds, store.id]
+                                : current.storeIds.filter((id) => id !== store.id)
+                            }))
+                          }
+                        />
+                      </label>
+                    );
+                  })
+                )}
+                <p className="text-xs text-stone-500">1店舗＝店舗専用 ／ 複数選択＝複数店舗対応。</p>
               </div>
-              {form.storeScope === "selected" ? (
-                <div className="mt-3 grid gap-2">
-                  {storeOptions.length === 0 ? (
-                    <p className="text-sm text-stone-500">有効な店舗がありません（組織管理で店舗を有効化してください）。</p>
-                  ) : (
-                    storeOptions.map((store) => {
-                      const checked = form.storeIds.includes(store.id);
-                      return (
-                        <label
-                          key={store.id}
-                          className={[
-                            "flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm",
-                            checked ? "border-luxas-green bg-luxas-mist" : "border-luxas-line bg-white"
-                          ].join(" ")}
-                        >
-                          <span className="font-medium text-luxas-ink">{store.name}</span>
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-luxas-green"
-                            checked={checked}
-                            onChange={(event) =>
-                              setForm((current) => ({
-                                ...current,
-                                storeIds: event.target.checked
-                                  ? [...current.storeIds, store.id]
-                                  : current.storeIds.filter((id) => id !== store.id)
-                              }))
-                            }
-                          />
-                        </label>
-                      );
-                    })
-                  )}
-                  <p className="text-xs text-stone-500">1店舗＝店舗専用 ／ 複数選択＝複数店舗対応。</p>
-                </div>
-              ) : null}
-            </section>
+            ) : null}
+          </section>
 
-            <StatusMessage message={message} />
+          <StatusMessage message={message} />
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="submit"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#285f51]"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#285f51]"
             >
               <Plus size={17} aria-hidden="true" />
               {editingId ? "更新する" : "追加する"}
             </button>
-          </form>
-        </section>
-
-        <section className="rounded-lg border border-luxas-line bg-white">
-          <div className="border-b border-luxas-line px-5 py-4">
-            <h2 className="text-base font-semibold text-luxas-ink">メニュー一覧</h2>
-            <p className="mt-1 text-sm text-stone-500">{services.length}件</p>
+            {editingId && form.isActive ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-3 text-sm font-medium text-amber-800 hover:bg-amber-50"
+                onClick={() => handleDeactivate(editingId)}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                提供停止
+              </button>
+            ) : null}
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-luxas-paper text-xs font-semibold uppercase tracking-normal text-stone-500">
-                <tr>
-                  <th className="px-5 py-3">メニュー名</th>
-                  <th className="px-5 py-3">カテゴリ</th>
-                  <th className="px-5 py-3">所要時間</th>
-                  <th className="px-5 py-3">価格</th>
-                  <th className="px-5 py-3">表示順</th>
-                  <th className="px-5 py-3">個室</th>
-                  <th className="px-5 py-3">オンライン予約</th>
-                  <th className="px-5 py-3">提供店舗</th>
-                  <th className="px-5 py-3">状態</th>
-                  <th className="px-5 py-3 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-luxas-line">
-                {[...services].sort(compareBySortOrder).map((item) => (
-                  <tr key={item.id}>
-                    <td className="whitespace-nowrap px-5 py-4 font-medium text-luxas-ink">
-                      <span className="inline-flex items-center gap-2">
-                        <span className={["inline-block h-3 w-3 shrink-0 rounded-sm border", menuColorStyle(item.color).bg, menuColorStyle(item.color).border].join(" ")} aria-hidden="true" />
-                        {item.name}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">{item.category}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">{item.durationMinutes}分</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">{formatCurrency(item.price)}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">{item.sortOrder ?? 0}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">
-                      {item.requiresPrivateRoom ? "個室必須" : "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 text-stone-700">
-                      {item.onlineBooking ? "○" : "×"}
-                    </td>
-                    <td className="px-5 py-4 text-stone-700">
-                      <span className="block max-w-[220px] truncate">{scopeLabel(item)}</span>
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4">
-                      <ActiveBadge isActive={item.isActive} />
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 text-right">
-                      <div className="inline-flex gap-2">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded-md border border-luxas-line px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-luxas-paper"
-                          onClick={() => handleEdit(item)}
-                        >
-                          <Pencil size={14} aria-hidden="true" />
-                          編集
-                        </button>
-                        {item.isActive ? (
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50"
-                            onClick={() => handleDeactivate(item.id)}
-                          >
-                            <Trash2 size={14} aria-hidden="true" />
-                            提供停止
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        </form>
       </div>
+    );
+  }
+
+  return (
+    <MasterPage
+      title="メニュー管理（通常商品）"
+      description="予約作成時に使う施術メニューの名称、施術料金、時間、カテゴリを管理します。左の一覧から選ぶと右に明細が開きます。"
+    >
+      <p className="mb-3 text-sm text-stone-500">{visibleServices.length}件{categoryFilter ? `（${categoryFilter}）` : ""}</p>
+      <MasterSplitPanel
+        items={visibleServices}
+        columns={columns}
+        searchKeys={["name", "category"]}
+        selectedId={editingId}
+        onSelect={handleEdit}
+        onCreate={startCreate}
+        renderDetail={renderDetail}
+        searchPlaceholder="メニュー名で検索"
+        detailTitle="明細設定"
+        emptyDetail="左の一覧から選択するか「新規作成」を押してください。"
+        gridClassName="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]"
+        listMaxHeightClassName="max-h-[72vh]"
+        filterSlot={
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+            className="rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm text-luxas-ink outline-none"
+            aria-label="カテゴリで絞り込み"
+          >
+            <option value="">全カテゴリ</option>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        }
+      />
     </MasterPage>
   );
 }
