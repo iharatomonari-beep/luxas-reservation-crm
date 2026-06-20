@@ -78,6 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "セット商品", href: "/dashboard/course-sets" },
       { label: "物販商品", href: "/dashboard/retail-items" },
       { label: "物販カテゴリ", href: "/dashboard/retail-categories" },
+      { label: "会計アイテム", href: "/dashboard/checkout-items" },
       { label: "EPARK掲載設定", href: "/dashboard/epark" }
     ]
   },

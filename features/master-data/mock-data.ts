@@ -1,4 +1,5 @@
 import type {
+  CheckoutItem,
   CourseSet,
   CreditCardCompany,
   EmoneyBrand,
@@ -28,6 +29,19 @@ export const courseSetsStorageKey = "luxas-master-course-sets";
 export const retailCategoriesStorageKey = "luxas-retail-categories";
 export const retailItemsStorageKey = "luxas-retail-items";
 export const retailSalesStorageKey = "luxas-retail-sales";
+export const checkoutItemsStorageKey = "luxas-checkout-items";
+
+export const initialCheckoutItems: CheckoutItem[] = [
+  { id: "coi-r-001", kind: "retail", name: "シャンプー", amount: 2200, sortOrder: 10, isActive: true },
+  { id: "coi-r-002", kind: "retail", name: "福袋", amount: 5000, sortOrder: 20, isActive: true },
+  { id: "coi-ts-001", kind: "ticketSale", name: "回数券", amount: 30000, sortOrder: 10, isActive: true },
+  { id: "coi-ts-002", kind: "ticketSale", name: "60分チケット", amount: 6000, sortOrder: 20, isActive: true },
+  { id: "coi-tu-001", kind: "ticketUse", name: "回数券利用", amount: 5000, sortOrder: 10, isActive: true },
+  { id: "coi-tu-002", kind: "ticketUse", name: "チケット利用", amount: 6000, sortOrder: 20, isActive: true },
+  { id: "coi-d-001", kind: "discount", name: "500円クーポン", amount: 500, sortOrder: 10, isActive: true },
+  { id: "coi-d-002", kind: "discount", name: "リピート割引", amount: 1000, sortOrder: 20, isActive: true },
+  { id: "coi-d-003", kind: "discount", name: "社割60分", amount: 2000, sortOrder: 30, isActive: true }
+];
 
 export const initialCreditCards: CreditCardCompany[] = [
   { id: "cc-001", name: "VISA", feePercent: 3.25, sortOrder: 10, isActive: true },

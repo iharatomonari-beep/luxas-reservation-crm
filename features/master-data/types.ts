@@ -156,6 +156,35 @@ export const optionKindLabels: Record<OptionKind, string> = {
   other: "その他"
 };
 
+// 会計アイテムマスタ。会計画面の4区分（物販/チケット販売/チケット利用/割引）の事前登録アイテム。
+// kind により会計での加減算と計上が変わる:
+//  retail      物販        … 支払金額に+ / 売上計上 / 担当スタッフ紐付け（個人物販売上）
+//  ticketSale  チケット販売 … 支払金額に+ / 預り金として計上
+//  ticketUse   チケット利用 … 支払金額から- / 売上計上（個人売上にも紐付け）
+//  discount    割引        … 支払金額から- / 売上マイナス
+export type CheckoutItemKind = "retail" | "ticketSale" | "ticketUse" | "discount";
+
+export type CheckoutItem = {
+  id: string;
+  kind: CheckoutItemKind;
+  name: string;
+  /** プリセット金額（円・税込）。 */
+  amount: number;
+  sortOrder: number;
+  isActive: boolean;
+  /** 作成日時（ISO・任意）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO・任意）。 */
+  updatedAt?: string;
+};
+
+export const checkoutItemKindLabels: Record<CheckoutItemKind, string> = {
+  retail: "物販",
+  ticketSale: "チケット販売",
+  ticketUse: "チケット利用",
+  discount: "割引"
+};
+
 // タグマスタ（T025）。種別=顧客タグ/予約ルートタグ/施術カルテタグ。
 export type TagKind = "customer" | "route" | "karte";
 
