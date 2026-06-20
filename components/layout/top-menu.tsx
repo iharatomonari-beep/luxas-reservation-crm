@@ -14,6 +14,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     key: "reservations",
     label: "予約台帳",
+    href: "/dashboard/reservations",
     items: [
       { label: "予約台帳", href: "/dashboard/reservations" },
       { label: "予約一覧", href: "/dashboard/reservations/list" },
@@ -31,6 +32,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     key: "daily",
     label: "日次管理",
+    href: "/dashboard/daily",
     items: [
       { label: "日次管理", href: "/dashboard/daily" },
       { label: "出勤・退勤", href: "/dashboard/attendance" },
@@ -46,6 +48,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     key: "store",
     label: "店舗情報",
+    href: "/dashboard/settings",
     items: [
       { label: "店舗設定", href: "/dashboard/settings" },
       { label: "スタッフ", href: "/dashboard/staff" },
@@ -59,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     key: "customers",
     label: "顧客情報",
+    href: "/dashboard/customers",
     items: [
       { label: "顧客管理", href: "/dashboard/customers" },
       { label: "顧客フル検索", href: "/dashboard/customers/search" },
@@ -71,6 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     key: "products",
     label: "商品情報",
+    href: "/dashboard/services",
     items: [
       { label: "メニュー", href: "/dashboard/services" },
       { label: "カテゴリ", href: "/dashboard/categories" },
@@ -85,6 +90,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     key: "mail",
     label: "メール管理",
+    href: "/dashboard/mail",
     items: [
       { label: "配信履歴", href: "/dashboard/mail" },
       { label: "配信一括停止", href: "/dashboard/mail/cancel" },
@@ -96,6 +102,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     key: "analytics",
     label: "経営指標",
+    href: "/dashboard/analytics",
     items: [
       { label: "経営指標", href: "/dashboard/analytics" },
       { label: "詳細帳票", href: "/dashboard/analytics/reports" }
@@ -141,35 +148,39 @@ export function TopMenu({ mobileOpen, onNavigate }: { mobileOpen: boolean; onNav
       <div ref={navRef} className="hidden items-center gap-1 md:flex">
         {NAV_GROUPS.map((group) => {
           const active = isGroupActive(pathname, group);
-          if (group.href) {
-            return (
-              <Link
-                key={group.key}
-                href={group.href}
-                className={[
-                  "rounded-md px-3 py-2 text-sm font-medium transition",
-                  active ? "bg-luxas-mist text-luxas-green" : "text-luxas-ink hover:bg-luxas-paper"
-                ].join(" ")}
-              >
-                {group.label}
-              </Link>
-            );
-          }
+          const hasItems = (group.items?.length ?? 0) > 0;
           const open = openKey === group.key;
+          const labelClass = [
+            "rounded-md px-3 py-2 text-sm font-medium transition",
+            active || open ? "bg-luxas-mist text-luxas-green" : "text-luxas-ink hover:bg-luxas-paper"
+          ].join(" ");
+          const toggle = () => setOpenKey((current) => (current === group.key ? null : group.key));
           return (
-            <div key={group.key} className="relative">
-              <button
-                type="button"
-                onClick={() => setOpenKey((current) => (current === group.key ? null : group.key))}
-                className={[
-                  "inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition",
-                  active || open ? "bg-luxas-mist text-luxas-green" : "text-luxas-ink hover:bg-luxas-paper"
-                ].join(" ")}
-              >
-                {group.label}
-                <ChevronDown size={14} className={open ? "rotate-180 transition" : "transition"} aria-hidden="true" />
-              </button>
-              {open ? (
+            <div key={group.key} className="relative flex items-center">
+              {/* 見出し: href があれば押して代表ページへ移動。無ければドロップダウン開閉。 */}
+              {group.href ? (
+                <Link href={group.href} className={labelClass}>{group.label}</Link>
+              ) : (
+                <button type="button" onClick={toggle} className={["inline-flex items-center gap-1", labelClass].join(" ")}>
+                  {group.label}
+                  {hasItems ? <ChevronDown size={14} className={open ? "rotate-180 transition" : "transition"} aria-hidden="true" /> : null}
+                </button>
+              )}
+              {/* href があるグループは別途 ▼ ボタンで小メニューを開く。 */}
+              {group.href && hasItems ? (
+                <button
+                  type="button"
+                  onClick={toggle}
+                  aria-label={`${group.label}のメニューを開く`}
+                  className={[
+                    "-ml-1 rounded-md px-1 py-2 text-stone-500 transition hover:bg-luxas-paper",
+                    open ? "text-luxas-green" : ""
+                  ].join(" ")}
+                >
+                  <ChevronDown size={14} className={open ? "rotate-180 transition" : "transition"} aria-hidden="true" />
+                </button>
+              ) : null}
+              {hasItems && open ? (
                 <div className="absolute left-0 top-full z-30 mt-1 min-w-44 rounded-md border border-luxas-line bg-white py-1 shadow-soft">
                   {(group.items ?? []).map((item) => (
                     <Link
@@ -197,7 +208,8 @@ export function TopMenu({ mobileOpen, onNavigate }: { mobileOpen: boolean; onNav
       {mobileOpen ? (
         <div className="border-t border-luxas-line bg-white px-2 py-2 md:hidden">
           {NAV_GROUPS.map((group) => {
-            if (group.href) {
+            const hasItems = (group.items?.length ?? 0) > 0;
+            if (group.href && !hasItems) {
               return (
                 <Link
                   key={group.key}
@@ -214,7 +226,18 @@ export function TopMenu({ mobileOpen, onNavigate }: { mobileOpen: boolean; onNav
             }
             return (
               <div key={group.key} className="px-1 py-1">
-                <p className="px-2 py-1 text-xs font-semibold text-stone-500">{group.label}</p>
+                {/* 見出し: href があれば移動リンク、無ければ見出しテキスト。 */}
+                {group.href ? (
+                  <Link
+                    href={group.href}
+                    onClick={onNavigate}
+                    className="block rounded-md px-2 py-1 text-xs font-semibold text-luxas-green hover:bg-luxas-paper"
+                  >
+                    {group.label}
+                  </Link>
+                ) : (
+                  <p className="px-2 py-1 text-xs font-semibold text-stone-500">{group.label}</p>
+                )}
                 <div className="flex flex-col">
                   {(group.items ?? []).map((item) => (
                     <Link
