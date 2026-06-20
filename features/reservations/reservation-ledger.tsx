@@ -45,6 +45,7 @@ import {
   normalizeTimeInputValue,
   timeToMinutes
 } from "@/features/reservations/date-utils";
+import { useDailyWeather } from "@/features/reservations/weather";
 import {
   initialReservations,
   reservationLedgerDateStorageKey,
@@ -336,6 +337,8 @@ export function ReservationLedger() {
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   // 現在店舗（T062）。新規予約への storeId 付与と表示の安全フィルタ（T063）に使う。
   const { currentStoreId, stores } = useCurrentStore();
+  // 日付バーの天気（Open-Meteo・現在店舗の所在地×選択日）。表示専用。
+  const weather = useDailyWeather(currentStoreId, selectedDate);
   // 店舗設定（営業時間・時間きざみ）をランタイム参照する（T031）。設定画面の保存値が台帳に反映される。
   const [storeSettings] = useStoreSettings();
   const businessStart = storeSettings.businessStartTime;
@@ -1497,11 +1500,24 @@ export function ReservationLedger() {
               <CalendarDays size={17} className="text-luxas-green" aria-hidden="true" />
               今日へ戻る
             </button>
-            <label className="flex items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 shadow-inner">
+            {/* 日付表示は曜日付き1つに統一。透明オーバーレイのネイティブ入力でピッカー機能を維持。 */}
+            <label
+              className="relative flex cursor-pointer items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 shadow-inner"
+              onClick={(event) => {
+                const input = event.currentTarget.querySelector("input[type='date']") as HTMLInputElement | null;
+                try {
+                  input?.showPicker?.();
+                } catch {
+                  /* showPicker 非対応・多重呼び出しは無視（クリックで通常どおり開く） */
+                }
+              }}
+            >
               <CalendarDays size={17} className="text-luxas-green" aria-hidden="true" />
+              <span className="text-sm font-semibold text-luxas-ink whitespace-nowrap">{formatDayLabel(selectedDate)}</span>
               <input
-                className="w-[130px] bg-transparent text-sm font-medium text-luxas-ink outline-none"
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                 type="date"
+                aria-label="日付を選択"
                 value={selectedDate}
                 onChange={(event) => {
                   const nextDate = normalizeDateInputValue(event.target.value);
@@ -1531,9 +1547,20 @@ export function ReservationLedger() {
             </button>
           </div>
         </div>
-        {/* PM準拠の静的プレースホルダ（天気／絞り込み／店舗）と現在時刻。機能は後続。 */}
+        {/* 天気は実データ（Open-Meteo）。絞り込み／店舗はPM準拠の静的プレースホルダ。現在時刻は実値。 */}
         <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-stone-500">
-          <span className="rounded-md border border-luxas-line bg-luxas-paper px-2 py-1" title="準備中">☀ 天気 --℃</span>
+          {weather.status === "ready" ? (
+            <span
+              className="rounded-md border border-luxas-line bg-luxas-paper px-2 py-1"
+              title={`${weather.label}（最低 ${weather.tempMin}℃ / 最高 ${weather.tempMax}℃）`}
+            >
+              {weather.icon} {weather.label} {weather.tempMax}℃
+            </span>
+          ) : (
+            <span className="rounded-md border border-luxas-line bg-luxas-paper px-2 py-1" title="天気を取得できませんでした">
+              {weather.status === "loading" ? "天気 取得中…" : "☀ 天気 --℃"}
+            </span>
+          )}
           <span className="rounded-md border border-luxas-line bg-white px-2 py-1" title="準備中">すべて ▾</span>
           <span className="rounded-md border border-luxas-line bg-white px-2 py-1" title="準備中">LUXAS 店舗 ▾</span>
           <span className="inline-flex items-center gap-1 rounded-md border border-luxas-line bg-white px-2 py-1 font-mono text-sm font-semibold text-luxas-ink">
