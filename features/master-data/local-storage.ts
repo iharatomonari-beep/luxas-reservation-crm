@@ -23,8 +23,8 @@ function readStoredCollection<T>(storageKey: string) {
 // token の値を変えれば再度リセットがかかる。対象外の key は従来通り（影響なし）。
 const SEED_RESET_TOKENS: Record<string, string> = {
   "luxas-master-rooms-v2": "2026-06-13-booths-10",
-  "luxas-master-staff": "2026-06-13-staff-8",
-  "luxas-master-shifts-v2": "2026-06-13-shifts-2mo",
+  "luxas-master-staff": "2026-06-20-staff-pm7stores",
+  "luxas-master-shifts-v2": "2026-06-20-shifts-pm7stores",
   // 会計アイテムを4区分→6区分に作り直し（割引/回数券利用/チケット利用/回数券販売/チケット販売/物販）。
   "luxas-checkout-items": "2026-06-20-checkout-6kinds"
 };

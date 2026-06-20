@@ -18,6 +18,37 @@ export type StaffMember = {
   createdAt?: string;
   /** 最終更新日時（ISO・任意・T064.5）。保存時に自動更新（表示のみ）。 */
   updatedAt?: string;
+  // --- PM スタッフ詳細準拠の追加項目（すべて任意・既存箇所を壊さない）---
+  /** 社員番号（PM・任意）。 */
+  employeeNumber?: string;
+  /** 姓（PM・任意）。fullName と併存。 */
+  lastName?: string;
+  /** 名（PM・任意）。fullName と併存。 */
+  firstName?: string;
+  /** フリガナ セイ（PM・任意）。 */
+  kanaLast?: string;
+  /** フリガナ メイ（PM・任意）。 */
+  kanaFirst?: string;
+  /** ニックネーム（PM・任意）。PM表記の「◯◯(定休日→…)」をそのまま保持。displayName は台帳表示用の短縮名。 */
+  nickname?: string;
+  /** 性別（PM・任意）。 */
+  gender?: "male" | "female";
+  /** 電話番号（PM・任意）。 */
+  phone?: string;
+  /** Email（PM・任意）。 */
+  email?: string;
+  /** 画像URL（PM・任意）。プロト段階ではアップロードせずURLのみ保持。 */
+  imageUrl?: string;
+  /** 個人指名 可否（PM・任意・未設定=可）。 */
+  personalNomination?: boolean;
+  /** 男女指名 可否（PM・任意・未設定=可）。 */
+  genderNomination?: boolean;
+  /** 個人指名料（円・PM・任意）。 */
+  personalNominationFee?: number;
+  /** フリーメッセージ（PM・任意）。揉み加減・注意事項などのメモ。 */
+  freeMessage?: string;
+  /** 定休曜日（0=日〜6=土・任意）。シフト自動生成と台帳表示に使う。 */
+  regularDayOffs?: number[];
 };
 
 export type ServiceMenu = {

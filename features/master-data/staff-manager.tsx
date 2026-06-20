@@ -10,6 +10,7 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import { staffRoleLabels, type ServiceMenu, type StaffMember, type StaffRole } from "@/features/master-data/types";
 import { compareBySortOrder, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { isStaffHomeStore } from "@/features/master-data/store-staff-scope";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
@@ -23,6 +24,20 @@ type StaffForm = {
   homeStoreId: string;
   startDate: string;
   endDate: string;
+  // --- PM スタッフ詳細準拠 ---
+  employeeNumber: string;
+  lastName: string;
+  firstName: string;
+  kanaLast: string;
+  kanaFirst: string;
+  nickname: string;
+  gender: "" | "male" | "female";
+  phone: string;
+  email: string;
+  personalNomination: boolean;
+  genderNomination: boolean;
+  personalNominationFee: string;
+  freeMessage: string;
 };
 
 const emptyForm: StaffForm = {
@@ -34,7 +49,20 @@ const emptyForm: StaffForm = {
   isActive: true,
   homeStoreId: "",
   startDate: "",
-  endDate: ""
+  endDate: "",
+  employeeNumber: "",
+  lastName: "",
+  firstName: "",
+  kanaLast: "",
+  kanaFirst: "",
+  nickname: "",
+  gender: "",
+  phone: "",
+  email: "",
+  personalNomination: true,
+  genderNomination: true,
+  personalNominationFee: "",
+  freeMessage: ""
 };
 
 const roles = Object.entries(staffRoleLabels) as [StaffRole, string][];
@@ -42,7 +70,7 @@ const roles = Object.entries(staffRoleLabels) as [StaffRole, string][];
 export function StaffManager() {
   const [staff, setStaff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
-  const { stores } = useCurrentStore();
+  const { stores, currentStoreId, store: currentStore } = useCurrentStore();
   const storeOptions = useMemo(() => [...stores].filter((s) => s.isActive).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)), [stores]);
   const storeName = (id?: string) => (id ? stores.find((s) => s.id === id)?.name ?? id : "—");
   const [form, setForm] = useState<StaffForm>(emptyForm);
@@ -50,7 +78,11 @@ export function StaffManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
   const sortedServices = useMemo(() => [...services].sort(compareBySortOrder), [services]);
-  const sortedStaff = useMemo(() => [...staff].sort(compareBySortOrder), [staff]);
+  // 現在店舗に所属するスタッフだけ表示する（所属未設定は既定店舗=渋谷扱い）。
+  const sortedStaff = useMemo(
+    () => staff.filter((s) => isStaffHomeStore(s, currentStoreId)).sort(compareBySortOrder),
+    [staff, currentStoreId]
+  );
 
   function resetForm() {
     setForm(emptyForm);
@@ -58,7 +90,7 @@ export function StaffManager() {
   }
 
   function startCreate() {
-    setForm(emptyForm);
+    setForm({ ...emptyForm, homeStoreId: currentStoreId });
     setEditingId("");
     setMessage(null);
   }
@@ -97,7 +129,21 @@ export function StaffManager() {
       isActive: form.isActive,
       homeStoreId: form.homeStoreId || undefined,
       startDate: form.startDate || undefined,
-      endDate: form.endDate || undefined
+      endDate: form.endDate || undefined,
+      employeeNumber: normalizeText(form.employeeNumber) || undefined,
+      lastName: normalizeText(form.lastName) || undefined,
+      firstName: normalizeText(form.firstName) || undefined,
+      kanaLast: normalizeText(form.kanaLast) || undefined,
+      kanaFirst: normalizeText(form.kanaFirst) || undefined,
+      nickname: normalizeText(form.nickname) || undefined,
+      gender: form.gender || undefined,
+      phone: normalizeText(form.phone) || undefined,
+      email: normalizeText(form.email) || undefined,
+      personalNomination: form.personalNomination,
+      genderNomination: form.genderNomination,
+      personalNominationFee:
+        form.personalNominationFee.trim() === "" ? undefined : Number(form.personalNominationFee),
+      freeMessage: normalizeText(form.freeMessage) || undefined
     };
 
     if (editingId) {
@@ -122,7 +168,21 @@ export function StaffManager() {
       isActive: item.isActive,
       homeStoreId: item.homeStoreId ?? "",
       startDate: item.startDate ?? "",
-      endDate: item.endDate ?? ""
+      endDate: item.endDate ?? "",
+      employeeNumber: item.employeeNumber ?? "",
+      lastName: item.lastName ?? "",
+      firstName: item.firstName ?? "",
+      kanaLast: item.kanaLast ?? "",
+      kanaFirst: item.kanaFirst ?? "",
+      nickname: item.nickname ?? "",
+      gender: item.gender ?? "",
+      phone: item.phone ?? "",
+      email: item.email ?? "",
+      personalNomination: item.personalNomination ?? true,
+      genderNomination: item.genderNomination ?? true,
+      personalNominationFee:
+        item.personalNominationFee === undefined ? "" : String(item.personalNominationFee),
+      freeMessage: item.freeMessage ?? ""
     });
     setMessage(null);
   }
@@ -139,7 +199,7 @@ export function StaffManager() {
   const columns: MasterColumn<StaffMember>[] = [
     { key: "id", header: "ID", render: (s) => <span className="font-mono text-xs text-stone-400">{s.id.slice(0, 8)}</span> },
     { key: "fullName", header: "氏名", render: (s) => <span className="font-medium text-luxas-ink">{s.fullName}</span> },
-    { key: "displayName", header: "ニックネーム", render: (s) => s.displayName },
+    { key: "displayName", header: "ニックネーム", render: (s) => s.nickname ?? s.displayName },
     { key: "role", header: "役割", render: (s) => staffRoleLabels[s.role] },
     { key: "homeStore", header: "所属店舗", render: (s) => storeName(s.homeStoreId) },
     { key: "sortOrder", header: "表示順", render: (s) => s.sortOrder ?? 0 },
@@ -178,12 +238,99 @@ export function StaffManager() {
             required
           />
           <TextField
-            label="表示名（ニックネーム）"
+            label="表示名（台帳表示）"
             value={form.displayName}
             onChange={(value) => setForm((current) => ({ ...current, displayName: value }))}
             placeholder="例: 青山"
             required
           />
+
+          {/* --- PM スタッフ詳細準拠の項目 --- */}
+          <TextField
+            label="社員番号"
+            value={form.employeeNumber}
+            onChange={(value) => setForm((current) => ({ ...current, employeeNumber: value }))}
+            placeholder="任意"
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="姓"
+              value={form.lastName}
+              onChange={(value) => setForm((current) => ({ ...current, lastName: value }))}
+              placeholder="例: 青山"
+            />
+            <TextField
+              label="名"
+              value={form.firstName}
+              onChange={(value) => setForm((current) => ({ ...current, firstName: value }))}
+              placeholder="例: 真央"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="フリガナ（セイ）"
+              value={form.kanaLast}
+              onChange={(value) => setForm((current) => ({ ...current, kanaLast: value }))}
+              placeholder="例: アオヤマ"
+            />
+            <TextField
+              label="フリガナ（メイ）"
+              value={form.kanaFirst}
+              onChange={(value) => setForm((current) => ({ ...current, kanaFirst: value }))}
+              placeholder="例: マオ"
+            />
+          </div>
+          <TextField
+            label="ニックネーム（PM表記）"
+            value={form.nickname}
+            onChange={(value) => setForm((current) => ({ ...current, nickname: value }))}
+            placeholder="例: 青山(定休日→日月)"
+            hint="PMの「◯◯(定休日→…)」表記をそのまま保持します"
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField
+              label="性別"
+              value={form.gender}
+              onChange={(value) => setForm((current) => ({ ...current, gender: value as StaffForm["gender"] }))}
+            >
+              <option value="">未設定</option>
+              <option value="male">男性</option>
+              <option value="female">女性</option>
+            </SelectField>
+            <TextField
+              label="電話番号"
+              value={form.phone}
+              onChange={(value) => setForm((current) => ({ ...current, phone: value }))}
+              placeholder="任意"
+            />
+          </div>
+          <TextField
+            label="Email"
+            value={form.email}
+            onChange={(value) => setForm((current) => ({ ...current, email: value }))}
+            placeholder="任意"
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ToggleField
+              label="個人指名 可"
+              checked={form.personalNomination}
+              onChange={(value) => setForm((current) => ({ ...current, personalNomination: value }))}
+            />
+            <ToggleField
+              label="男女指名 可"
+              checked={form.genderNomination}
+              onChange={(value) => setForm((current) => ({ ...current, genderNomination: value }))}
+            />
+          </div>
+          <TextField
+            label="個人指名料（円）"
+            type="number"
+            min="0"
+            value={form.personalNominationFee}
+            onChange={(value) => setForm((current) => ({ ...current, personalNominationFee: value }))}
+            placeholder="任意"
+          />
+
           <div className="grid gap-4 sm:grid-cols-2">
             <SelectField
               label="役割"
@@ -242,9 +389,9 @@ export function StaffManager() {
           <section className="rounded-md border border-luxas-line bg-white p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-stone-700">対応可能メニュー</p>
+                <p className="text-sm font-medium text-stone-700">対応コース</p>
                 <p className="mt-1 text-xs text-stone-500">
-                  未選択の場合は全メニュー対応として扱います。予約作成時の絞り込みに使います。
+                  コースマスタ（メニュー）から自動表示されます。未選択の場合は全コース対応として扱います。予約作成時の絞り込みに使います。
                 </p>
               </div>
               {form.serviceMenuIds.length > 0 ? (
@@ -258,7 +405,7 @@ export function StaffManager() {
               ) : null}
             </div>
             {sortedServices.length > 0 ? (
-              <div className="mt-3 grid gap-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {sortedServices.map((service) => {
                   const checked = form.serviceMenuIds.includes(service.id);
 
@@ -294,9 +441,19 @@ export function StaffManager() {
                 })}
               </div>
             ) : (
-              <p className="mt-3 text-sm text-stone-500">先にメニューを作成すると対応可能メニューを設定できます。</p>
+              <p className="mt-3 text-sm text-stone-500">先にメニュー（コース）を作成すると対応コースを設定できます。</p>
             )}
           </section>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-stone-700">フリーメッセージ</label>
+            <textarea
+              className="w-full rounded-md border border-luxas-line bg-white px-3 py-2 text-sm text-luxas-ink focus:border-luxas-green focus:outline-none focus:ring-1 focus:ring-luxas-green"
+              rows={3}
+              value={form.freeMessage}
+              onChange={(event) => setForm((current) => ({ ...current, freeMessage: event.target.value }))}
+              placeholder="揉み加減・注意事項などのメモ（任意）"
+            />
+          </div>
           <ToggleField
             label="表示する（有効）"
             checked={form.isActive}
@@ -333,7 +490,7 @@ export function StaffManager() {
   return (
     <MasterPage
       title="スタッフ管理"
-      description="予約担当者、受付、店長など、single store内で使うスタッフマスタを管理します。"
+      description={`「${currentStore?.name ?? "現在店舗"}」に所属するスタッフを表示しています。上部バーの店舗切替で店舗を変えると、その店舗のスタッフに切り替わります。`}
     >
       <MasterSplitPanel
         items={sortedStaff}
@@ -346,6 +503,8 @@ export function StaffManager() {
         searchPlaceholder="氏名・表示名で検索"
         createLabel="新規作成"
         emptyDetail="左の一覧から選択するか「新規作成」を押してください。"
+        gridClassName="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]"
+        listMaxHeightClassName="max-h-[72vh]"
       />
     </MasterPage>
   );

@@ -26,7 +26,9 @@ export function MasterSplitPanel<T extends { id: string }>({
   searchPlaceholder = "名前で検索",
   createLabel = "新規作成",
   emptyListLabel = "該当する項目がありません。",
-  emptyDetail = "左の一覧から選択するか「新規作成」を押してください。"
+  emptyDetail = "左の一覧から選択するか「新規作成」を押してください。",
+  gridClassName = "grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]",
+  listMaxHeightClassName
 }: {
   items: T[];
   columns: MasterColumn<T>[];
@@ -39,6 +41,10 @@ export function MasterSplitPanel<T extends { id: string }>({
   createLabel?: string;
   emptyListLabel?: ReactNode;
   emptyDetail?: ReactNode;
+  /** グリッド列比の上書き（任意）。明細を広く取りたい画面で渡す。 */
+  gridClassName?: string;
+  /** 一覧テーブルを縦スクロールにする最大高さクラス（任意・例: "max-h-[70vh]"）。 */
+  listMaxHeightClassName?: string;
 }) {
   const [query, setQuery] = useState("");
 
@@ -53,7 +59,7 @@ export function MasterSplitPanel<T extends { id: string }>({
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+    <div className={gridClassName}>
       {/* 左: 一覧 */}
       <section className="rounded-lg border border-luxas-line bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-luxas-line px-3 py-2.5">
@@ -87,7 +93,7 @@ export function MasterSplitPanel<T extends { id: string }>({
           ) : null}
         </div>
 
-        <div className="overflow-x-auto">
+        <div className={["overflow-x-auto", listMaxHeightClassName ? `${listMaxHeightClassName} overflow-y-auto` : ""].filter(Boolean).join(" ")}>
           <table className="min-w-full text-left text-sm">
             <thead className="bg-luxas-paper text-xs font-semibold text-stone-500">
               <tr>
