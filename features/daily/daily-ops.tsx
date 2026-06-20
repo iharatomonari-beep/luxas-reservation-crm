@@ -80,6 +80,14 @@ function sumCounts(counts: CashCounts) {
   return Object.entries(counts).reduce((sum, [denom, qty]) => sum + Number(denom) * (Number(qty) || 0), 0);
 }
 
+// useLocalCollection の initialItems に毎レンダー新しい [] を渡すと、ハイドレーション effect が
+// 毎回再実行され無限ループ（Maximum update depth exceeded）になる。安定参照の定数を使う。
+const EMPTY_TARGETS: DailyTarget[] = [];
+const EMPTY_ATTENDANCE: AttendanceRecord[] = [];
+const EMPTY_REGISTERS: RegisterRecord[] = [];
+const EMPTY_EXPENSES: ExpenseEntry[] = [];
+const EMPTY_REPORTS: DailyReport[] = [];
+
 export function DailyOps({ view = "all" }: { view?: DailyView }) {
   const [date, setDate] = useState(today());
   const [tab, setTab] = useState<DailyView>("attendance");
@@ -87,13 +95,13 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [shifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
   const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
-  const [targets] = useLocalCollection<DailyTarget>(dailyTargetsStorageKey, []);
+  const [targets] = useLocalCollection<DailyTarget>(dailyTargetsStorageKey, EMPTY_TARGETS);
   const [accounts] = useLocalCollection<ExpenseAccount>(expenseAccountsStorageKey, initialExpenseAccounts);
 
-  const [attendance, setAttendance] = useLocalCollection<AttendanceRecord>(attendanceStorageKey, []);
-  const [registers, setRegisters] = useLocalCollection<RegisterRecord>(registerStorageKey, []);
-  const [expenses, setExpenses] = useLocalCollection<ExpenseEntry>(expenseEntriesStorageKey, []);
-  const [reports, setReports] = useLocalCollection<DailyReport>(dailyReportsStorageKey, []);
+  const [attendance, setAttendance] = useLocalCollection<AttendanceRecord>(attendanceStorageKey, EMPTY_ATTENDANCE);
+  const [registers, setRegisters] = useLocalCollection<RegisterRecord>(registerStorageKey, EMPTY_REGISTERS);
+  const [expenses, setExpenses] = useLocalCollection<ExpenseEntry>(expenseEntriesStorageKey, EMPTY_EXPENSES);
+  const [reports, setReports] = useLocalCollection<DailyReport>(dailyReportsStorageKey, EMPTY_REPORTS);
 
   // 閉店処理検索の範囲。
   const [from, setFrom] = useState(today().slice(0, 8) + "01");

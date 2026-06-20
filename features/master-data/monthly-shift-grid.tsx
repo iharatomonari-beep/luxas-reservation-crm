@@ -24,10 +24,13 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
+// 安定参照の空配列（インライン [] は毎レンダー新参照→無限ループの原因になる）。
+const EMPTY_TARGETS: DailyTarget[] = [];
+
 export function MonthlyShiftGrid() {
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [shifts, setShifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
-  const [targets, setTargets] = useLocalCollection<DailyTarget>(dailyTargetsStorageKey, []);
+  const [targets, setTargets] = useLocalCollection<DailyTarget>(dailyTargetsStorageKey, EMPTY_TARGETS);
   const { currentStoreId } = useCurrentStore();
 
   const now = new Date();
