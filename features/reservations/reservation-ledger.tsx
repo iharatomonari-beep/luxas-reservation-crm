@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Ban, BookMarked, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Search, Undo2, UserRound, Wallet, X } from "lucide-react";
+import { Ban, BookMarked, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Search, Trash2, Undo2, UserRound, Wallet, X } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
 import { searchCustomers } from "@/features/customers/customer-search";
@@ -314,6 +314,10 @@ export function ReservationLedger() {
   // 会計モーダル対象の予約ID（T022）
   const [checkoutReservationId, setCheckoutReservationId] = useState<string | null>(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  // 編集対象の返客記録（null=新規登録）。返客情報タブの行クリックで編集モードに入る。
+  const [editingTurnaway, setEditingTurnaway] = useState<TurnawayRecord | null>(null);
+  // 当日情報パネル（予約情報／販売情報／返客情報）の開閉。左レール「情報」ボタンで表示（PM準拠）。
+  const [isDayPanelOpen, setIsDayPanelOpen] = useState(false);
   const [isBlockFormOpen, setIsBlockFormOpen] = useState(false);
   const [turnaways, setTurnaways] = useLocalCollection<TurnawayRecord>(turnawaysStorageKey, EMPTY_TURNAWAYS);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
@@ -1555,8 +1559,24 @@ export function ReservationLedger() {
         </section>
       ) : null}
 
-      {/* 当日情報パネル（PM準拠・T036）。予約情報／販売情報／返客情報の3タブ。タイムラインの下に配置（T042）。 */}
-      <section className="order-5 rounded-lg border border-luxas-line bg-white">
+      {/* 当日情報パネル（PM準拠・T036）。予約情報／販売情報／返客情報の3タブ。
+          左レール「情報」ボタンで、予約詳細と同じ左スライドパネル（左ドロワー）として表示（T042）。 */}
+      {isDayPanelOpen ? (
+      <div className="fixed inset-0 z-50 flex bg-stone-950/35" onClick={() => setIsDayPanelOpen(false)}>
+      <section className="relative flex h-full w-full max-w-[420px] flex-col overflow-hidden border-r border-luxas-line bg-white shadow-soft" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-luxas-line px-4 py-3">
+          <p className="text-sm font-semibold text-luxas-green">当日情報</p>
+          <button
+            type="button"
+            onClick={() => setIsDayPanelOpen(false)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-luxas-line text-stone-600 transition hover:bg-luxas-paper"
+            aria-label="情報パネルを閉じる"
+            title="閉じる"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 border-b border-luxas-line px-3 py-2">
           {([
             { key: "reservation", label: "予約情報" },
@@ -1581,12 +1601,12 @@ export function ReservationLedger() {
               value={dayPanelSearch}
               onChange={(event) => setDayPanelSearch(event.target.value)}
               placeholder="顧客名で絞り込み"
-              className="ml-auto w-44 rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+              className="ml-auto w-40 rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
             />
           ) : null}
         </div>
 
-        <div className="max-h-64 overflow-y-auto px-3 py-3 text-sm">
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 text-sm">
           {dayPanelTab === "reservation" ? (
             dayPanelReservations.length > 0 ? (
               <ul className="divide-y divide-luxas-line">
@@ -1637,11 +1657,34 @@ export function ReservationLedger() {
               {dayTurnaways.length > 0 ? (
                 <ul className="divide-y divide-luxas-line">
                   {dayTurnaways.map((t) => (
-                    <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-2">
-                      <span className="font-mono text-xs text-stone-500">{t.startTime}</span>
-                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">{t.kind}</span>
-                      <span className="text-xs text-stone-600">{t.gender === "male" ? "男性" : t.gender === "female" ? "女性" : "—"}</span>
-                      {t.reason ? <span className="text-xs text-stone-500">理由: {t.reason}</span> : null}
+                    <li key={t.id} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingTurnaway(t);
+                          setIsReturnModalOpen(true);
+                        }}
+                        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 text-left transition hover:bg-luxas-paper"
+                        title="クリックで編集"
+                      >
+                        <span className="font-mono text-xs text-stone-500">{t.startTime}</span>
+                        <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">{t.kind}</span>
+                        <span className="text-xs text-stone-600">{t.gender === "male" ? "男性" : t.gender === "female" ? "女性" : "—"}</span>
+                        {t.reason ? <span className="text-xs text-stone-500">理由: {t.reason}</span> : null}
+                        <span className="ml-auto text-xs text-luxas-green">編集</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTurnaways((current) => current.filter((x) => x.id !== t.id));
+                          setMessage({ type: "success", text: "返客記録を削除しました。" });
+                        }}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-red-200 text-red-600 transition hover:bg-red-50"
+                        aria-label="この返客記録を削除"
+                        title="削除"
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -1652,6 +1695,8 @@ export function ReservationLedger() {
           ) : null}
         </div>
       </section>
+      </div>
+      ) : null}
 
       {/* T067.5-B-1: 選択中予約の詳細は左スライドオーバー（ReservationDetailModal）に一本化したため、
           旧 order-6 サマリは削除（中央モーダルとの二重表示を解消）。 */}
@@ -1707,7 +1752,9 @@ export function ReservationLedger() {
         {/* 左縦アクションレール（PM準拠・配置のみ）。既存導線のみ結線、無いものは準備中で無効。 */}
         <nav className="flex w-16 shrink-0 flex-col gap-1 self-start rounded-lg border border-luxas-line bg-white p-1.5">
           {[
-            { key: "予約", icon: Plus, enabled: true, onClick: () => openCreateForm({ date: selectedDate }) },
+            // 「予約」＋ボタンは廃止（新規予約はタイムラインの空き枠クリックから行う）。
+            // 情報=当日情報パネル（予約情報／販売情報／返客情報）の表示切替（PM準拠）。
+            { key: "情報", icon: CalendarDays, enabled: true, onClick: () => setIsDayPanelOpen((v) => !v) },
             // 開く=選択中予約の詳細モーダルを開く（未選択なら案内・落ちない）。
             {
               key: "開く",
@@ -1728,6 +1775,7 @@ export function ReservationLedger() {
               enabled: true,
               onClick: () => {
                 setSelectedReservationId(null);
+                setEditingTurnaway(null);
                 setIsReturnModalOpen(true);
               }
             },
@@ -1762,7 +1810,8 @@ export function ReservationLedger() {
             const Icon = item.icon;
             const klass = [
               "flex flex-col items-center gap-0.5 rounded-md px-1 py-2 text-[10px] font-medium transition",
-              item.enabled ? "text-luxas-ink hover:bg-luxas-mist" : "cursor-not-allowed text-stone-300"
+              item.enabled ? "text-luxas-ink hover:bg-luxas-mist" : "cursor-not-allowed text-stone-300",
+              item.key === "情報" && isDayPanelOpen ? "bg-luxas-mist text-luxas-green" : ""
             ].join(" ");
             if (item.href && item.enabled) {
               return (
@@ -2233,21 +2282,39 @@ export function ReservationLedger() {
       />
 
       <ReturnModal
-        key={isReturnModalOpen ? "open" : "closed"}
+        key={isReturnModalOpen ? `open-${editingTurnaway?.id ?? "new"}` : "closed"}
         isOpen={isReturnModalOpen}
+        editing={editingTurnaway}
         defaultDate={selectedDate}
         defaultTime={initialStoreSettings.reservationAcceptStartTime}
         services={services}
         options={activeOptions}
         staff={staff}
-        onClose={() => setIsReturnModalOpen(false)}
-        onSubmit={(record) => {
-          setTurnaways((current) => [
-            { ...record, id: makeLocalId("turnaway"), storeId: currentStoreId, createdAt: new Date().toISOString() },
-            ...current
-          ]);
+        onClose={() => {
           setIsReturnModalOpen(false);
-          setMessage({ type: "success", text: "返客を登録しました。" });
+          setEditingTurnaway(null);
+        }}
+        onSubmit={(record) => {
+          if (editingTurnaway) {
+            setTurnaways((current) =>
+              current.map((t) => (t.id === editingTurnaway.id ? { ...t, ...record } : t))
+            );
+            setMessage({ type: "success", text: "返客記録を更新しました。" });
+          } else {
+            setTurnaways((current) => [
+              { ...record, id: makeLocalId("turnaway"), storeId: currentStoreId, createdAt: new Date().toISOString() },
+              ...current
+            ]);
+            setMessage({ type: "success", text: "返客を登録しました。" });
+          }
+          setIsReturnModalOpen(false);
+          setEditingTurnaway(null);
+        }}
+        onDelete={(id) => {
+          setTurnaways((current) => current.filter((t) => t.id !== id));
+          setIsReturnModalOpen(false);
+          setEditingTurnaway(null);
+          setMessage({ type: "success", text: "返客記録を削除しました。" });
         }}
       />
 
@@ -2715,7 +2782,7 @@ function ReservationStatusPill({ status }: { status: ReservationStatus }) {
   };
 
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${styles[status]}`}>
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-sm font-medium ${styles[status]}`}>
       {reservationStatusLabels[status]}
     </span>
   );
@@ -3697,15 +3764,18 @@ const RETURN_REASONS = [
 
 function ReturnModal({
   isOpen,
+  editing,
   defaultDate,
   defaultTime,
   services,
   options,
   staff,
   onClose,
-  onSubmit
+  onSubmit,
+  onDelete
 }: {
   isOpen: boolean;
+  editing?: TurnawayRecord | null;
   defaultDate: string;
   defaultTime: string;
   services: ServiceMenu[];
@@ -3713,18 +3783,19 @@ function ReturnModal({
   staff: StaffMember[];
   onClose: () => void;
   onSubmit: (record: Omit<TurnawayRecord, "id" | "storeId" | "createdAt">) => void;
+  onDelete?: (id: string) => void;
 }) {
-  const [date, setDate] = useState(defaultDate);
-  const [time, setTime] = useState(defaultTime);
-  const [gender, setGender] = useState<"male" | "female" | "">("");
-  const [kind, setKind] = useState<"返客" | "キャンセル待ち">("返客");
-  const [reason, setReason] = useState("");
-  const [comment, setComment] = useState("");
-  const [serviceMenuId, setServiceMenuId] = useState("");
-  const [optionIds, setOptionIds] = useState<string[]>([]);
+  const [date, setDate] = useState(editing?.date ?? defaultDate);
+  const [time, setTime] = useState(editing?.startTime ?? defaultTime);
+  const [gender, setGender] = useState<"male" | "female" | "">(editing?.gender ?? "");
+  const [kind, setKind] = useState<"返客" | "キャンセル待ち">(editing?.kind === "キャンセル待ち" ? "キャンセル待ち" : "返客");
+  const [reason, setReason] = useState(editing?.reason ?? "");
+  const [comment, setComment] = useState(editing?.comment ?? "");
+  const [serviceMenuId, setServiceMenuId] = useState(editing?.serviceMenuId ?? "");
+  const [optionIds, setOptionIds] = useState<string[]>(editing?.optionIds ?? []);
   const [courseTab, setCourseTab] = useState("");
-  const [preference, setPreference] = useState("none");
-  const [nominatedStaffId, setNominatedStaffId] = useState("");
+  const [preference, setPreference] = useState(editing?.preference ?? "none");
+  const [nominatedStaffId, setNominatedStaffId] = useState(editing?.nominatedStaffId ?? "");
 
   if (!isOpen) {
     return null;
@@ -3739,8 +3810,8 @@ function ReturnModal({
       <section className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-luxas-line bg-white shadow-soft">
         <div className="flex shrink-0 items-center justify-between gap-4 border-b border-luxas-line px-5 py-4">
           <div>
-            <p className="text-sm font-medium text-luxas-green">返客登録</p>
-            <h2 className="mt-1 text-lg font-semibold text-luxas-ink">受けられなかったお客様を記録</h2>
+            <p className="text-sm font-medium text-luxas-green">{editing ? "返客記録の編集" : "返客登録"}</p>
+            <h2 className="mt-1 text-lg font-semibold text-luxas-ink">{editing ? "返客記録を修正" : "受けられなかったお客様を記録"}</h2>
             <p className="mt-1 text-xs text-stone-500">電話・飛び込みで満席等により受付できなかったお客様をカウントします（予約とは別管理）。</p>
           </div>
           <button
@@ -3922,10 +3993,20 @@ function ReturnModal({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-luxas-line bg-luxas-paper px-5 py-4">
+        <div className="flex shrink-0 items-center gap-2 border-t border-luxas-line bg-luxas-paper px-5 py-4">
+          {editing && onDelete ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+              onClick={() => onDelete(editing.id)}
+            >
+              <Trash2 size={15} aria-hidden="true" />
+              削除
+            </button>
+          ) : null}
           <button
             type="button"
-            className="rounded-md border border-luxas-line bg-white px-4 py-2.5 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"
+            className="ml-auto rounded-md border border-luxas-line bg-white px-4 py-2.5 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"
             onClick={onClose}
           >
             閉じる
@@ -3949,7 +4030,7 @@ function ReturnModal({
             }
           >
             <Undo2 size={16} aria-hidden="true" />
-            登録
+            {editing ? "更新" : "登録"}
           </button>
         </div>
       </section>
