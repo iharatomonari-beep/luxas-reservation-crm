@@ -2714,6 +2714,16 @@ function categoryToColorKey(category?: string): string {
       return "pink";
     case "鍼":
       return "stone";
+    case "シャンプー":
+      return "sky";
+    case "出張":
+      return "teal";
+    case "HPB":
+      return "amber";
+    case "ClassPass":
+      return "violet";
+    case "TORICOM":
+      return "stone";
     default:
       return "teal";
   }
@@ -2747,6 +2757,16 @@ function categoryColorClass(category: string): { tag: string; text: string; bord
     case "マタニティ":
       return { tag: "bg-pink-50 text-pink-700", text: "text-pink-700", border: "border-pink-300", activeBg: "bg-pink-600" };
     case "鍼":
+      return { tag: "bg-stone-100 text-stone-600", text: "text-stone-700", border: "border-stone-300", activeBg: "bg-stone-600" };
+    case "シャンプー":
+      return { tag: "bg-sky-50 text-sky-700", text: "text-sky-700", border: "border-sky-300", activeBg: "bg-sky-600" };
+    case "出張":
+      return { tag: "bg-teal-50 text-teal-700", text: "text-teal-700", border: "border-teal-300", activeBg: "bg-teal-600" };
+    case "HPB":
+      return { tag: "bg-amber-50 text-amber-700", text: "text-amber-700", border: "border-amber-300", activeBg: "bg-amber-600" };
+    case "ClassPass":
+      return { tag: "bg-violet-50 text-violet-700", text: "text-violet-700", border: "border-violet-300", activeBg: "bg-violet-600" };
+    case "TORICOM":
       return { tag: "bg-stone-100 text-stone-600", text: "text-stone-700", border: "border-stone-300", activeBg: "bg-stone-600" };
     default:
       return { tag: "bg-stone-100 text-stone-600", text: "text-stone-700", border: "border-luxas-line", activeBg: "bg-stone-600" };

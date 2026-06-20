@@ -25,9 +25,9 @@ const SEED_RESET_TOKENS: Record<string, string> = {
   "luxas-master-rooms-v2": "2026-06-13-booths-10",
   "luxas-master-staff": "2026-06-20-staff-pm7stores",
   "luxas-master-shifts-v2": "2026-06-20-shifts-pm7stores",
-  // コース／カテゴリを PM実データ（7店舗・コア施術232件＋8カテゴリ）に置換。古いlocalStorageを強制再シード。
-  "luxas-master-services": "2026-06-20-services-pm7stores",
-  "luxas-master-categories": "2026-06-20-categories-pm8",
+  // コース／カテゴリを PM実データ（7店舗・全カテゴリ375件＋14カテゴリ）に置換。古いlocalStorageを強制再シード。
+  "luxas-master-services": "2026-06-21-services-pm-all375",
+  "luxas-master-categories": "2026-06-21-categories-pm14",
   // 会計アイテムを4区分→6区分に作り直し（割引/回数券利用/チケット利用/回数券販売/チケット販売/物販）。
   "luxas-checkout-items": "2026-06-20-checkout-6kinds"
 };
