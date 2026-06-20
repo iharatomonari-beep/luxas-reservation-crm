@@ -3,32 +3,50 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Wallet, X } from "lucide-react";
 import {
+  type CheckoutLine,
   type PaymentMethod,
   type Reservation,
-  type ReservationPayment,
-  type RetailLine
+  type ReservationPayment
 } from "@/features/reservations/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
+  checkoutItemsStorageKey,
   computeReservationPricing,
   creditCardsStorageKey,
   emoneyStorageKey,
+  initialCheckoutItems,
   initialCreditCards,
   initialEmoney,
   initialOptions,
-  initialRetailItems,
   initialServices,
+  initialStaff,
   optionsStorageKey,
-  retailItemsStorageKey,
-  servicesStorageKey
+  servicesStorageKey,
+  staffStorageKey
 } from "@/features/master-data/mock-data";
-import type { CreditCardCompany, EmoneyBrand, RetailItem, ServiceMenu, ServiceOption } from "@/features/master-data/types";
+import type {
+  CheckoutItem,
+  CheckoutItemKind,
+  CreditCardCompany,
+  EmoneyBrand,
+  ServiceMenu,
+  ServiceOption,
+  StaffMember
+} from "@/features/master-data/types";
 import { compareBySortOrder } from "@/features/master-data/utils";
 
 function toNum(value: string): number {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
+
+// 各区分の見た目と符号（会計金額への加減算）。
+const CATEGORY_META: { kind: CheckoutItemKind; label: string; sign: 1 | -1; hint: string; needStaff: boolean }[] = [
+  { kind: "discount", label: "割引", sign: -1, hint: "売上から−", needStaff: false },
+  { kind: "ticketUse", label: "チケット利用", sign: -1, hint: "売上から−・担当紐付け", needStaff: true },
+  { kind: "ticketSale", label: "チケット販売", sign: 1, hint: "預り金に＋", needStaff: false },
+  { kind: "retail", label: "物販", sign: 1, hint: "売上に＋・担当紐付け", needStaff: true }
+];
 
 export function CheckoutModal({
   reservation,
@@ -37,47 +55,61 @@ export function CheckoutModal({
 }: {
   reservation: Reservation | null;
   onClose: () => void;
-  onSave: (reservationId: string, saleAmount: number, payments: ReservationPayment[], retailLines: RetailLine[]) => void;
+  onSave: (reservationId: string, saleAmount: number, payments: ReservationPayment[], checkoutLines: CheckoutLine[]) => void;
 }) {
   // 登録済みコース合計（売上見込をプリフィル・編集可）。
   const [courseTotal, setCourseTotal] = useState("0");
   // 各支払方法の利用額（PM準拠）。
-  const [ticket, setTicket] = useState("0"); // 回数券利用
-  const [prepaid, setPrepaid] = useState("0"); // プリペイド利用
-  const [point, setPoint] = useState("0"); // ポイント利用
-  const [giftcard, setGiftcard] = useState("0"); // 商品券利用
+  const [ticket, setTicket] = useState("0");
+  const [prepaid, setPrepaid] = useState("0");
+  const [point, setPoint] = useState("0");
+  const [giftcard, setGiftcard] = useState("0");
   const [credit, setCredit] = useState("0");
   const [creditBrand, setCreditBrand] = useState("");
   const [emoney, setEmoney] = useState("0");
   const [emoneyBrand, setEmoneyBrand] = useState("");
   const [epark, setEpark] = useState("0");
-  const [cashReceived, setCashReceived] = useState("0"); // お預かり
+  const [cashReceived, setCashReceived] = useState("0");
   const [error, setError] = useState<string | null>(null);
-  // 物販購入の明細。
-  const [retailLines, setRetailLines] = useState<RetailLine[]>([]);
-  const [pickItemId, setPickItemId] = useState("");
-  const [manualName, setManualName] = useState("");
-  const [manualPrice, setManualPrice] = useState("");
+  // 会計アイテム明細（物販/チケット販売/チケット利用/割引）。
+  const [checkoutLines, setCheckoutLines] = useState<CheckoutLine[]>([]);
+  // 登録済みコースに後から追加したコース（延長・施術後追加など）。合計は courseTotal に加算済み。
+  const [extraCourses, setExtraCourses] = useState<{ name: string; price: number }[]>([]);
+  const [showCoursePicker, setShowCoursePicker] = useState(false);
 
   const [creditCards] = useLocalCollection<CreditCardCompany>(creditCardsStorageKey, initialCreditCards);
   const [emoneyBrands] = useLocalCollection<EmoneyBrand>(emoneyStorageKey, initialEmoney);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [options] = useLocalCollection<ServiceOption>(optionsStorageKey, initialOptions);
-  const [retailItems] = useLocalCollection<RetailItem>(retailItemsStorageKey, initialRetailItems);
-  const activeRetail = [...retailItems].sort(compareBySortOrder).filter((i) => i.isActive);
+  const [checkoutItems] = useLocalCollection<CheckoutItem>(checkoutItemsStorageKey, initialCheckoutItems);
+  const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const activeCards = [...creditCards].sort(compareBySortOrder).filter((c) => c.isActive);
   const activeEmoney = [...emoneyBrands].sort(compareBySortOrder).filter((c) => c.isActive);
+  const activeStaff = [...staff].sort(compareBySortOrder).filter((s) => s.isActive);
+  const activeServices = [...services].sort(compareBySortOrder).filter((s) => s.isActive);
+  const activeCheckoutItems = [...checkoutItems].sort(compareBySortOrder).filter((i) => i.isActive);
+
+  // 区分ごとの合計（符号適用前の純額）。
+  const sumByKind = (kind: CheckoutItemKind) =>
+    checkoutLines.filter((l) => l.kind === kind).reduce((s, l) => s + l.amount * l.qty, 0);
+  const linesNet =
+    sumByKind("retail") + sumByKind("ticketSale") - sumByKind("ticketUse") - sumByKind("discount");
 
   useEffect(() => {
     if (!reservation) {
       return;
     }
     if (reservation.paymentStatus === "paid" && reservation.saleAmount != null) {
-      const lines = reservation.retailLines ?? [];
-      const retailSum = lines.reduce((s, l) => s + l.price * l.qty, 0);
-      setRetailLines(lines);
-      // saleAmount はコース＋物販の合計。コース合計＝saleAmount−物販。
-      setCourseTotal(String(Math.max(0, reservation.saleAmount - retailSum)));
+      const lines = reservation.checkoutLines ?? [];
+      const net =
+        lines.filter((l) => l.kind === "retail").reduce((s, l) => s + l.amount * l.qty, 0) +
+        lines.filter((l) => l.kind === "ticketSale").reduce((s, l) => s + l.amount * l.qty, 0) -
+        lines.filter((l) => l.kind === "ticketUse").reduce((s, l) => s + l.amount * l.qty, 0) -
+        lines.filter((l) => l.kind === "discount").reduce((s, l) => s + l.amount * l.qty, 0);
+      setCheckoutLines(lines);
+      setExtraCourses([]);
+      // saleAmount = コース + 会計アイテム純額。コース合計 = saleAmount − 純額。
+      setCourseTotal(String(Math.max(0, reservation.saleAmount - net)));
       const p = reservation.payments ?? [];
       const sum = (m: PaymentMethod) => p.filter((x) => x.method === m).reduce((s, x) => s + x.amount, 0);
       setTicket(String(sum("ticket")));
@@ -101,49 +133,54 @@ export function CheckoutModal({
       reservation.bulkDiscountPercent,
       reservation.bulkDiscountYen
     );
-    setRetailLines([]);
+    setCheckoutLines([]);
+    setExtraCourses([]);
     setCourseTotal(String(pricing.net));
-    setCashReceived(String(pricing.net));
+    // お預かりは初期空欄（受付で打ち込む）。
+    setCashReceived("");
   }, [reservation, services, options]);
 
   if (!reservation) {
     return null;
   }
 
-  const retailTotal = retailLines.reduce((s, l) => s + l.price * l.qty, 0);
-  const totalSales = toNum(courseTotal) + retailTotal;
+  const totalSales = toNum(courseTotal) + linesNet;
   const otherPaid = toNum(ticket) + toNum(prepaid) + toNum(point) + toNum(giftcard) + toNum(credit) + toNum(emoney) + toNum(epark);
-  const cashDue = Math.max(0, totalSales - otherPaid); // 現金支払額
-  const change = Math.max(0, toNum(cashReceived) - cashDue); // お釣り
+  const cashDue = Math.max(0, totalSales - otherPaid);
+  const change = Math.max(0, toNum(cashReceived) - cashDue);
 
-  function addRetailFromMaster() {
-    const item = activeRetail.find((i) => i.id === pickItemId);
-    if (!item) return;
-    setRetailLines((cur) => {
+  function addExtraCourse(service: ServiceMenu) {
+    setExtraCourses((cur) => [...cur, { name: service.name, price: service.price ?? 0 }]);
+    setCourseTotal((prev) => String(toNum(prev) + (service.price ?? 0)));
+    setShowCoursePicker(false);
+  }
+
+  function removeExtraCourse(index: number) {
+    const price = extraCourses[index]?.price ?? 0;
+    setExtraCourses((cur) => cur.filter((_, i) => i !== index));
+    setCourseTotal((prev) => String(Math.max(0, toNum(prev) - price)));
+  }
+
+  function addCheckoutItem(item: CheckoutItem) {
+    setCheckoutLines((cur) => {
       const idx = cur.findIndex((l) => l.itemId === item.id);
       if (idx >= 0) {
         return cur.map((l, i) => (i === idx ? { ...l, qty: l.qty + 1 } : l));
       }
-      return [...cur, { itemId: item.id, name: item.name, price: item.price, qty: 1 }];
+      const needStaff = item.kind === "retail" || item.kind === "ticketUse";
+      return [
+        ...cur,
+        { itemId: item.id, kind: item.kind, name: item.name, amount: item.amount, qty: 1, staffId: needStaff ? reservation?.staffId : undefined }
+      ];
     });
-    setPickItemId("");
   }
 
-  function addRetailManual() {
-    const name = manualName.trim();
-    const price = Number(manualPrice);
-    if (!name || !Number.isFinite(price) || price < 0) return;
-    setRetailLines((cur) => [...cur, { name, price, qty: 1 }]);
-    setManualName("");
-    setManualPrice("");
+  function updateLine(index: number, patch: Partial<CheckoutLine>) {
+    setCheckoutLines((cur) => cur.map((l, i) => (i === index ? { ...l, ...patch } : l)));
   }
 
-  function updateRetailQty(index: number, qty: number) {
-    setRetailLines((cur) => cur.map((l, i) => (i === index ? { ...l, qty: Math.max(1, qty) } : l)));
-  }
-
-  function removeRetail(index: number) {
-    setRetailLines((cur) => cur.filter((_, i) => i !== index));
+  function removeLine(index: number) {
+    setCheckoutLines((cur) => cur.filter((_, i) => i !== index));
   }
 
   function handleSave() {
@@ -164,7 +201,7 @@ export function CheckoutModal({
     if (toNum(giftcard) > 0) payments.push({ method: "giftcard", amount: toNum(giftcard) });
     if (toNum(epark) > 0) payments.push({ method: "epark", amount: toNum(epark) });
     if (payments.length === 0) payments.push({ method: "cash", amount: 0 });
-    onSave(reservation.id, totalSales, payments, retailLines);
+    onSave(reservation.id, totalSales, payments, checkoutLines);
   }
 
   const selectedService = services.find((s) => s.id === reservation.serviceMenuId);
@@ -191,15 +228,38 @@ export function CheckoutModal({
         </div>
 
         <div className="grid min-h-0 flex-1 gap-0 overflow-y-auto md:grid-cols-[1fr_320px]">
-          {/* 左：登録済みコース / 物販購入 */}
+          {/* 左：登録済みコース / 会計アイテム（4区分） */}
           <div className="space-y-4 border-luxas-line p-5 md:border-r">
             <section className="rounded-md border border-amber-200">
               <div className="flex items-center justify-between gap-2 rounded-t-md bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-900">
                 <span>登録済みコース</span>
-                <span className="text-xs font-medium text-amber-800">コース個別値引一括設定</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCoursePicker((v) => !v)}
+                  title="コース・延長などを追加"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-amber-300 bg-white text-amber-800 transition hover:bg-amber-50"
+                  aria-label="コースを追加"
+                >
+                  <Plus size={15} aria-hidden="true" />
+                </button>
               </div>
               <div className="space-y-2 bg-amber-50/40 p-4">
-                <div className="min-h-24 rounded-md border border-luxas-line bg-white p-3 text-sm text-stone-700">
+                {showCoursePicker ? (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const svc = activeServices.find((s) => s.id === e.target.value);
+                      if (svc) addExtraCourse(svc);
+                    }}
+                    className="w-full rounded-md border border-luxas-green bg-white px-2.5 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+                  >
+                    <option value="">追加するコースを選択…</option>
+                    {activeServices.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}（¥{(s.price ?? 0).toLocaleString()}）</option>
+                    ))}
+                  </select>
+                ) : null}
+                <div className="min-h-16 space-y-1.5 rounded-md border border-luxas-line bg-white p-3 text-sm text-stone-700">
                   {selectedService ? (
                     <div className="flex items-center justify-between gap-2">
                       <span>
@@ -211,6 +271,20 @@ export function CheckoutModal({
                   ) : (
                     <span className="text-stone-400">コース未選択</span>
                   )}
+                  {extraCourses.map((c, index) => (
+                    <div key={index} className="flex items-center justify-between gap-2 border-t border-luxas-line/60 pt-1.5">
+                      <span className="min-w-0 flex-1 truncate">＋ {c.name}</span>
+                      <span className="font-medium text-luxas-ink">¥{c.price.toLocaleString()}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeExtraCourse(index)}
+                        className="inline-flex h-5 w-5 items-center justify-center rounded border border-red-200 text-red-600 hover:bg-red-50"
+                        aria-label="追加コースを削除"
+                      >
+                        <Trash2 size={12} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
                 <div className="flex items-center justify-end gap-2 text-sm">
                   <span className="text-stone-600">合計:</span>
@@ -226,90 +300,75 @@ export function CheckoutModal({
               </div>
             </section>
 
-            <section className="rounded-md border border-amber-200">
-              <div className="flex items-center justify-between gap-2 rounded-t-md bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-900">
-                <span>物販購入</span>
-                <span className="text-xs font-medium text-amber-800">合計 ¥{retailTotal.toLocaleString()}</span>
-              </div>
-              <div className="space-y-2 bg-amber-50/40 p-4">
-                {/* 商品選択（マスタ）＋商品入力（手入力） */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={pickItemId}
-                    onChange={(e) => setPickItemId(e.target.value)}
-                    className="min-w-0 flex-1 rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
-                  >
-                    <option value="">商品選択（マスタ）…</option>
-                    {activeRetail.map((i) => (
-                      <option key={i.id} value={i.id}>{i.name}（¥{i.price.toLocaleString()}）</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={addRetailFromMaster}
-                    disabled={!pickItemId}
-                    className="inline-flex items-center gap-1 rounded-md border border-luxas-green bg-luxas-mist px-2.5 py-1.5 text-xs font-semibold text-luxas-green transition hover:bg-luxas-mist/70 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Plus size={13} aria-hidden="true" />追加
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    value={manualName}
-                    onChange={(e) => setManualName(e.target.value)}
-                    placeholder="商品入力（手入力名）"
-                    className="min-w-0 flex-1 rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    value={manualPrice}
-                    onChange={(e) => setManualPrice(e.target.value)}
-                    placeholder="円"
-                    className="w-24 rounded-md border border-luxas-line bg-white px-2 py-1.5 text-right text-sm text-luxas-ink outline-none focus:border-luxas-green"
-                  />
-                  <button
-                    type="button"
-                    onClick={addRetailManual}
-                    disabled={!manualName.trim()}
-                    className="inline-flex items-center gap-1 rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-700 transition hover:bg-luxas-paper disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Plus size={13} aria-hidden="true" />追加
-                  </button>
-                </div>
+            {CATEGORY_META.map((cat) => {
+              const items = activeCheckoutItems.filter((i) => i.kind === cat.kind);
+              const lineEntries = checkoutLines.map((l, i) => ({ l, i })).filter((e) => e.l.kind === cat.kind);
+              const sum = sumByKind(cat.kind);
+              return (
+                <section key={cat.kind} className="rounded-md border border-amber-200">
+                  <div className="flex items-center justify-between gap-2 rounded-t-md bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-900">
+                    <span>{cat.label}<span className="ml-2 text-[11px] font-normal text-amber-800">{cat.hint}</span></span>
+                    <span className="text-xs font-medium text-amber-800">{cat.sign < 0 ? "−" : "＋"}¥{sum.toLocaleString()}</span>
+                  </div>
+                  <div className="space-y-2 bg-amber-50/40 p-3">
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const item = items.find((i) => i.id === e.target.value);
+                        if (item) addCheckoutItem(item);
+                      }}
+                      className="w-full rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm text-luxas-ink outline-none focus:border-luxas-green"
+                    >
+                      <option value="">{cat.label}を選択して追加…</option>
+                      {items.map((i) => (
+                        <option key={i.id} value={i.id}>{i.name}（¥{i.amount.toLocaleString()}）</option>
+                      ))}
+                      {items.length === 0 ? <option value="" disabled>（会計アイテムマスタで登録してください）</option> : null}
+                    </select>
 
-                <div className="min-h-16 space-y-1.5 rounded-md border border-luxas-line bg-white p-2">
-                  {retailLines.length === 0 ? (
-                    <p className="px-1 py-2 text-center text-xs text-stone-400">物販の追加はありません。</p>
-                  ) : (
-                    retailLines.map((line, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        <span className="min-w-0 flex-1 truncate text-luxas-ink">{line.name}</span>
-                        <span className="text-xs text-stone-500">¥{line.price.toLocaleString()}</span>
-                        <input
-                          type="number"
-                          min="1"
-                          value={line.qty}
-                          onChange={(e) => updateRetailQty(index, Number(e.target.value))}
-                          className="w-14 rounded-md border border-luxas-line bg-white px-1.5 py-1 text-right text-xs text-luxas-ink outline-none focus:border-luxas-green"
-                          aria-label="数量"
-                        />
-                        <span className="w-20 text-right text-xs font-medium text-luxas-ink">¥{(line.price * line.qty).toLocaleString()}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeRetail(index)}
-                          className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-red-200 text-red-600 hover:bg-red-50"
-                          aria-label="削除"
-                        >
-                          <Trash2 size={13} aria-hidden="true" />
-                        </button>
+                    {lineEntries.length > 0 ? (
+                      <div className="space-y-1.5 rounded-md border border-luxas-line bg-white p-2">
+                        {lineEntries.map(({ l, i }) => (
+                          <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="min-w-0 flex-1 truncate text-luxas-ink">{l.name}</span>
+                            {cat.needStaff ? (
+                              <select
+                                value={l.staffId ?? ""}
+                                onChange={(e) => updateLine(i, { staffId: e.target.value || undefined })}
+                                className="w-24 rounded-md border border-luxas-line bg-white px-1.5 py-1 text-xs text-luxas-ink outline-none focus:border-luxas-green"
+                                aria-label="担当"
+                              >
+                                <option value="">担当</option>
+                                {activeStaff.map((s) => (
+                                  <option key={s.id} value={s.id}>{s.displayName}</option>
+                                ))}
+                              </select>
+                            ) : null}
+                            <input
+                              type="number"
+                              min="1"
+                              value={l.qty}
+                              onChange={(e) => updateLine(i, { qty: Math.max(1, Number(e.target.value)) })}
+                              className="w-12 rounded-md border border-luxas-line bg-white px-1 py-1 text-right text-xs text-luxas-ink outline-none focus:border-luxas-green"
+                              aria-label="数量"
+                            />
+                            <span className="w-20 text-right text-xs font-medium text-luxas-ink">{cat.sign < 0 ? "−" : ""}¥{(l.amount * l.qty).toLocaleString()}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeLine(i)}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-red-200 text-red-600 hover:bg-red-50"
+                              aria-label="削除"
+                            >
+                              <Trash2 size={13} aria-hidden="true" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </section>
+                    ) : null}
+                  </div>
+                </section>
+              );
+            })}
           </div>
 
           {/* 右：支払方法内訳 */}

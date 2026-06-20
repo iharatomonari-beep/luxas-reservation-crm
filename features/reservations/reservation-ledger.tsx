@@ -60,7 +60,7 @@ import {
   type Reservation,
   type ReservationStatus,
   type ReservationPayment,
-  type RetailLine,
+  type CheckoutLine,
   type TurnawayRecord
 } from "@/features/reservations/types";
 import { CheckoutModal } from "@/features/reservations/checkout-modal";
@@ -478,6 +478,12 @@ export function ReservationLedger() {
     const reservationKey = (r: Reservation) => r.phone.trim() || r.customerName.trim();
     const paidToday = dayCustomerReservations.filter((r) => r.paymentStatus === "paid");
     const totalSales = paidToday.reduce((sum, r) => sum + (r.saleAmount ?? 0), 0);
+    // 物販分（会計アイテムの物販合計）と施術分（総販売額−物販）。
+    const retailSales = paidToday.reduce(
+      (sum, r) => sum + (r.checkoutLines ?? []).filter((l) => l.kind === "retail").reduce((s, l) => s + l.amount * l.qty, 0),
+      0
+    );
+    const courseSales = Math.max(0, totalSales - retailSales);
     const methodTotals: Record<PaymentMethod, number> = {
       cash: 0,
       credit: 0,
@@ -514,7 +520,7 @@ export function ReservationLedger() {
       if (historyKeys.has(key)) repeatCount += 1;
       else newCount += 1;
     }
-    return { totalSales, methodTotals, avgPerCustomer, newCount, repeatCount };
+    return { totalSales, retailSales, courseSales, methodTotals, avgPerCustomer, newCount, repeatCount };
   }, [dayCustomerReservations, normalizedReservations, selectedDate]);
   // キャンセル種別別の件数（T035）。無断キャンセル/取消を集計バーに実値表示。
   const cancelStats = useMemo(() => {
@@ -1048,11 +1054,11 @@ export function ReservationLedger() {
   }
 
   // 会計を確定（T022）。売上額・支払明細を保存し paymentStatus を paid に。
-  function completeCheckout(reservationId: string, saleAmount: number, payments: ReservationPayment[], retailLines: RetailLine[]) {
+  function completeCheckout(reservationId: string, saleAmount: number, payments: ReservationPayment[], checkoutLines: CheckoutLine[]) {
     setReservations((current) =>
       current.map((reservation) =>
         reservation.id === reservationId
-          ? { ...reservation, paymentStatus: "paid", saleAmount, payments, retailLines: retailLines.length ? retailLines : undefined }
+          ? { ...reservation, paymentStatus: "paid", saleAmount, payments, checkoutLines: checkoutLines.length ? checkoutLines : undefined }
           : reservation
       )
     );
@@ -1858,8 +1864,8 @@ export function ReservationLedger() {
             <span>返客 <b className="text-luxas-ink">{dayTurnaways.length}件</b></span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>施術売上 <b className="text-luxas-ink">¥{checkoutSummary.totalSales.toLocaleString()}</b></span>
-            <span className="text-stone-400">物販 ¥0（物販販売画面で別管理）</span>
+            <span>施術売上 <b className="text-luxas-ink">¥{checkoutSummary.courseSales.toLocaleString()}</b></span>
+            <span>物販 <b className="text-luxas-ink">¥{checkoutSummary.retailSales.toLocaleString()}</b><span className="ml-1 text-[11px] text-stone-400">（会計内・物販販売画面は別）</span></span>
             <span className="text-stone-400">回数券販売 ¥0</span>
             <span className="text-stone-400">プリペイド販売 ¥0</span>
           </div>

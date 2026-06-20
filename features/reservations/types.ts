@@ -66,8 +66,10 @@ export type Reservation = {
    * Reservation.preference（男性スタッフ希望）とは無関係。
    */
   guestGender?: CustomerGender;
-  /** 会計の物販購入明細（任意・非破壊）。saleAmount にはコース＋物販の合計が入る。 */
+  /** 会計の物販購入明細（任意・非破壊・旧）。 */
   retailLines?: RetailLine[];
+  /** 会計アイテム明細（物販/チケット販売/チケット利用/割引）。saleAmount は course＋物販＋チケット販売−チケット利用−割引。 */
+  checkoutLines?: CheckoutLine[];
 };
 
 /** 会計の物販購入1行（マスタ商品 or 手入力）。 */
@@ -79,6 +81,21 @@ export type RetailLine = {
   price: number;
   /** 数量。 */
   qty: number;
+};
+
+/** 会計アイテム1行。kind により会計での加減算・計上が変わる。 */
+export type CheckoutLine = {
+  /** 会計アイテムマスタID（手入力は未設定）。 */
+  itemId?: string;
+  /** retail=物販(+) / ticketSale=チケット販売(+) / ticketUse=チケット利用(-) / discount=割引(-) */
+  kind: "retail" | "ticketSale" | "ticketUse" | "discount";
+  name: string;
+  /** 単価（円）。 */
+  amount: number;
+  /** 数量。 */
+  qty: number;
+  /** 物販・チケット利用の担当スタッフ（個人売上紐付け用・任意）。 */
+  staffId?: string;
 };
 
 export type CancelType = "none" | "cancel" | "no_show" | "void";
