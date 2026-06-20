@@ -87,8 +87,8 @@ export type RetailLine = {
 export type CheckoutLine = {
   /** 会計アイテムマスタID（手入力は未設定）。 */
   itemId?: string;
-  /** retail=物販(+) / ticketSale=チケット販売(+) / ticketUse=チケット利用(-) / discount=割引(-) */
-  kind: "retail" | "ticketSale" | "ticketUse" | "discount";
+  /** 割引/回数券利用/チケット利用(−) ・ 回数券販売/チケット販売/物販(＋) */
+  kind: "discount" | "couponUse" | "ticketUse" | "couponSale" | "ticketSale" | "retail";
   name: string;
   /** 単価（円）。 */
   amount: number;

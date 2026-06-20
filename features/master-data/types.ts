@@ -162,7 +162,13 @@ export const optionKindLabels: Record<OptionKind, string> = {
 //  ticketSale  チケット販売 … 支払金額に+ / 預り金として計上
 //  ticketUse   チケット利用 … 支払金額から- / 売上計上（個人売上にも紐付け）
 //  discount    割引        … 支払金額から- / 売上マイナス
-export type CheckoutItemKind = "retail" | "ticketSale" | "ticketUse" | "discount";
+export type CheckoutItemKind =
+  | "discount" // 割引（−）
+  | "couponUse" // 回数券利用（−）
+  | "ticketUse" // チケット利用（−）
+  | "couponSale" // 回数券販売（＋・預り）
+  | "ticketSale" // チケット販売（＋・預り）
+  | "retail"; // 物販（＋・売上）
 
 export type CheckoutItem = {
   id: string;
@@ -179,10 +185,12 @@ export type CheckoutItem = {
 };
 
 export const checkoutItemKindLabels: Record<CheckoutItemKind, string> = {
-  retail: "物販",
-  ticketSale: "チケット販売",
+  discount: "割引",
+  couponUse: "回数券利用",
   ticketUse: "チケット利用",
-  discount: "割引"
+  couponSale: "回数券販売",
+  ticketSale: "チケット販売",
+  retail: "物販"
 };
 
 // タグマスタ（T025）。種別=顧客タグ/予約ルートタグ/施術カルテタグ。

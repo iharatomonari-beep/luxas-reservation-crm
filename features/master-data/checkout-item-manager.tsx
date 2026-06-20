@@ -11,16 +11,18 @@ import { checkoutItemKindLabels, type CheckoutItem, type CheckoutItemKind } from
 import { compareBySortOrder, isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 
-const KIND_ORDER: CheckoutItemKind[] = ["retail", "ticketSale", "ticketUse", "discount"];
+const KIND_ORDER: CheckoutItemKind[] = ["discount", "couponUse", "ticketUse", "couponSale", "ticketSale", "retail"];
 const KIND_HINTS: Record<CheckoutItemKind, string> = {
-  retail: "支払金額に＋／売上計上／担当スタッフ紐付け",
-  ticketSale: "支払金額に＋／預り金として計上",
+  discount: "支払金額から−／売上マイナス",
+  couponUse: "支払金額から−／売上計上（個人にも紐付け）",
   ticketUse: "支払金額から−／売上計上（個人にも紐付け）",
-  discount: "支払金額から−／売上マイナス"
+  couponSale: "支払金額に＋／預り金として計上",
+  ticketSale: "支払金額に＋／預り金として計上",
+  retail: "支払金額に＋／売上計上／担当スタッフ紐付け"
 };
 
 type ItemForm = { kind: CheckoutItemKind; name: string; amount: string; sortOrder: string; isActive: boolean };
-const emptyForm: ItemForm = { kind: "retail", name: "", amount: "0", sortOrder: "10", isActive: true };
+const emptyForm: ItemForm = { kind: "discount", name: "", amount: "0", sortOrder: "10", isActive: true };
 
 export function CheckoutItemManager() {
   const [items, setItems] = useLocalCollection<CheckoutItem>(checkoutItemsStorageKey, initialCheckoutItems);
