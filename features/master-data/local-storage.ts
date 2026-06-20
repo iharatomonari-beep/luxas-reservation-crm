@@ -23,7 +23,7 @@ function readStoredCollection<T>(storageKey: string) {
 // token の値を変えれば再度リセットがかかる。対象外の key は従来通り（影響なし）。
 const SEED_RESET_TOKENS: Record<string, string> = {
   "luxas-master-rooms-v2": "2026-06-13-booths-10",
-  "luxas-master-staff": "2026-06-20-staff-pm7stores",
+  "luxas-master-staff": "2026-06-21-staff-pm7stores-courses",
   "luxas-master-shifts-v2": "2026-06-20-shifts-pm7stores",
   // コース／カテゴリを PM実データ（7店舗・全カテゴリ375件＋14カテゴリ）に置換。古いlocalStorageを強制再シード。
   "luxas-master-services": "2026-06-21-services-pm-all375",
