@@ -1,86 +1,93 @@
 # セッション 2026-06-21（全体引き継ぎ・完全版）
 
-新しいセッション／ターミナル作業は、まず `CLAUDE.md` → このファイルの順で読むこと。
-作業ディレクトリ: `/Users/C.C/claude code/luxas-reservation-crm`
+新しいセッションは、まず CLAUDE.md → このファイルの順で読むこと。作業ディレクトリ: `/Users/C.C/claude code/luxas-reservation-crm`。
 
-## 再開時の状態確認コマンド
+最初に状態確認:
 ```bash
 cd "/Users/C.C/claude code/luxas-reservation-crm"
 git status --short
 git log --oneline -8
-npx tsc --noEmit        # 型チェック（クリーンのはず）
-npm run lint            # eslint --max-warnings=0（クリーンのはず）
-# 実機: npm run dev → http://localhost:3001/dashboard
+npx tsc --noEmit && npm run lint
+# devは既に :3001 で稼働していることが多い（落ちていたら PORT=3001 npm run dev）
 ```
 
 ---
 
-## やったこと
+## やったこと（このセッション・2026-06-21）
 
-### 本セッション（夕方・最新／コミット `922b680`）
-- **スタッフ成績画面を新規追加** `/dashboard/analytics/staff`
-  - スタッフ別に **施術件数 / 指名数 / 指名率 / 来店客数 / 新規 / リピート / 売上 / 客単価 / 無断キャンセル** を月単位集計。
-  - 対象月セレクタ＋並び替え（売上/件数/指名数/指名率/客単価/新規）＋**合計行**＋**CSV出力**。
-  - 店舗スコープ対応（`filterReservationsByStore`）。経営指標メニューに導線追加（経営指標→スタッフ成績→詳細帳票）。
-  - 新規: `features/analytics/staff-performance.tsx` / `app/dashboard/analytics/staff/page.tsx`、改修: `components/layout/top-menu.tsx`。
-- **スタッフ管理「対応コース」を現在店舗スコープに絞り込み**
-  - グリッドを `storeScope!=="selected"（全店共通）|| storeIds.includes(現在店舗)` で絞り込み。渋谷=全377中**84件**のみ表示（以前は全件）。説明文も更新。`features/master-data/staff-manager.tsx`。
-- **既存lint警告を解消**: `service-manager.tsx` の未使用 `scopeLabel`／`storeName` を削除。
+### シフト時間の復活＋台帳ソート（commit `f800d3a`）
+- 全スタッフ一律 10:00-20:00 だったシフトを **早番10-19 / 中番12-21 / 遅番14-23** の3帯に復活（PM実データ移行時に失われたバリエーションの回復）。各店舗の表示順で循環割当（`generateSeedShifts` / `buildStaffBandMap` in `mock-data.ts`）。定休曜日は従来どおり個別維持。
+- 台帳タイムラインの縦軸を **「その日の出勤開始が早い順」** に自動ソート（同時刻は表示順）。`getEarliestShiftStartMinutes` 追加（`reservation-ledger.tsx`）。
+- 再シードトークン更新: `luxas-master-shifts-v2 = 2026-06-21-shifts-early-mid-late-bands`。
 
-### 本日午前〜昼（コミット済み）
-- **店舗・組織**: PM準拠の **7店舗** を org に定義（渋谷=既定）。渋谷/五反田東口/五反田西口/錦糸町/溝の口/横浜元町中華街/中目黒。
-- **スタッフ＋シフト**: PM実データ **7店舗59名** を `initialStaff` にシード（`staff-001`/`staff-002` は予約mock参照のため渋谷先頭2名に温存）。`StaffMember` 型をPM錦糸町準拠に拡張。`regularDayOffs` から 2026-06-13〜08-13 のシフト自動生成（10:00〜20:00・storeId付き）。
-- **コース・カテゴリ**: PM **全375コース・14カテゴリ** を取り込み（店舗スコープ付き・オンライン予約可否反映）。メニュー管理UI(`service-manager.tsx`)をPM準拠スプリット型に刷新。**スタッフ×コース紐付け**を反映（42名は一部のみ・17名は全コース=空配列）。
-- **台帳UI**: 日付バーに曜日表示＋天気の実データ化（Open-Meteo・APIキー/依存追加なし・8秒フォールバック）。
+### メニュー明細のPM準拠作り込み（commit `a488364`）
+- `ServiceMenu` に **コース種別 / ジャンル1-3 / 店舗適用開始終了日 / 時間・曜日限定**（`availableDays`/`availableTimeStart`/`availableTimeEnd`）を任意追加（画像はスキップ）。
+- `features/master-data/menu-genres.ts` 新設（ジャンル18種・コース種別・曜日定数）。
+- メニュー管理(`service-manager.tsx`)のフォームに各項目を追加、一覧にジャンル/「限定」バッジ。
+- **予約作成まで制御**: `isMenuAvailableForDateTime`（`reservation-ledger.tsx`）で、限定外の曜日・時間ではコース候補から除外＋送信時ブロック。
+
+### 物販・オプションのPM実データ取り込み（commit `44388f6`）
+- 物販: カテゴリ6件＋商品62件（`initialRetailCategories`/`initialRetailItems`）。
+- オプション: 236件（延長/割引/その他を kind 判定、延長分数・割引率を抽出）。
+- 取り込み方針: **有効のみ・現役7店舗＋本部・名前+価格で重複排除**（RetailItem/ServiceOptionは店舗スコープ非対応の型のため全店共通フラット）。
+- 生成スクリプト: `scripts/gen-pm-retail.mjs` / `scripts/gen-pm-options.mjs`（再実行で `mock-data.ts` を再生成。入力CSVは `docs/reference/pm-retail-*.csv` / `pm-options.csv`＝git対象外）。
+- 再シードトークン追加: `luxas-retail-categories` / `luxas-retail-items` / `luxas-master-options` = `2026-06-21-...`。
+- 注意: PM物販マスタには「インバウンド60」等の施術系・「受付」「LINE@抽選梅昆布茶」(¥0)など実態のまま含む。不要分は画面で無効化可。
+- **セット商品は未取り込み**（ユーザー判断で一旦保留。CSV未受領）。
+
+### オンライン予約（自前の公開予約ページ）（commit `d230b65`）★主機能
+- 背景: 現状オンライン予約は外部PMページのみ。HP店舗ページにリンク＋EPARK製アプリからそのPMページに飛ばして受けている。これを **このCRM内に自前で内製**し、将来リンク先を差し替え可能にするのがゴール。
+- 公開ルート **`app/book/[storeId]/page.tsx`**（認証なし・店舗別URL。例 `/book/store-shibuya`）。Next15のasync params。
+- `features/online-booking/online-booking-page.tsx`: ①コース選択（`onlineBooking`かつ当該店舗）→②日付・指名・空き時間→③お客様情報→完了（受付番号）。
+- `features/reservations/availability.ts`（新規・純粋関数で共有化）:
+  - `isMenuAvailableForDateTime` / `findStaffShiftStatus`（ledgerからロジック移植・export）、`onlineMenusForStore`、`getOpenStartTimes`、`pickAutoStaff`。
+  - 空き判定 = メニュー限定 ＋ オンライン停止枠(`online-blocks`)外 ＋ 担当（指名 or 出勤者）がシフト内 ＋ 予約重複なし ＋ ブース容量(`hasBoothCapacity`再利用)。無指名は対応スタッフから自動割当。表示間隔30分。
+- `Reservation.source?: "online" | "manual"` を非破壊追加。確定時にゲスト`Customer`を新規作成し`customerId`紐付け、同じ`reservationsStorageKey`に保存→**台帳・予約一覧に自動反映**。一覧に「オンライン」バッジ。
+- `online-blocks.tsx` の型/キー/初期値を export（空き計算に接続）。
+- 店舗設定 `onlineReservationEnabled` の**初期値を true（公開）**に変更（`store-settings.ts`）。OFFだと公開ページは受付停止表示。
 
 ## 現在の状態
-- `npx tsc --noEmit` クリーン ✅ / `npm run lint`（--max-warnings=0）クリーン ✅。
-- 直近コミット: `922b680`（スタッフ成績＋対応コース店舗スコープ＋lint修正）。
-- **作業ツリーはクリーン（git対象外ファイルのみ残置）**: `.claude/settings.local.json`(M) / `docs/reference/`(未追跡) / `docs/sessions/2026-06-21-handover-full.md`（この引き継ぎ）。
-- **git push は未実施**（ローカルコミットのみ）。
-- 動作確認済み: スタッフ/シフト/コース/カテゴリ/メニュー管理UI/スタッフ成績/対応コース絞り込み。サービス一覧377件（PM375＋レガシー2）。
-- 売上系の数値はモック予約に会計済(paid)データが無いため¥0表示（会計を入れれば埋まる。既存の経営指標も同条件）。
+- `npx tsc --noEmit` / `npm run lint` ともにクリーン。
+- ローカル＝`origin/main` 一致（全てpush済み・最新 `d230b65`）。
+- 未コミットは `.claude/settings.local.json`(M) と `docs/reference/`(未追跡) のみ＝いずれも運用上git対象外。
+- 機能完成度: シフト/コース/メニュー明細/物販/オプション/オンライン予約公開ページ = 実装済み・型/lintクリーン。
+- セット商品取り込み = 未着手（保留）。
 
 ## 次にやること（優先順）
-1. **②物販・オプション・セット商品のPM実データ取り込み**（コースと同方式＝シード書き換え＋再シードトークン更新）。※再シードで既存物販を破壊しないこと（破壊的なら停止＝STOP寄り）。
-2. PM明細の重い系項目（画像アップロード/利用ブース選択/スタッフ選択/時間・曜日限定/ジャンル1-3）の要否検討・実装。
-3. （任意）スタッフ成績の売上系を実データで確認するため、会計済みモック予約を少数投入 or 実運用入力。
-4. （任意）git push の要否をユーザー確認。
+1. **オンライン予約の実機確認**（ユーザー手元で未完了）: `/dashboard/settings` の「オンライン予約を公開する」を**ON保存**してから `/book/store-shibuya` を開く。コース→日付→指名→時間→情報→予約 が通り、台帳・一覧に「オンライン」バッジ付きで出るか確認。`online-blocks`で当日枠を止めると空き候補から消えるか確認。
+   - 注意: `store-settings` は再シードトークン機構が無く、既存localStorageの保存値が優先される。初期値trueにしたが、既に保存済みなら設定画面でON保存が必要。
+2. オンライン予約の作り込み続き（必要に応じ）: メール確認送信／予約確認・キャンセル画面／会員ログイン／店舗別の設定・停止枠・ブーススコープ化（現状いずれも単一保持）。
+3. セット商品(`/HeadquarterCourseSets`)のCSV取り込み（コース/物販と同方式）。
+4. （任意）メニュー特例の手入力反映（工藤「金〜17:30」、隔週休み等）はユーザーが手動対応する方針。
 
 ## 判断・決定事項
-- データ入力は **A=シード書き換え方式**（コードの初期データを実データ化）。localStorage手入力ではない。
-- 再シードは **トークン方式**（`SEED_RESET_TOKENS`）。構造変更時はトークン更新が必須。
-  - 現行: staff/shifts=`2026-06-20-...pm7stores`、services=`2026-06-21-services-pm-all375`、categories=`2026-06-21-categories-pm14`。
-- コース取り込みは **店舗別管理が正**（PM本部マスタは空。各店舗スコープの商品が実体）。取得は `/courses/serach?...&limit=500` を店舗スコープ切替で。shopId: 渋谷3722/中目黒3723/錦糸町4278/溝の口4276/横浜元町4280/五反田東4277/五反田西4279。
-- カテゴリはPM表記ゆれを14アプリカテゴリへ正規化（`scripts/gen-pm-courses.mjs` の mapCat）。重複排除は(カテゴリ+名前+価格)で storeIds をマージ。
-- PMで「非表示」のスタッフ・コースは取り込まない（現役のみ）。
-- 大量PMデータ取得は「ページ内に書き出し→get_page_text で一括回収」が有効（ダウンロードは不発のことあり）。
-- コミットは慣例どおり **main に直接**（ローカル運用・push なし）。今回もユーザー依頼で main にコミット。
-- スタッフ成績の指標定義: 施術件数＝当月予約（キャンセル・休憩/業務ブロック除外）、売上/客単価/新規リピートは会計確定分、指名数＝`nominatedStaffId===staffId`、新規＝初回会計月＝当月の顧客、無断キャンセル＝当月の担当別 `cancelType==="no_show"`、顧客識別＝customerId→電話→氏名。
+- データ入力は **A=シード書き換え方式**。再シードは **トークン方式**（`SEED_RESET_TOKENS` in `local-storage.ts`）。構造変更時はトークン更新必須。
+  - 現行トークン: shifts=`2026-06-21-shifts-early-mid-late-bands`、retail-categories/items=`2026-06-21-retail-pm`、options=`2026-06-21-options-pm`、services=`2026-06-21-services-pm-all375`、categories=`2026-06-21-categories-pm14`、staff=`2026-06-21-staff-pm7stores-courses`、rooms=`2026-06-13-booths-10`、checkout-items=`2026-06-20-checkout-6kinds`。
+  - **例外**: `store-settings`（key `luxas-store-settings`）と `reservations`（`luxas-reservations-v2`）はトークン機構の対象外。store-settingsは保存値優先のため初期値変更が既存ユーザーに効かない点に注意。
+- PM実データ取り込みの共通ルール: **有効のみ／現役7店舗＋本部／名前+価格で重複排除**。閉店・別ブランド（Fudan-Ism/新橋/L溝の口）は除外。
+- オンライン予約はプロトタイプ既定で **ゲスト予約（ログインなし）／店舗別URL／空き枠30分間隔／指名なし=自動割当**。決済・ポイント・回数券・LINE・メール・店舗別スコープ化は今回スコープ外。
+- 店舗ID対応: 渋谷=store-shibuya / 五反田東=gotanda-east / 五反田西=gotanda-west / 錦糸町=kinshicho / 溝の口プレミアム=mizonokuchi-premium / 横浜元町=motomachi-chukagai-plus / 中目黒=nakameguro。
 
 ## 既知の問題・注意点
-- **`<invoke>`/`<parameter>` を本文に表示しない**。Bash/Edit等は実際にツール実行する。本文表示が再発したらそのセッションは破棄して新セッションへ。
-- **コード修正のたびに毎回**ブラウザで実機確認してもらう（①lint/tsc ②`open "http://localhost:3001/該当URL"` ③目視 ④OK後に次へ）。記憶: `memory/feedback-open-browser-after-edit.md`。
-- `useLocalCollection` には安定参照（`initial*` か `EMPTY_*`）を渡す。インライン`[]`/`{}`は無限ループ。
+- **`<invoke>`/`<parameter>` を本文に表示しない**。Bash/Editは実ツール実行。本文表示が再発したらそのセッションは破棄して新セッションへ。
+- **コード修正のたびに**ブラウザで実機確認してもらう（①tsc/lint ②`open "http://localhost:3001/該当URL"` ③目視 ④OK後に次へ）。記憶: `memory/feedback-open-browser-after-edit.md`。
 - dev稼働中に `npm run build` をしない（`.next`破損）。型確認は `npx tsc --noEmit`。
-- 予約mockが参照するstaff idは `staff-001`/`staff-002` のみ。スタッフid変更時は壊さない。
-- コースの「時間(分)」は名前からの推定（実値が要るなら明細クロール）。カテゴリ色キーに"pink"使用、未対応キーはフォールバック。
-- `docs/reference/`（pm-courses.json / pm-staff-import.md 等）と `.claude/settings.local.json` は git 対象外。
-- Cowork キュー(`docs/instructions/`)は現在未使用（会話で直接指示する運用）。
-- preview スクリーンショットが空/細く出ることがある（描画タイミング）。その場合は eval で DOM を直接読んで数値検証する。
+- `useLocalCollection` には安定参照（`initial*` か `EMPTY_*`）を渡す。インライン`[]`/`{}`は無限ループ。
+- 予約mockが参照するstaff idは `staff-001`/`staff-002`（渋谷先頭2名）。変更時は壊さない。
+- `RetailItem`/`ServiceOption`/`StoreSettings`/`OnlineBlock`/`ServiceRoom` は店舗スコープ未対応（単一/全店共通）。マルチ店舗のオンライン予約を厳密化するなら型拡張が前提。
+- `findShiftForReservation`/`isMenuAvailableForDateTime` は ledger 内ローカル版と `availability.ts` の共有版が**重複**している（今回は最小変更のため統合せず）。将来 ledger 側を共有版に寄せると重複解消できる。
+- `docs/reference/`（pm-courses.json / pm-retail-*.csv / pm-options.csv 等）と `.claude/settings.local.json` は git 対象外。
 
 ## 主要ファイル早見
-- シード（スタッフ/シフト/コース/カテゴリ/ブース）: `features/master-data/mock-data.ts`
-- マスタ型: `features/master-data/types.ts`
-- 再シード機構: `features/master-data/local-storage.ts`
-- スタッフ管理: `features/master-data/staff-manager.tsx`（`/dashboard/staff`）
-- メニュー管理: `features/master-data/service-manager.tsx`（`/dashboard/services`）
-- スタッフ成績: `features/analytics/staff-performance.tsx`（`/dashboard/analytics/staff`）
-- 経営指標 詳細帳票: `features/analytics/analytics-detail-reports.tsx`（`/dashboard/analytics/reports`）
-- 共通スプリットUI: `components/master/master-split-panel.tsx`
-- 上部メニュー: `components/layout/top-menu.tsx`
+- シード（スタッフ/シフト/コース/カテゴリ/ブース/物販/オプション）: `features/master-data/mock-data.ts`
+- マスタ型: `features/master-data/types.ts` ／ 予約型: `features/reservations/types.ts`
+- 再シード機構・トークン: `features/master-data/local-storage.ts`
+- メニュー管理: `features/master-data/service-manager.tsx`（`/dashboard/services`）／ ジャンル定数: `menu-genres.ts`
+- 物販管理: `/dashboard/retail-items` ／ オプション: `/dashboard/options`
+- 台帳: `features/reservations/reservation-ledger.tsx` ／ 予約一覧: `reservation-list.tsx`
+- **オンライン予約（公開）**: `app/book/[storeId]/page.tsx` ＋ `features/online-booking/online-booking-page.tsx` ＋ `features/reservations/availability.ts`
+- オンライン停止枠: `features/store-ops/online-blocks.tsx`（`/dashboard/online-blocks`）
+- 店舗設定: `features/master-data/store-settings.ts` ＋ `features/store-settings/store-settings-manager.tsx`（`/dashboard/settings`）
 - 組織(店舗): `features/org/mock-data.ts` / `features/org/use-current-store.ts`
-- 予約スコープ: `features/reservations/store-scope.ts`（`filterReservationsByStore`）
-- 台帳: `features/reservations/reservation-ledger.tsx`
-- PMコース生成スクリプト: `scripts/gen-pm-courses.mjs`（`node scripts/gen-pm-courses.mjs` で mock-data 再生成）
-- PM生データ: `docs/reference/pm-courses.json` / `docs/reference/pm-staff-import.md`
+- PM取り込みスクリプト: `scripts/gen-pm-courses.mjs` / `gen-pm-retail.mjs` / `gen-pm-options.mjs`
+- PM生データ: `docs/reference/`（pm-courses.json / pm-retail-items.csv / pm-retail-categories.csv / pm-options.csv ほか）
