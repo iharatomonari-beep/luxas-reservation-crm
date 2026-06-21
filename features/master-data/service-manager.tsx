@@ -85,7 +85,6 @@ export function ServiceManager() {
   // 提供店舗の選択肢（T065）。localStorage補正後の有効な店舗一覧を参照。
   const { stores } = useCurrentStore();
   const storeOptions = [...stores].filter((s) => s.isActive).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? id;
 
   // カテゴリ選択肢＝カテゴリマスタ ∪ 既存メニューのカテゴリ（重複排除・表示順）。
   const categoryOptions = useMemo(() => {
@@ -93,14 +92,6 @@ export function ServiceManager() {
     const fromServices = services.map((s) => s.category).filter(Boolean);
     return [...new Set([...fromMaster, ...fromServices])];
   }, [services]);
-
-  function scopeLabel(item: ServiceMenu): string {
-    if (item.storeScope !== "selected") {
-      return "全店共通";
-    }
-    const names = (item.storeIds ?? []).map(storeName);
-    return names.length ? names.join("、") : "（店舗未選択）";
-  }
 
   // 一覧（表示順）＋カテゴリ絞り込み。名前検索は MasterSplitPanel が担当。
   const visibleServices = useMemo(() => {

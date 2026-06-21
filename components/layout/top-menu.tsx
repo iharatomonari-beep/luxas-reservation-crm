@@ -105,6 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
     href: "/dashboard/analytics",
     items: [
       { label: "経営指標", href: "/dashboard/analytics" },
+      { label: "スタッフ成績", href: "/dashboard/analytics/staff" },
       { label: "詳細帳票", href: "/dashboard/analytics/reports" }
     ]
   }

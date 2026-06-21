@@ -77,7 +77,14 @@ export function StaffManager() {
   // null=未選択（右ペイン非表示）/ ""=新規 / id=編集。
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
-  const sortedServices = useMemo(() => [...services].sort(compareBySortOrder), [services]);
+  // 対応コースは現在店舗で提供するコースだけ表示する（全店共通＝未設定/"all"、または storeIds に現在店舗を含む）。
+  const sortedServices = useMemo(
+    () =>
+      [...services]
+        .filter((s) => s.storeScope !== "selected" || (s.storeIds ?? []).includes(currentStoreId))
+        .sort(compareBySortOrder),
+    [services, currentStoreId]
+  );
   // 現在店舗に所属するスタッフだけ表示する（所属未設定は既定店舗=渋谷扱い）。
   const sortedStaff = useMemo(
     () => staff.filter((s) => isStaffHomeStore(s, currentStoreId)).sort(compareBySortOrder),
@@ -391,7 +398,7 @@ export function StaffManager() {
               <div>
                 <p className="text-sm font-medium text-stone-700">対応コース</p>
                 <p className="mt-1 text-xs text-stone-500">
-                  コースマスタ（メニュー）から自動表示されます。未選択の場合は全コース対応として扱います。予約作成時の絞り込みに使います。
+                  現在店舗で提供するコースだけ表示します。未選択の場合は全コース対応として扱います。予約作成時の絞り込みに使います。
                 </p>
               </div>
               {form.serviceMenuIds.length > 0 ? (
