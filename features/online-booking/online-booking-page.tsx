@@ -13,6 +13,7 @@ import { initialStores } from "@/features/org/mock-data";
 import { useStoreSettings } from "@/features/master-data/store-settings";
 import { stampCreate } from "@/features/master-data/timestamps";
 import { compareBySortOrder, formatCurrency, makeLocalId, normalizeText } from "@/features/master-data/utils";
+import { menuColorStyle } from "@/features/master-data/menu-colors";
 import { minutesToTime, timeToMinutes, toDateInputValue } from "@/features/reservations/date-utils";
 import { getOpenStartTimes, isStaffWorkingOnDate, onlineMenusForStore, pickAutoStaff, type OpenSlot } from "@/features/reservations/availability";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
@@ -81,6 +82,17 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
   const categories = useMemo(() => [...new Set(onlineMenus.map((m) => m.category))], [onlineMenus]);
   const visibleMenus = category ? onlineMenus.filter((m) => m.category === category) : onlineMenus;
   const menu = onlineMenus.find((m) => m.id === menuId) ?? null;
+
+  // PM寄せ: カテゴリ見出しごとにコースをまとめて表示する（カテゴリ絞り込み時は1グループ）。
+  const groupedMenus = useMemo(() => {
+    const order: string[] = [];
+    const map = new Map<string, ServiceMenu[]>();
+    for (const m of visibleMenus) {
+      if (!map.has(m.category)) { map.set(m.category, []); order.push(m.category); }
+      map.get(m.category)!.push(m);
+    }
+    return order.map((c) => ({ category: c, items: map.get(c)! }));
+  }, [visibleMenus]);
 
   // 当該店舗のシフトに絞る（指名候補の出勤判定に使う）。
   const storeShifts = useMemo(() => filterShiftsByStore(shifts, storeId), [shifts, storeId]);
@@ -221,23 +233,39 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
                   <Chip key={c} active={category === c} onClick={() => setCategory(c)}>{c}</Chip>
                 ))}
               </div>
-              <ul className="space-y-2">
-                {visibleMenus.map((m) => (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      onClick={() => { setMenuId(m.id); setNominatedStaffId(""); setNominationPicked(false); setSlot(null); setStep("datetime"); }}
-                      className="flex w-full items-center justify-between gap-3 rounded-lg border border-luxas-line bg-white px-4 py-3 text-left hover:border-luxas-green"
-                    >
-                      <span>
-                        <span className="block text-sm font-medium text-luxas-ink">{m.name}</span>
-                        <span className="block text-xs text-stone-500">{m.durationMinutes}分 ・ {m.category}</span>
-                      </span>
-                      <span className="shrink-0 text-sm font-semibold text-luxas-ink">{formatCurrency(m.price)}</span>
-                    </button>
-                  </li>
+              <div className="space-y-5">
+                {groupedMenus.map(({ category: cat, items }) => (
+                  <div key={cat} className="space-y-2">
+                    <h3 className="flex items-center gap-2 text-xs font-bold text-stone-600">
+                      <span className={["inline-block h-3 w-3 rounded-sm border", menuColorStyle(items[0]?.color).bg, menuColorStyle(items[0]?.color).border].join(" ")} aria-hidden="true" />
+                      {cat}
+                      <span className="font-normal text-stone-400">（{items.length}件）</span>
+                    </h3>
+                    <ul className="space-y-2">
+                      {items.map((m) => (
+                        <li key={m.id}>
+                          <button
+                            type="button"
+                            onClick={() => { setMenuId(m.id); setNominatedStaffId(""); setNominationPicked(false); setSlot(null); setStep("datetime"); }}
+                            className="flex w-full items-stretch gap-3 overflow-hidden rounded-lg border border-luxas-line bg-white text-left hover:border-luxas-green"
+                          >
+                            <span className={["w-1.5 shrink-0", menuColorStyle(m.color).bg].join(" ")} aria-hidden="true" />
+                            <span className="flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-md bg-luxas-mist text-[10px] text-stone-400" aria-hidden="true">写真</span>
+                            <span className="min-w-0 flex-1 py-3">
+                              <span className="block truncate text-sm font-medium text-luxas-ink">{m.name}</span>
+                              {m.description ? (
+                                <span className="block truncate text-xs text-stone-400">{m.description}</span>
+                              ) : null}
+                              <span className="mt-0.5 block text-xs text-stone-500">{m.durationMinutes}分</span>
+                            </span>
+                            <span className="shrink-0 self-center px-4 text-sm font-semibold text-luxas-ink">{formatCurrency(m.price)}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </>
           )}
         </section>
