@@ -51,10 +51,22 @@ function useMyPageData() {
 
   const myReservations = useMemo(() => {
     if (!memberId) return [];
+    // 現在日時を基準に「これから来る予約（直近が最上）」→「過去の予約（新しい順）」の並びにする。
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const nowKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const key = (r: Reservation) => `${r.date}${r.startTime ?? "00:00"}`;
+    const isUpcoming = (r: Reservation) => key(r) >= nowKey;
     return reservations
       .filter((r) => r.customerId === memberId)
       .slice()
-      .sort((a, b) => `${b.date}${b.startTime}`.localeCompare(`${a.date}${a.startTime}`));
+      .sort((a, b) => {
+        const ua = isUpcoming(a);
+        const ub = isUpcoming(b);
+        if (ua !== ub) return ua ? -1 : 1; // これから来る予約を先に
+        // 未来は近い順（昇順）＝次の予約が最上、過去は新しい順（降順）。
+        return ua ? key(a).localeCompare(key(b)) : key(b).localeCompare(key(a));
+      });
   }, [reservations, memberId]);
 
   // お客様によるキャンセル（取消）。台帳・集計と同じ canceled / cancelType=cancel を使う。

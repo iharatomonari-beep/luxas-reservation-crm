@@ -147,6 +147,13 @@ export function getOpenStartTimes(params: {
   const duration = menu.durationMinutes;
   if (!Number.isFinite(open) || !Number.isFinite(close) || !(duration > 0)) return [];
 
+  // 本日を選んだ場合は「現在時刻より前の枠」を候補から除外する（過ぎた時間は予約不可）。
+  // 未来日は制限なし（minStart = -Infinity）。
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const minStart = normalizedDate === todayStr ? now.getHours() * 60 + now.getMinutes() : -Infinity;
+
   // 当該店舗のシフト・予約に絞る。
   const storeShifts = filterShiftsByStore(shifts, storeId);
   const storeReservations = reservations.filter((r) => (r.storeId ?? "store-shibuya") === storeId);
@@ -157,6 +164,7 @@ export function getOpenStartTimes(params: {
 
   const slots: OpenSlot[] = [];
   for (let t = open; t + duration <= close; t += stepMinutes) {
+    if (t < minStart) continue; // 本日の過ぎた時刻はスキップ
     const startTime = minutesToTime(t);
     const endTime = minutesToTime(t + duration);
     const end = t + duration;
