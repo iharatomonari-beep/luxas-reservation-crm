@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Check, ChevronLeft } from "lucide-react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
@@ -301,15 +302,26 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
             {!nominationPicked ? (
               <p className="mt-1 rounded-md border border-dashed border-luxas-line bg-white p-3 text-sm text-stone-400">先に「指名」または「指名なし」を選ぶと、空き時間が表示されます。</p>
             ) : slots.length === 0 ? (
-              <p className="mt-1 rounded-md border border-luxas-line bg-white p-3 text-sm text-stone-500">この指名・この日に空き枠がありません。指名や日付を変更してください。</p>
+              <p className="mt-1 rounded-md border border-luxas-line bg-white p-3 text-sm text-stone-500">
+                {date === toDateInputValue(new Date())
+                  ? "本日の受付は終了しました。別の日付を選んでください。"
+                  : "この指名・この日に空き枠がありません。指名や日付を変更してください。"}
+              </p>
             ) : (
-              <div className="mt-1 grid grid-cols-4 gap-2">
-                {slots.map((sl) => (
-                  <button
-                    key={sl.time} type="button" onClick={() => setSlot(sl)}
-                    className={["rounded-md border px-2 py-2 text-sm font-medium",
-                      slot?.time === sl.time ? "border-luxas-green bg-luxas-mist text-luxas-green" : "border-luxas-line bg-white text-luxas-ink hover:border-luxas-green"].join(" ")}
-                  >{sl.time}</button>
+              <div className="mt-1 space-y-3">
+                {groupSlotsByHalfDay(slots).map(({ label, items }) => (
+                  <div key={label}>
+                    <p className="mb-1 text-[11px] font-semibold text-stone-400">{label}</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {items.map((sl) => (
+                        <button
+                          key={sl.time} type="button" onClick={() => setSlot(sl)}
+                          className={["rounded-md border px-2 py-2 text-sm font-medium",
+                            slot?.time === sl.time ? "border-luxas-green bg-luxas-mist text-luxas-green" : "border-luxas-line bg-white text-luxas-ink hover:border-luxas-green"].join(" ")}
+                        >{sl.time}</button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -424,12 +436,29 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
             </div>
           </div>
 
-          <button type="button" onClick={() => { setStep("menu"); setMenuId(""); setSlot(null); setNominatedStaffId(""); setNominationPicked(false); setInfo({ name: "", phone: "", email: "", gender: "unspecified" }); setGuestStep("gateway"); setLoginEmail(""); setLoginPassword(""); setConfirmedEmail(""); }}
-            className="mx-auto mt-2 rounded-md border border-luxas-line bg-white px-4 py-2 text-sm font-medium text-stone-700">続けて予約する</button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Link href={`/book/${storeId}/mypage/reservations`}
+              className="rounded-md px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: PM_NAVY }}>マイページで予約を確認</Link>
+            <button type="button" onClick={() => { setStep("menu"); setMenuId(""); setSlot(null); setNominatedStaffId(""); setNominationPicked(false); setInfo({ name: "", phone: "", email: "", gender: "unspecified" }); setGuestStep("gateway"); setLoginEmail(""); setLoginPassword(""); setConfirmedEmail(""); }}
+              className="rounded-md border border-luxas-line bg-white px-4 py-2 text-sm font-medium text-stone-700">続けて予約する</button>
+          </div>
         </section>
       )}
     </div>
   );
+}
+
+// 空き枠を午前/午後に分けて表示する（PM寄せ）。空のグループは返さない。
+function groupSlotsByHalfDay(slots: OpenSlot[]): { label: string; items: OpenSlot[] }[] {
+  const am: OpenSlot[] = [];
+  const pm: OpenSlot[] = [];
+  for (const s of slots) {
+    (timeToMinutes(s.time) < 12 * 60 ? am : pm).push(s);
+  }
+  const groups: { label: string; items: OpenSlot[] }[] = [];
+  if (am.length) groups.push({ label: "午前", items: am });
+  if (pm.length) groups.push({ label: "午後", items: pm });
+  return groups;
 }
 
 const inputCls = "mt-1 w-full rounded-md border border-luxas-line bg-white px-3 py-2 text-sm outline-none focus:border-luxas-green";
