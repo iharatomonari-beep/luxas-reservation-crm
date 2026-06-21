@@ -247,10 +247,18 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 // 予約のキャンセル/変更ハンドラ（確認ダイアログ付き）を組み立てる。
 // cancelReservation は呼び出し側の useMyPageData から受け取る（state を二重に持たない）。
-function useReservationActions(storeId: string, cancelReservation: (id: string) => void) {
+function useReservationActions(storeId: string, cancelReservation: (id: string) => void, memberEmail?: string) {
   const router = useRouter();
   function onCancel(id: string) {
-    if (window.confirm("この予約をキャンセルします。よろしいですか？")) cancelReservation(id);
+    if (window.confirm("この予約をキャンセルします。よろしいですか？")) {
+      cancelReservation(id);
+      // キャンセル確認メール（モック・実送信なし）。
+      window.alert(
+        memberEmail
+          ? `予約をキャンセルしました。確認メールを ${memberEmail} に送信しました（モック）。`
+          : "予約をキャンセルしました（確認メールはモックのため送信されません）。"
+      );
+    }
   }
   function onChange(id: string) {
     if (window.confirm("現在の予約をキャンセルして、新しく予約し直します。よろしいですか？")) {
@@ -264,7 +272,7 @@ function useReservationActions(storeId: string, cancelReservation: (id: string) 
 // ── ① マイページ ホーム ───────────────────────────────────────
 export function MyPageHome({ storeId }: { storeId: string }) {
   const { member, myReservations, services, staff, cancelReservation } = useMyPageData();
-  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation);
+  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation, member?.email);
   const upcoming = myReservations.filter((r) => r.status !== "canceled");
 
   return (
@@ -300,8 +308,8 @@ export function MyPageHome({ storeId }: { storeId: string }) {
 
 // ── ② 予約情報 ────────────────────────────────────────────────
 export function MyPageReservations({ storeId }: { storeId: string }) {
-  const { myReservations, services, staff, cancelReservation } = useMyPageData();
-  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation);
+  const { member, myReservations, services, staff, cancelReservation } = useMyPageData();
+  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation, member?.email);
 
   return (
     <MyPageShell storeId={storeId} tab="reservations">
