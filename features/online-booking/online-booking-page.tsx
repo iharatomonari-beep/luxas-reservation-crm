@@ -22,6 +22,7 @@ import type { ServiceMenu, StaffMember } from "@/features/master-data/types";
 import type { Reservation } from "@/features/reservations/types";
 import type { Customer, CustomerGender } from "@/features/customers/types";
 import { useMemberSession } from "@/features/online-booking/use-member-session";
+import { buildReservationEmail } from "@/features/online-booking/confirmation-email";
 import { signInWithProvider } from "@/features/online-booking/public-sidebar";
 import { PM_NAVY } from "@/features/online-booking/public-shell";
 
@@ -432,14 +433,23 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
             ) : (
               <p className="text-xs font-medium text-stone-500">メールアドレスのご登録がないため、確認メールは送信されません。</p>
             )}
-            <div className="mt-3 space-y-1 border-t border-luxas-line pt-3 text-xs text-stone-600">
-              <p className="font-semibold text-luxas-ink">【ご予約確認】{store.name}</p>
-              <p>受付番号: <span className="font-mono">{completedId.replace(/^reservation-?/, "")}</span></p>
-              <p>コース: {menu?.name}</p>
-              <p>日時: {date} {slot?.time}〜</p>
-              <p>担当: {assignedName}</p>
-              <p className="pt-1 text-[11px] text-stone-400">※このメールはモックです（実際の送信は行われません）。</p>
-            </div>
+            {(() => {
+              const email = buildReservationEmail("confirm", {
+                storeName: store.name,
+                receiptNo: completedId.replace(/^reservation-?/, ""),
+                menuName: menu?.name,
+                dateTimeLabel: `${date} ${slot?.time ?? ""}〜${slot && menu ? minutesToTime(timeToMinutes(slot.time) + menu.durationMinutes) : ""}`,
+                staffName: assignedName
+              });
+              return (
+                <div className="mt-3 space-y-1 border-t border-luxas-line pt-3 text-xs text-stone-600">
+                  <p className="font-semibold text-luxas-ink">{email.subject}</p>
+                  {email.lines.map((ln, i) => (
+                    <p key={i} className={i === email.lines.length - 1 ? "pt-1 text-[11px] text-stone-400" : ""}>{ln}</p>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">

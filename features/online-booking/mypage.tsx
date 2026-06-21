@@ -13,6 +13,8 @@ import type { ServiceMenu, StaffMember } from "@/features/master-data/types";
 import type { Reservation } from "@/features/reservations/types";
 import type { Customer } from "@/features/customers/types";
 import { formatCurrency } from "@/features/master-data/utils";
+import { initialStores } from "@/features/org/mock-data";
+import { buildReservationEmail } from "@/features/online-booking/confirmation-email";
 import { PM_NAVY } from "@/features/online-booking/public-shell";
 import { LoginCard } from "@/features/online-booking/public-sidebar";
 import { useMemberSession } from "@/features/online-booking/use-member-session";
@@ -188,8 +190,8 @@ function ReservationCard({
   r: Reservation;
   services: ServiceMenu[];
   staff: StaffMember[];
-  onCancel?: (id: string) => void;
-  onChange?: (id: string) => void;
+  onCancel?: (r: Reservation) => void;
+  onChange?: (r: Reservation) => void;
 }) {
   const menu = services.find((m) => m.id === r.serviceMenuId);
   const assignedName = staff.find((s) => s.id === r.staffId)?.displayName ?? "スタッフ";
@@ -214,7 +216,7 @@ function ReservationCard({
           {onChange && (
             <button
               type="button"
-              onClick={() => onChange(r.id)}
+              onClick={() => onChange(r)}
               className="flex-1 rounded-md py-2 text-sm font-semibold text-white"
               style={{ backgroundColor: PM_NAVY }}
             >
@@ -224,7 +226,7 @@ function ReservationCard({
           {onCancel && (
             <button
               type="button"
-              onClick={() => onCancel(r.id)}
+              onClick={() => onCancel(r)}
               className="flex-1 rounded-md border border-red-300 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
             >
               キャンセル
@@ -247,22 +249,37 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 // 予約のキャンセル/変更ハンドラ（確認ダイアログ付き）を組み立てる。
 // cancelReservation は呼び出し側の useMyPageData から受け取る（state を二重に持たない）。
-function useReservationActions(storeId: string, cancelReservation: (id: string) => void, memberEmail?: string) {
+function useReservationActions(
+  storeId: string,
+  cancelReservation: (id: string) => void,
+  ctx: { services: ServiceMenu[]; staff: StaffMember[]; memberEmail?: string }
+) {
   const router = useRouter();
-  function onCancel(id: string) {
+  const storeName = initialStores.find((s) => s.id === storeId)?.name ?? "当店";
+
+  function onCancel(r: Reservation) {
     if (window.confirm("この予約をキャンセルします。よろしいですか？")) {
-      cancelReservation(id);
-      // キャンセル確認メール（モック・実送信なし）。
-      window.alert(
-        memberEmail
-          ? `予約をキャンセルしました。確認メールを ${memberEmail} に送信しました（モック）。`
-          : "予約をキャンセルしました（確認メールはモックのため送信されません）。"
-      );
+      cancelReservation(r.id);
+      // キャンセル確認メール（モック・実送信なし）。完了画面と同一フォーマット。
+      const menuName = ctx.services.find((m) => m.id === r.serviceMenuId)?.name;
+      const staffName = ctx.staff.find((s) => s.id === r.staffId)?.displayName;
+      const email = buildReservationEmail("cancel", {
+        storeName,
+        receiptNo: r.id.replace(/^reservation-?/, ""),
+        menuName,
+        dateTimeLabel: `${r.date} ${r.startTime}〜`,
+        staffName,
+        customerName: r.customerName
+      });
+      const sent = ctx.memberEmail
+        ? `確認メールを ${ctx.memberEmail} に送信しました（モック）。\n\n`
+        : "（確認メールはモックのため送信されません）\n\n";
+      window.alert(`${email.subject}\n\n${sent}${email.lines.join("\n")}`);
     }
   }
-  function onChange(id: string) {
+  function onChange(r: Reservation) {
     if (window.confirm("現在の予約をキャンセルして、新しく予約し直します。よろしいですか？")) {
-      cancelReservation(id);
+      cancelReservation(r.id);
       router.push(`/book/${storeId}/reserve`);
     }
   }
@@ -272,7 +289,7 @@ function useReservationActions(storeId: string, cancelReservation: (id: string) 
 // ── ① マイページ ホーム ───────────────────────────────────────
 export function MyPageHome({ storeId }: { storeId: string }) {
   const { member, myReservations, services, staff, cancelReservation } = useMyPageData();
-  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation, member?.email);
+  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation, { services, staff, memberEmail: member?.email });
   const upcoming = myReservations.filter((r) => r.status !== "canceled");
 
   return (
@@ -309,7 +326,7 @@ export function MyPageHome({ storeId }: { storeId: string }) {
 // ── ② 予約情報 ────────────────────────────────────────────────
 export function MyPageReservations({ storeId }: { storeId: string }) {
   const { member, myReservations, services, staff, cancelReservation } = useMyPageData();
-  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation, member?.email);
+  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation, { services, staff, memberEmail: member?.email });
 
   return (
     <MyPageShell storeId={storeId} tab="reservations">
