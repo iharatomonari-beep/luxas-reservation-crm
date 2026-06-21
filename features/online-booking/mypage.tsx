@@ -4,7 +4,7 @@
 // ホーム / 予約情報 / 会員情報 の3タブ＋右にマイページメニュー。
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { initialServices, initialStaff, servicesStorageKey, staffStorageKey } from "@/features/master-data/mock-data";
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
@@ -45,7 +45,7 @@ function statusInfo(r: Reservation): { label: string; cls: string } {
 function useMyPageData() {
   const { memberId, hydrated, logout } = useMemberSession();
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
-  const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
+  const [customers, setCustomers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
 
@@ -82,7 +82,13 @@ function useMyPageData() {
     );
   }
 
-  return { memberId, hydrated, logout, member, myReservations, services, staff, cancelReservation };
+  // 会員情報の実保存（localStorage の customers を更新）。ログイン中の会員のみ対象。
+  function updateMember(patch: Partial<Customer>) {
+    if (!memberId) return;
+    setCustomers((cur) => cur.map((c) => (c.id === memberId ? { ...c, ...patch } : c)));
+  }
+
+  return { memberId, hydrated, logout, member, myReservations, services, staff, cancelReservation, updateMember };
 }
 
 // ── 共通レイアウト（タブ＋右メニュー）。未ログインはログイン誘導。 ─────────────
@@ -345,27 +351,69 @@ export function MyPageReservations({ storeId }: { storeId: string }) {
 
 // ── ③ 会員情報 ────────────────────────────────────────────────
 export function MyPageMember({ storeId }: { storeId: string }) {
-  const { member } = useMyPageData();
+  const { member, updateMember } = useMyPageData();
+
+  // 基本情報の編集（名前/電話/誕生日/メール）。編集→保存で localStorage に実保存。
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ name: "", phone: "", birthDate: "", email: "" });
+
+  function startEdit() {
+    setForm({
+      name: member?.name ?? "",
+      phone: member?.phone ?? "",
+      birthDate: member?.birthDate ?? "",
+      email: member?.email ?? ""
+    });
+    setEditing(true);
+  }
+  function save() {
+    updateMember({
+      name: form.name.trim() || member?.name || "ゲスト",
+      phone: form.phone.trim(),
+      birthDate: form.birthDate,
+      email: form.email.trim()
+    });
+    setEditing(false);
+    window.alert("会員情報を保存しました。");
+  }
 
   return (
     <MyPageShell storeId={storeId} tab="member">
       <section className="rounded-lg border border-luxas-line bg-white p-5">
         <h2 className="mb-3 text-base font-bold text-luxas-ink">会員情報</h2>
-        <dl className="divide-y divide-luxas-line">
-          <Row label="お名前" value={member?.name || "-"} />
-          <Row label="電話番号" value={member?.phone || "-"} />
-          <Row label="誕生日" value={member?.birthDate ? formatJpDate(member.birthDate) : "-"} />
-        </dl>
-        <MockButton label="変更" />
+        {editing ? (
+          <div className="space-y-3">
+            <EditField label="お名前"><input className={memberInputCls} value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} /></EditField>
+            <EditField label="電話番号"><input className={memberInputCls} value={form.phone} onChange={(e) => setForm((c) => ({ ...c, phone: e.target.value }))} inputMode="tel" /></EditField>
+            <EditField label="誕生日"><input type="date" className={memberInputCls} value={form.birthDate} onChange={(e) => setForm((c) => ({ ...c, birthDate: e.target.value }))} /></EditField>
+            <EditField label="メールアドレス"><input className={memberInputCls} value={form.email} onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))} inputMode="email" /></EditField>
+            <div className="flex justify-center gap-2 pt-1">
+              <button type="button" onClick={save} className="rounded-md px-6 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: PM_NAVY }}>保存</button>
+              <button type="button" onClick={() => setEditing(false)} className="rounded-md border border-luxas-line px-6 py-2.5 text-sm font-medium text-stone-600 hover:bg-luxas-mist/50">キャンセル</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <dl className="divide-y divide-luxas-line">
+              <Row label="お名前" value={member?.name || "-"} />
+              <Row label="電話番号" value={member?.phone || "-"} />
+              <Row label="誕生日" value={member?.birthDate ? formatJpDate(member.birthDate) : "-"} />
+              <Row label="メールアドレス" value={member?.email || "-"} />
+            </dl>
+            <div className="mt-4 flex justify-center">
+              <button type="button" onClick={startEdit} disabled={!member} className="rounded-md px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ backgroundColor: PM_NAVY }}>変更</button>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="rounded-lg border border-luxas-line bg-white p-5">
         <h2 className="mb-3 text-base font-bold text-luxas-ink">メールマガジン</h2>
         <dl className="divide-y divide-luxas-line">
-          <Row label="重要なお知らせ" value={member?.acceptsEmail === false ? "受け取らない" : "受け取り"} />
-          <Row label="店舗メールマガジン" value={member?.acceptsDm ? "受け取り" : "受け取らない"} />
+          <ToggleRow label="重要なお知らせ" on={member?.acceptsEmail !== false} disabled={!member} onToggle={() => updateMember({ acceptsEmail: !(member?.acceptsEmail !== false) })} />
+          <ToggleRow label="店舗メールマガジン" on={!!member?.acceptsDm} disabled={!member} onToggle={() => updateMember({ acceptsDm: !member?.acceptsDm })} />
         </dl>
-        <MockButton label="変更" />
+        <p className="mt-2 text-[11px] text-stone-400">切り替えは即時保存されます。</p>
       </section>
 
       <section className="rounded-lg border border-luxas-line bg-white p-5">
@@ -374,25 +422,33 @@ export function MyPageMember({ storeId }: { storeId: string }) {
           <Row label="メールアドレス" value={member?.email || "-"} />
           <Row label="パスワード" value="********" />
         </dl>
-        <div className="mt-4 flex justify-center gap-2">
-          <MockButton label="メールアドレス変更" inline />
-          <MockButton label="パスワード変更" inline />
-        </div>
+        <p className="mt-3 text-center text-[11px] text-stone-400">パスワード変更は認証基盤の実装後に対応します（現在はモック）。</p>
       </section>
     </MyPageShell>
   );
 }
 
-function MockButton({ label, inline }: { label: string; inline?: boolean }) {
+const memberInputCls = "w-full rounded-md border border-luxas-line bg-white px-3 py-2 text-sm outline-none focus:border-luxas-green";
+
+function EditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="block"><span className="mb-1 block text-xs font-medium text-stone-600">{label}</span>{children}</label>;
+}
+
+function ToggleRow({ label, on, disabled, onToggle }: { label: string; on: boolean; disabled?: boolean; onToggle: () => void }) {
   return (
-    <div className={inline ? "" : "mt-4 flex justify-center"}>
-      <button
-        type="button"
-        className="rounded-md px-6 py-2.5 text-sm font-semibold text-white"
-        style={{ backgroundColor: PM_NAVY }}
-      >
-        {label}
-      </button>
+    <div className="grid grid-cols-[1fr_auto] items-center gap-3 py-3.5 text-sm">
+      <dt className="text-stone-500">{label}</dt>
+      <dd>
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          className={["rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-40",
+            on ? "bg-luxas-green text-white" : "border border-luxas-line bg-white text-stone-500"].join(" ")}
+        >
+          {on ? "受け取り" : "受け取らない"}
+        </button>
+      </dd>
     </div>
   );
 }
