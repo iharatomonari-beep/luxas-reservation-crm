@@ -32,7 +32,7 @@ function staffCanDoMenu(staff: StaffMember, menuId: string): boolean {
   return ids.length === 0 || ids.includes(menuId);
 }
 
-export function OnlineBookingPage({ storeId }: { storeId: string }) {
+export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string; initialMenuId?: string }) {
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [shifts] = useLocalCollection(shiftsStorageKey, initialShifts);
@@ -48,9 +48,10 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
 
   const store = initialStores.find((s) => s.id === storeId);
 
-  const [step, setStep] = useState<Step>("menu");
+  // メニュー画面から ?menu= 付きで来たら、そのコースを選択済みで日時選択から開始する。
+  const [step, setStep] = useState<Step>(initialMenuId ? "datetime" : "menu");
   const [category, setCategory] = useState<string>("");
-  const [menuId, setMenuId] = useState<string>("");
+  const [menuId, setMenuId] = useState<string>(initialMenuId ?? "");
   const [date, setDate] = useState<string>(toDateInputValue(new Date()));
   const [nominatedStaffId, setNominatedStaffId] = useState<string>(""); // ""=指名なし
   const [nominationPicked, setNominationPicked] = useState(false); // 指名/指名なしを選んだか（選ぶまで時間は出さない）

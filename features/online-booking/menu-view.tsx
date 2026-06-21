@@ -2,12 +2,14 @@
 
 // 公開サイト メニュー（PMの /menu 相当）: オンライン掲載コースをカテゴリ別にカード表示。
 import { useMemo } from "react";
+import Link from "next/link";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { initialServices, servicesStorageKey } from "@/features/master-data/mock-data";
 import { onlineMenusForStore } from "@/features/reservations/availability";
 import { compareBySortOrder, formatCurrency } from "@/features/master-data/utils";
 import type { ServiceMenu } from "@/features/master-data/types";
 import { LoginCard } from "@/features/online-booking/public-sidebar";
+import { PM_NAVY } from "@/features/online-booking/public-shell";
 
 export function MenuView({ storeId }: { storeId: string }) {
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
@@ -48,6 +50,13 @@ export function MenuView({ storeId }: { storeId: string }) {
                         <p className="mt-0.5 text-xs text-stone-500">{m.durationMinutes}分</p>
                       </div>
                       <span className="shrink-0 text-sm font-semibold text-luxas-ink">{formatCurrency(m.price)}</span>
+                      <Link
+                        href={`/book/${storeId}/reserve?menu=${m.id}`}
+                        className="shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold text-white"
+                        style={{ backgroundColor: PM_NAVY }}
+                      >
+                        予約する
+                      </Link>
                     </li>
                   ))}
                 </ul>
