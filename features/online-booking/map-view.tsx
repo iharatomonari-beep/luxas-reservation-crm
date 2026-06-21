@@ -30,7 +30,7 @@ export function MapView({ storeId }: { storeId: string }) {
         </div>
 
         <aside className="space-y-4">
-          <LoginCard />
+          <LoginCard storeId={storeId} />
         </aside>
       </div>
     </main>

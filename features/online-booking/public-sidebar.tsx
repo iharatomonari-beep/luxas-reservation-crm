@@ -2,18 +2,60 @@
 
 // 公開サイト右カラム: ログインカード（モック）＋店舗情報カード。
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Apple, Chrome, Lock, Mail } from "lucide-react";
 import { useStoreSettings } from "@/features/master-data/store-settings";
+import { useLocalCollection } from "@/features/master-data/local-storage";
 import { initialStores } from "@/features/org/mock-data";
+import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
+import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
+import type { Reservation } from "@/features/reservations/types";
+import type { Customer } from "@/features/customers/types";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { PM_NAVY } from "@/features/online-booking/public-shell";
+import { useMemberSession } from "@/features/online-booking/use-member-session";
+
+// ソーシャルログイン（Supabase Auth）。プロバイダ設定が済めばそのまま動く。
+// 未設定の今は案内のみ（オンボーディングは管理者が Supabase 側で実施）。
+async function signInWithProvider(provider: "google" | "apple", storeId: string) {
+  if (!isSupabaseConfigured()) {
+    window.alert("ソーシャルログインは現在準備中です。管理者が連携設定を行うと利用できます。");
+    return;
+  }
+  const supabase = createSupabaseBrowserClient();
+  await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: `${window.location.origin}/auth/callback?next=/book/${storeId}/mypage` }
+  });
+}
 
 const inputCls =
   "mt-1 flex w-full items-center gap-2 rounded-md border border-luxas-line bg-luxas-mist/40 px-3 py-2.5 text-sm text-luxas-ink focus-within:border-luxas-green";
 
-// ログインカード（第1段は見た目のみのモック。実認証は第3段）。
-export function LoginCard() {
+// ログインカード（第2段はデモ・ログイン。実認証は第3段）。
+// ログインボタンで「登録済みのお客様」としてマイページに入る（モック）。
+export function LoginCard({ storeId }: { storeId: string }) {
+  const router = useRouter();
+  const { login } = useMemberSession();
+  const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // デモ: 直近のオンライン予約の顧客 → 無ければ最初の顧客 をログイン会員とする。
+  function pickDemoMemberId(): string {
+    const fromReservation = reservations.find((r) => r.source === "online" && r.customerId)?.customerId;
+    if (fromReservation) return fromReservation;
+    return customers[0]?.id ?? "";
+  }
+
+  function handleLogin() {
+    const id = pickDemoMemberId();
+    if (!id) return;
+    login(id);
+    router.push(`/book/${storeId}/mypage`);
+  }
 
   return (
     <div id="login" className="space-y-4 scroll-mt-24">
@@ -47,30 +89,45 @@ export function LoginCard() {
         </label>
         <button
           type="button"
+          onClick={handleLogin}
           className="mt-4 w-full rounded-md py-2.5 text-sm font-semibold text-white"
           style={{ backgroundColor: PM_NAVY }}
         >
           ログイン
         </button>
         <p className="mt-3 text-center text-xs text-stone-500">パスワードを忘れた方はこちら</p>
+        <p className="mt-1 text-center text-[10px] text-stone-400">（デモ：登録済みのお客様としてマイページに入ります）</p>
       </section>
 
       <section className="rounded-lg border border-luxas-line bg-white p-5">
         <h3 className="mb-4 text-base font-bold text-luxas-ink">ソーシャルログイン</h3>
         <div className="space-y-2.5">
-          <SocialButton icon={<Chrome size={18} className="text-stone-500" />} label="Googleでログイン" />
-          <SocialButton icon={<Apple size={18} className="text-luxas-ink" />} label="Appleでログイン" />
-          <SocialButton icon={<span className="text-sm font-bold text-green-600">E</span>} label="EPARKでログイン" />
+          <SocialButton
+            icon={<Chrome size={18} className="text-stone-500" />}
+            label="Googleでログイン"
+            onClick={() => signInWithProvider("google", storeId)}
+          />
+          <SocialButton
+            icon={<Apple size={18} className="text-luxas-ink" />}
+            label="Appleでログイン"
+            onClick={() => signInWithProvider("apple", storeId)}
+          />
+          <SocialButton
+            icon={<span className="text-sm font-bold text-green-600">E</span>}
+            label="EPARKでログイン"
+            onClick={() => window.alert("EPARK連携は準備中です。")}
+          />
         </div>
       </section>
     </div>
   );
 }
 
-function SocialButton({ icon, label }: { icon: React.ReactNode; label: string }) {
+function SocialButton({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className="flex w-full items-center justify-center gap-3 rounded-md border border-luxas-line bg-white py-2.5 text-sm font-semibold text-luxas-ink hover:bg-luxas-mist/50"
     >
       <span className="flex h-5 w-5 items-center justify-center">{icon}</span>

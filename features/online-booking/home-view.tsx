@@ -31,7 +31,7 @@ export function HomeView({ storeId }: { storeId: string }) {
 
         <aside className="space-y-4">
           <InstallButton />
-          <LoginCard />
+          <LoginCard storeId={storeId} />
         </aside>
       </div>
     </main>

@@ -6,14 +6,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarCheck, Hand, Home, MapPin, User } from "lucide-react";
 import { initialStores } from "@/features/org/mock-data";
+import { useMemberSession } from "@/features/online-booking/use-member-session";
 
 // PM のヘッダー／プライマリボタンに使われている濃紺。
 export const PM_NAVY = "#1f2a44";
 
 export function PublicHeader({ storeId }: { storeId: string }) {
   const pathname = usePathname();
+  const { memberId } = useMemberSession();
   const base = `/book/${storeId}`;
   const store = initialStores.find((s) => s.id === storeId);
+  const loggedIn = Boolean(memberId);
+  const onMyPage = pathname.startsWith(`${base}/mypage`);
 
   const items = [
     { href: base, label: "ホーム", icon: Home, active: pathname === base },
@@ -55,12 +59,15 @@ export function PublicHeader({ storeId }: { storeId: string }) {
             );
           })}
           <Link
-            href={`${base}#login`}
-            className="ml-1 flex flex-col items-center gap-0.5 rounded-md px-3 py-1.5 text-[10px] font-semibold text-white sm:text-[11px]"
+            href={loggedIn ? `${base}/mypage` : `${base}#login`}
+            className={[
+              "ml-1 flex flex-col items-center gap-0.5 rounded-md px-3 py-1.5 text-[10px] font-semibold text-white sm:text-[11px]",
+              onMyPage ? "ring-2 ring-luxas-ink ring-offset-1" : ""
+            ].join(" ")}
             style={{ backgroundColor: PM_NAVY }}
           >
             <User size={18} strokeWidth={1.8} />
-            <span>ログイン</span>
+            <span>{loggedIn ? "マイページ" : "ログイン"}</span>
           </Link>
         </nav>
       </div>
