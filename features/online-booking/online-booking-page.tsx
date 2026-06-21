@@ -55,6 +55,7 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
   const [slot, setSlot] = useState<OpenSlot | null>(null);
   const [info, setInfo] = useState({ name: "", phone: "", email: "", gender: "unspecified" as CustomerGender });
   const [completedId, setCompletedId] = useState<string>("");
+  const [confirmedEmail, setConfirmedEmail] = useState<string>(""); // 確認メール（モック）の送信先
   // 未ログインで予約に進んだ時の「ログイン/新規登録」ゲートウェイ。
   const [guestStep, setGuestStep] = useState<"gateway" | "register">("gateway");
   const [loginEmail, setLoginEmail] = useState("");
@@ -189,6 +190,9 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
     };
     setReservations((cur) => [reservation, ...cur]);
     setCompletedId(reservationId);
+    // 確認メール送信先（モック・実送信なし）。会員/照合済み顧客/ゲスト入力の順で決定。
+    const toEmail = member?.email ?? matchedCustomer?.email ?? normalizeText(info.email);
+    setConfirmedEmail(toEmail || "");
     setStep("done");
   }
 
@@ -374,7 +378,25 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
           <h2 className="text-lg font-bold text-luxas-ink">ご予約を受け付けました</h2>
           <p className="text-sm text-stone-600">受付番号: <span className="font-mono">{completedId.replace(/^reservation-?/, "")}</span></p>
           <p className="text-xs text-stone-500">{store.name} ／ {date} {slot?.time}〜 ／ 担当 {assignedName}</p>
-          <button type="button" onClick={() => { setStep("menu"); setMenuId(""); setSlot(null); setNominatedStaffId(""); setNominationPicked(false); setInfo({ name: "", phone: "", email: "", gender: "unspecified" }); setGuestStep("gateway"); setLoginEmail(""); setLoginPassword(""); }}
+
+          {/* 予約確認メール（モック・実送信なし）。登録メール宛に送った体で内容を表示する。 */}
+          <div className="mx-auto max-w-md rounded-lg border border-luxas-line bg-white p-4 text-left">
+            {confirmedEmail ? (
+              <p className="text-xs font-medium text-luxas-green">確認メールを <span className="font-mono">{confirmedEmail}</span> に送信しました</p>
+            ) : (
+              <p className="text-xs font-medium text-stone-500">メールアドレスのご登録がないため、確認メールは送信されません。</p>
+            )}
+            <div className="mt-3 space-y-1 border-t border-luxas-line pt-3 text-xs text-stone-600">
+              <p className="font-semibold text-luxas-ink">【ご予約確認】{store.name}</p>
+              <p>受付番号: <span className="font-mono">{completedId.replace(/^reservation-?/, "")}</span></p>
+              <p>コース: {menu?.name}</p>
+              <p>日時: {date} {slot?.time}〜</p>
+              <p>担当: {assignedName}</p>
+              <p className="pt-1 text-[11px] text-stone-400">※このメールはモックです（実際の送信は行われません）。</p>
+            </div>
+          </div>
+
+          <button type="button" onClick={() => { setStep("menu"); setMenuId(""); setSlot(null); setNominatedStaffId(""); setNominationPicked(false); setInfo({ name: "", phone: "", email: "", gender: "unspecified" }); setGuestStep("gateway"); setLoginEmail(""); setLoginPassword(""); setConfirmedEmail(""); }}
             className="mx-auto mt-2 rounded-md border border-luxas-line bg-white px-4 py-2 text-sm font-medium text-stone-700">続けて予約する</button>
         </section>
       )}
