@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft } from "lucide-react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
@@ -14,7 +14,8 @@ import { useStoreSettings } from "@/features/master-data/store-settings";
 import { stampCreate } from "@/features/master-data/timestamps";
 import { compareBySortOrder, formatCurrency, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { minutesToTime, timeToMinutes, toDateInputValue } from "@/features/reservations/date-utils";
-import { getOpenStartTimes, onlineMenusForStore, pickAutoStaff, type OpenSlot } from "@/features/reservations/availability";
+import { getOpenStartTimes, isStaffWorkingOnDate, onlineMenusForStore, pickAutoStaff, type OpenSlot } from "@/features/reservations/availability";
+import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import type { ServiceMenu, StaffMember } from "@/features/master-data/types";
 import type { Reservation } from "@/features/reservations/types";
 import type { CustomerGender } from "@/features/customers/types";
@@ -55,13 +56,26 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
   const visibleMenus = category ? onlineMenus.filter((m) => m.category === category) : onlineMenus;
   const menu = onlineMenus.find((m) => m.id === menuId) ?? null;
 
-  // 指名候補: 当該店舗所属・有効・このコース対応のスタッフ。
+  // 当該店舗のシフトに絞る（指名候補の出勤判定に使う）。
+  const storeShifts = useMemo(() => filterShiftsByStore(shifts, storeId), [shifts, storeId]);
+
+  // 指名候補: 当該店舗所属・有効・このコース対応で、かつ選択日に出勤予定のスタッフのみ。
+  // 出勤していないスタッフは指名候補に出さない。
   const nominationStaff = useMemo(() => {
     if (!menu) return [];
     return [...staff]
       .filter((s) => s.isActive && (s.homeStoreId ?? "store-shibuya") === storeId && staffCanDoMenu(s, menu.id))
+      .filter((s) => isStaffWorkingOnDate(s.id, date, storeShifts))
       .sort(compareBySortOrder);
-  }, [staff, storeId, menu]);
+  }, [staff, storeId, menu, date, storeShifts]);
+
+  // 指名済みスタッフが選択日に出勤しなくなった（候補から外れた）ら指名を解除する。
+  useEffect(() => {
+    if (nominatedStaffId && !nominationStaff.some((s) => s.id === nominatedStaffId)) {
+      setNominatedStaffId("");
+      setSlot(null);
+    }
+  }, [nominationStaff, nominatedStaffId]);
 
   // 空き枠（無指名はコース対応スタッフ全員、指名ありはその人で計算）。
   const slots = useMemo(() => {
@@ -125,10 +139,8 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
   })();
 
   return (
-    <div className="mx-auto min-h-screen max-w-xl bg-luxas-paper px-4 py-6">
+    <div className="mx-auto max-w-xl px-4 py-6">
       <header className="mb-5">
-        <p className="text-xs font-medium text-luxas-green">{store.name}</p>
-        <h1 className="text-xl font-bold text-luxas-ink">オンライン予約</h1>
         <StepBar step={step} />
       </header>
 
@@ -283,7 +295,7 @@ function SelectedMenuCard({ menu }: { menu: ServiceMenu }) {
 
 function StepBar({ step }: { step: Step }) {
   const steps: { key: Step; label: string }[] = [
-    { key: "menu", label: "コース" }, { key: "datetime", label: "日時" }, { key: "info", label: "情報" }, { key: "done", label: "完了" }
+    { key: "menu", label: "メニュー選択" }, { key: "datetime", label: "日時選択" }, { key: "info", label: "予約確認" }, { key: "done", label: "予約完了" }
   ];
   const idx = steps.findIndex((s) => s.key === step);
   return (

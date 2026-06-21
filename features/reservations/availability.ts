@@ -83,6 +83,14 @@ export function onlineMenusForStore(services: ServiceMenu[], storeId: string): S
   return services.filter((m) => m.isActive && m.onlineBooking === true && isMenuInStore(m, storeId));
 }
 
+// 指定スタッフがその日に出勤予定か（有効なシフトが1件以上あるか）。
+// オンライン予約の指名候補を「その日に出勤しているスタッフ」だけに絞るのに使う。
+export function isStaffWorkingOnDate(staffId: string, date: string, shifts: StaffShift[]): boolean {
+  const normalizedDate = normalizeDateInputValue(date);
+  if (!normalizedDate) return false;
+  return shifts.some((s) => s.staffId === staffId && s.workDate === normalizedDate && (s.isActive ?? true));
+}
+
 // 指定スタッフが、その時間帯に既存予約と重なっていないか。
 function staffHasReservationConflict(staffId: string, date: string, start: number, end: number, reservations: Reservation[]): boolean {
   return reservations.some((r) => {

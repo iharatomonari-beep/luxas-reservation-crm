@@ -1,8 +1,7 @@
-import { OnlineBookingPage } from "@/features/online-booking/online-booking-page";
+import { HomeView } from "@/features/online-booking/home-view";
 
-// 公開オンライン予約ページ（認証なし）。HP店舗ページ／スマホアプリからの遷移先。
-// 例: /book/store-shibuya
-export default async function BookPage({ params }: { params: Promise<{ storeId: string }> }) {
+// 公開予約サイト ホーム（認証なし）。例: /book/store-shibuya
+export default async function BookHomePage({ params }: { params: Promise<{ storeId: string }> }) {
   const { storeId } = await params;
-  return <OnlineBookingPage storeId={storeId} />;
+  return <HomeView storeId={storeId} />;
 }
