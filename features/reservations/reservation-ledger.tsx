@@ -3044,9 +3044,12 @@ function ReservationCard({
       onClick={onClick}
       onPointerDown={onPointerDown}
     >
-      {/* 1行目: [女/男] 顧客名（個室利用時のみ【個室名】） */}
+      {/* 1行目: [女/男] 顧客名（個室利用時のみ【個室名】、オンライン予約は[ネット]） */}
       <p className="flex min-w-0 items-center truncate text-xs font-semibold leading-tight">
         {genderLabel ? labelChip(genderLabel) : null}
+        {reservation.source === "online" ? (
+          <span className="mr-1 shrink-0 rounded bg-sky-100 px-1 text-[9px] font-medium text-sky-700">ネット</span>
+        ) : null}
         <span className="truncate">{reservation.customerName}</span>
         {privateRoomLabel ? <span className="ml-1 shrink-0 text-[10px] font-medium text-stone-600">【{privateRoomLabel}】</span> : null}
       </p>
