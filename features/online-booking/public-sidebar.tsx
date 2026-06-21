@@ -176,13 +176,15 @@ export function StoreInfoCard({ storeId }: { storeId: string }) {
   const store = initialStores.find((s) => s.id === storeId);
 
   const address = [settings.prefecture, settings.city, settings.address2].filter(Boolean).join("");
-  const hours = `【営業時間】 ${settings.businessStartTime}〜${settings.businessEndTime} 【定休日】 ${settings.hpClosedDaysText || "なし"}`;
 
   const rows: { label: string; value: React.ReactNode }[] = [
     { label: "店舗名", value: store?.name ?? "LUXAS" },
     { label: "電話番号", value: settings.phone || "-" },
+    ...(settings.email ? [{ label: "メール", value: settings.email }] : []),
     { label: "住所", value: address || "-" },
-    { label: "営業時間", value: hours },
+    { label: "営業時間", value: `${settings.businessStartTime}〜${settings.businessEndTime}` },
+    { label: "予約受付", value: `〜${settings.reservationAcceptEndTime || settings.businessEndTime}` },
+    { label: "定休日", value: settings.hpClosedDaysText || "なし" },
     {
       label: "ホームページ",
       value: settings.hpUrl ? (

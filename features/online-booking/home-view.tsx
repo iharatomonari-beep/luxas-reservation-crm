@@ -1,6 +1,8 @@
 "use client";
 
 // 公開サイト ホーム（PMの /home 相当）: ヒーロー＋紹介文＋店舗情報＋右ログイン。
+import Link from "next/link";
+import { CalendarCheck } from "lucide-react";
 import { useStoreSettings } from "@/features/master-data/store-settings";
 import { initialStores } from "@/features/org/mock-data";
 import { LoginCard, StoreInfoCard } from "@/features/online-booking/public-sidebar";
@@ -20,6 +22,21 @@ export function HomeView({ storeId }: { storeId: string }) {
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-5">
           <HeroGallery storeName={store?.name ?? "LUXAS"} imageUrl={settings.hpImageUrl} />
+
+          {/* 予約CTA＋本日の営業時間 */}
+          <div className="flex flex-col items-stretch gap-3 rounded-lg border border-luxas-line bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-stone-600">
+              <p className="font-semibold text-luxas-ink">ネット予約受付中</p>
+              <p className="mt-0.5 text-xs">営業時間 {settings.businessStartTime}〜{settings.businessEndTime}　予約受付 〜{settings.reservationAcceptEndTime || settings.businessEndTime}</p>
+            </div>
+            <Link
+              href={`/book/${storeId}/reserve`}
+              className="inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-bold text-white"
+              style={{ backgroundColor: PM_NAVY }}
+            >
+              <CalendarCheck size={18} aria-hidden="true" />今すぐ予約する
+            </Link>
+          </div>
 
           <article className="rounded-lg border border-luxas-line bg-white p-5">
             <Carousel />
