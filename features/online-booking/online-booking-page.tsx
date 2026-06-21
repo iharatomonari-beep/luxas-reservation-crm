@@ -23,6 +23,7 @@ import type { Reservation } from "@/features/reservations/types";
 import type { Customer, CustomerGender } from "@/features/customers/types";
 import { useMemberSession } from "@/features/online-booking/use-member-session";
 import { buildReservationEmail } from "@/features/online-booking/confirmation-email";
+import { buildIcs } from "@/features/online-booking/ics";
 import { signInWithProvider } from "@/features/online-booking/public-sidebar";
 import { PM_NAVY } from "@/features/online-booking/public-shell";
 
@@ -216,6 +217,27 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
     const id = nominatedStaffId || pickAutoStaff(nominationStaff, slot.staffIds);
     return staff.find((s) => s.id === id)?.displayName ?? "スタッフ";
   })();
+
+  // 予約をカレンダー(.ics)としてダウンロードする（端末カレンダーに追加）。
+  function downloadCalendar() {
+    if (!menu || !slot) return;
+    const endTime = minutesToTime(timeToMinutes(slot.time) + menu.durationMinutes);
+    const ics = buildIcs({
+      uid: completedId,
+      date, startTime: slot.time, endTime,
+      title: `${store?.name ?? "LUXAS"} ${menu.name}`,
+      description: `担当: ${assignedName}　受付番号: ${completedId.replace(/^reservation-?/, "")}`,
+      location: store?.name
+    });
+    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `luxas-reservation-${date}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="mx-auto max-w-xl px-4 py-6">
@@ -453,6 +475,8 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">
+            <button type="button" onClick={downloadCalendar}
+              className="rounded-md border border-luxas-line bg-white px-4 py-2 text-sm font-medium text-luxas-ink hover:bg-luxas-mist/50">カレンダーに追加</button>
             <Link href={`/book/${storeId}/mypage/reservations`}
               className="rounded-md px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: PM_NAVY }}>マイページで予約を確認</Link>
             <button type="button" onClick={() => { setStep("menu"); setMenuId(""); setSlot(null); setNominatedStaffId(""); setNominationPicked(false); setInfo({ name: "", phone: "", email: "", gender: "unspecified" }); setGuestStep("gateway"); setLoginEmail(""); setLoginPassword(""); setConfirmedEmail(""); }}
