@@ -339,8 +339,13 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
           <BackButton onClick={() => setStep("datetime")} />
           <div className="rounded-lg border border-luxas-line bg-white p-4 text-sm">
             <p className="font-medium text-luxas-ink">{menu.name}</p>
-            <p className="mt-1 text-stone-600">{date} {slot.time}〜 ／ 担当: {assignedName}{nominatedStaffId ? "（指名）" : "（指名なし）"}</p>
-            <p className="mt-1 font-semibold text-luxas-ink">{formatCurrency(menu.price)}</p>
+            <p className="text-xs text-stone-400">{menu.category}</p>
+            <dl className="mt-2 space-y-1 text-stone-600">
+              <div className="flex justify-between"><dt>日時</dt><dd className="text-luxas-ink">{date} {slot.time}〜{minutesToTime(timeToMinutes(slot.time) + menu.durationMinutes)}</dd></div>
+              <div className="flex justify-between"><dt>所要時間</dt><dd className="text-luxas-ink">{menu.durationMinutes}分</dd></div>
+              <div className="flex justify-between"><dt>担当</dt><dd className="text-luxas-ink">{assignedName}{nominatedStaffId ? "（指名）" : "（指名なし）"}</dd></div>
+            </dl>
+            <p className="mt-2 flex justify-between border-t border-luxas-line pt-2 text-base font-semibold text-luxas-ink"><span className="text-sm font-normal text-stone-500">料金</span>{formatCurrency(menu.price)}</p>
           </div>
           {member ? (
             <>
