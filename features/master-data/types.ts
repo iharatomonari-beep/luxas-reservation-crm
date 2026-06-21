@@ -108,6 +108,23 @@ export type ServiceMenu = {
   createdAt?: string;
   /** 最終更新日時（ISO・任意・T064.5）。保存時に自動更新（表示のみ）。 */
   updatedAt?: string;
+  // --- PM通常商品マスタ §4-1 準拠の追加項目（任意・後方互換）---
+  /** コース種別（PMは「通常コース」のみ。プリセット選択）。 */
+  courseType?: string;
+  /** ジャンル1/2/3（PM §4-1 の18種から選択）。空=未設定。 */
+  genre1?: string;
+  genre2?: string;
+  genre3?: string;
+  /** 店舗適用開始日（YYYY-MM-DD・任意）。この日より前は提供しない。 */
+  startDate?: string;
+  /** 店舗適用終了日（YYYY-MM-DD・任意）。この日より後は提供しない。 */
+  endDate?: string;
+  /** 提供曜日（0=日〜6=土）。未設定/空=全曜日OK。限定外の曜日は予約候補から除外。 */
+  availableDays?: number[];
+  /** 提供時間帯の開始（HH:MM・任意）。未設定=制限なし。 */
+  availableTimeStart?: string;
+  /** 提供時間帯の終了（HH:MM・任意）。未設定=制限なし。 */
+  availableTimeEnd?: string;
 };
 
 // セット商品マスタ（PM準拠・T053）。コースの組み合わせ等を1商品として扱う。既存ServiceMenuとは別管理。

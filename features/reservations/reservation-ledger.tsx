@@ -306,6 +306,47 @@ function getEarliestShiftStartMinutes(staffId: string, selectedDate: string, shi
   return earliest;
 }
 
+// 指定の予約日・開始時刻で、そのメニューが提供可能か（PM §4-1 時間・曜日限定／店舗適用期間）。
+// 限定が未設定の項目はすべて「制限なし」として通す（後方互換）。
+function isMenuAvailableForDateTime(menu: ServiceMenu, date: string, startTime: string): boolean {
+  const normalizedDate = normalizeDateInputValue(date);
+  if (!normalizedDate) {
+    return true; // 日付未確定なら絞り込まない
+  }
+
+  // 店舗適用開始日/終了日（範囲外なら不可）。
+  if (menu.startDate && normalizedDate < menu.startDate) {
+    return false;
+  }
+  if (menu.endDate && normalizedDate > menu.endDate) {
+    return false;
+  }
+
+  // 提供曜日（指定があり、当日の曜日が含まれなければ不可）。
+  if (menu.availableDays && menu.availableDays.length > 0) {
+    const dow = new Date(`${normalizedDate}T00:00:00`).getDay();
+    if (!menu.availableDays.includes(dow)) {
+      return false;
+    }
+  }
+
+  // 提供時間帯（開始時刻が範囲外なら不可）。開始時刻が未確定ならスキップ。
+  const normalizedStart = normalizeTimeInputValue(startTime);
+  if (normalizedStart) {
+    const startMin = timeToMinutes(normalizedStart);
+    const from = menu.availableTimeStart ? timeToMinutes(menu.availableTimeStart) : null;
+    const to = menu.availableTimeEnd ? timeToMinutes(menu.availableTimeEnd) : null;
+    if (from != null && Number.isFinite(from) && startMin < from) {
+      return false;
+    }
+    if (to != null && Number.isFinite(to) && startMin > to) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function ReservationLedger() {
   const isDebugMode = process.env.NODE_ENV !== "production";
   const searchParams = useSearchParams();
@@ -602,8 +643,8 @@ export function ReservationLedger() {
     [dayCustomerReservations, timelineStaff]
   );
   const formServiceOptions = useMemo(
-    () => buildSelectableServices(activeServices, services, form.serviceMenuId, reservationFormMode),
-    [activeServices, form.serviceMenuId, reservationFormMode, services]
+    () => buildSelectableServices(activeServices, services, form.serviceMenuId, reservationFormMode, form.date, form.startTime),
+    [activeServices, form.serviceMenuId, reservationFormMode, services, form.date, form.startTime]
   );
   const formStaffOptions = useMemo(
     () => buildSelectableStaff(formCandidateStaff, staff, form.serviceMenuId, form.staffId, reservationFormMode),
@@ -1428,6 +1469,12 @@ export function ReservationLedger() {
 
     if (end <= start) {
       return "終了時刻を開始時刻より後にしてください。メニューの所要時間を確認して直してください。";
+    }
+
+    // 時間・曜日限定／店舗適用期間（PM §4-1）。選択日時で提供できないメニューは弾く。
+    const selectedMenu = services.find((item) => item.id === value.serviceMenuId);
+    if (selectedMenu && !isMenuAvailableForDateTime(selectedMenu, normalizedDate, normalizedStartTime)) {
+      return `選択中のメニューはこの日時では提供できません（時間・曜日限定／適用期間）。日時かメニューを変更してください: ${selectedMenu.name}`;
     }
 
     const shiftAvailability = findShiftForReservation({
@@ -2408,9 +2455,12 @@ function buildSelectableServices(
   activeServices: ServiceMenu[],
   allServices: ServiceMenu[],
   selectedServiceId: string,
-  mode: FormMode | null
+  mode: FormMode | null,
+  date: string,
+  startTime: string
 ) {
-  const base = [...activeServices];
+  // 時間・曜日限定／適用期間で、選択中の日時に提供できないコースは候補から外す。
+  const base = activeServices.filter((service) => isMenuAvailableForDateTime(service, date, startTime));
   const currentService = mode === "edit" ? allServices.find((service) => service.id === selectedServiceId) : null;
 
   if (currentService && !base.some((service) => service.id === currentService.id)) {

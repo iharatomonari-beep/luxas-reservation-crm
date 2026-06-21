@@ -13,6 +13,7 @@ import { useLocalCollection } from "@/features/master-data/local-storage";
 import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { MENU_COLOR_OPTIONS, menuColorStyle } from "@/features/master-data/menu-colors";
+import { COURSE_TYPE_OPTIONS, GENRE_OPTIONS, WEEKDAY_OPTIONS } from "@/features/master-data/menu-genres";
 
 type ServiceForm = {
   name: string;
@@ -45,6 +46,16 @@ type ServiceForm = {
   googleBooking: boolean;
   storeApp: boolean;
   eparkListing: boolean;
+  // PM §4-1 追加（コース種別 / ジャンル1-3 / 適用日 / 時間・曜日限定）
+  courseType: string;
+  genre1: string;
+  genre2: string;
+  genre3: string;
+  startDate: string;
+  endDate: string;
+  availableDays: number[];
+  availableTimeStart: string;
+  availableTimeEnd: string;
 };
 
 const emptyForm: ServiceForm = {
@@ -72,7 +83,16 @@ const emptyForm: ServiceForm = {
   reservationTerminal: true,
   googleBooking: false,
   storeApp: false,
-  eparkListing: false
+  eparkListing: false,
+  courseType: "通常コース",
+  genre1: "",
+  genre2: "",
+  genre3: "",
+  startDate: "",
+  endDate: "",
+  availableDays: [],
+  availableTimeStart: "",
+  availableTimeEnd: ""
 };
 
 export function ServiceManager() {
@@ -179,7 +199,17 @@ export function ServiceManager() {
       reservationTerminal: form.reservationTerminal,
       googleBooking: form.googleBooking,
       storeApp: form.storeApp,
-      eparkListing: form.eparkListing
+      eparkListing: form.eparkListing,
+      // PM §4-1 追加（空は undefined で保存）。
+      courseType: form.courseType.trim() || undefined,
+      genre1: form.genre1 || undefined,
+      genre2: form.genre2 || undefined,
+      genre3: form.genre3 || undefined,
+      startDate: form.startDate.trim() || undefined,
+      endDate: form.endDate.trim() || undefined,
+      availableDays: form.availableDays.length > 0 ? [...form.availableDays].sort((a, b) => a - b) : undefined,
+      availableTimeStart: form.availableTimeStart.trim() || undefined,
+      availableTimeEnd: form.availableTimeEnd.trim() || undefined
     };
 
     if (editingId) {
@@ -221,7 +251,16 @@ export function ServiceManager() {
       reservationTerminal: item.reservationTerminal ?? true,
       googleBooking: item.googleBooking ?? false,
       storeApp: item.storeApp ?? false,
-      eparkListing: item.eparkListing ?? false
+      eparkListing: item.eparkListing ?? false,
+      courseType: item.courseType ?? "通常コース",
+      genre1: item.genre1 ?? "",
+      genre2: item.genre2 ?? "",
+      genre3: item.genre3 ?? "",
+      startDate: item.startDate ?? "",
+      endDate: item.endDate ?? "",
+      availableDays: item.availableDays ?? [],
+      availableTimeStart: item.availableTimeStart ?? "",
+      availableTimeEnd: item.availableTimeEnd ?? ""
     });
     setMessage(null);
   }
@@ -245,6 +284,10 @@ export function ServiceManager() {
         <span className="inline-flex items-center gap-2">
           <span className={["inline-block h-3 w-3 shrink-0 rounded-sm border", menuColorStyle(s.color).bg, menuColorStyle(s.color).border].join(" ")} aria-hidden="true" />
           <span className="font-medium text-rose-600 underline-offset-2 hover:underline">{s.name}</span>
+          {s.genre1 ? <span className="rounded bg-stone-100 px-1 text-[10px] text-stone-500">{s.genre1}</span> : null}
+          {(s.availableDays?.length || s.availableTimeStart || s.availableTimeEnd) ? (
+            <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-700">限定</span>
+          ) : null}
         </span>
       )
     },
@@ -525,6 +568,106 @@ export function ServiceManager() {
                 <p className="text-xs text-stone-500">1店舗＝店舗専用 ／ 複数選択＝複数店舗対応。</p>
               </div>
             ) : null}
+          </section>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField
+              label="コース種別"
+              value={form.courseType}
+              onChange={(value) => setForm((current) => ({ ...current, courseType: value }))}
+            >
+              {COURSE_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </SelectField>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            {(["genre1", "genre2", "genre3"] as const).map((field, index) => (
+              <SelectField
+                key={field}
+                label={`ジャンル${index + 1}`}
+                value={form[field]}
+                onChange={(value) => setForm((current) => ({ ...current, [field]: value }))}
+              >
+                {GENRE_OPTIONS.map((opt) => (
+                  <option key={opt.key || "none"} value={opt.key}>
+                    {opt.label}
+                  </option>
+                ))}
+              </SelectField>
+            ))}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="店舗適用開始日"
+              value={form.startDate}
+              onChange={(value) => setForm((current) => ({ ...current, startDate: value }))}
+              type="date"
+              hint="未指定=制限なし"
+            />
+            <TextField
+              label="店舗適用終了日"
+              value={form.endDate}
+              onChange={(value) => setForm((current) => ({ ...current, endDate: value }))}
+              type="date"
+              hint="未指定=制限なし"
+            />
+          </div>
+
+          <section className="rounded-md border border-luxas-line bg-white p-3">
+            <p className="text-sm font-medium text-stone-700">時間・曜日限定</p>
+            <p className="mt-1 text-xs text-stone-500">
+              未指定=制限なし（全曜日・終日）。設定すると、予約作成で限定外の曜日・時間ではこのコースを選べません。
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {WEEKDAY_OPTIONS.map((day) => {
+                const checked = form.availableDays.includes(day.value);
+                return (
+                  <label
+                    key={day.value}
+                    className={[
+                      "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border text-sm font-medium",
+                      checked ? "border-luxas-green bg-luxas-mist text-luxas-green" : "border-luxas-line bg-white text-stone-600"
+                    ].join(" ")}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={checked}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          availableDays: event.target.checked
+                            ? [...current.availableDays, day.value]
+                            : current.availableDays.filter((d) => d !== day.value)
+                        }))
+                      }
+                    />
+                    {day.label}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <TextField
+                label="提供開始時刻"
+                value={form.availableTimeStart}
+                onChange={(value) => setForm((current) => ({ ...current, availableTimeStart: value }))}
+                type="time"
+                hint="未指定=終日"
+              />
+              <TextField
+                label="提供終了時刻"
+                value={form.availableTimeEnd}
+                onChange={(value) => setForm((current) => ({ ...current, availableTimeEnd: value }))}
+                type="time"
+                hint="未指定=終日"
+              />
+            </div>
           </section>
 
           <StatusMessage message={message} />
