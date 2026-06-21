@@ -105,9 +105,11 @@ function staffHasReservationConflict(staffId: string, date: string, start: numbe
 }
 
 // オンライン予約停止枠（同日・時間重複）に当たるか。
-function isWithinOnlineBlock(date: string, start: number, end: number, blocks: OnlineBlock[]): boolean {
+function isWithinOnlineBlock(date: string, start: number, end: number, blocks: OnlineBlock[], storeId: string): boolean {
   return blocks.some((b) => {
     if (b.date !== date) return false;
+    // 店舗スコープ: storeId 一致のブロック、または未設定（レガシー=全店共通）のみ適用。
+    if (b.storeId && b.storeId !== storeId) return false;
     const bs = timeToMinutes(b.startTime);
     const be = timeToMinutes(b.endTime);
     if (!Number.isFinite(bs) || !Number.isFinite(be)) return false;
@@ -170,7 +172,7 @@ export function getOpenStartTimes(params: {
     const end = t + duration;
 
     if (!isMenuAvailableForDateTime(menu, normalizedDate, startTime)) continue;
-    if (isWithinOnlineBlock(normalizedDate, t, end, onlineBlocks)) continue;
+    if (isWithinOnlineBlock(normalizedDate, t, end, onlineBlocks, storeId)) continue;
 
     // この時刻に対応できるスタッフ（シフトOK＆予約重複なし）。
     const okStaffIds = candidateStaff

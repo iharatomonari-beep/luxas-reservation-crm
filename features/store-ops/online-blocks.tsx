@@ -5,9 +5,11 @@ import { Plus, Trash2 } from "lucide-react";
 import { MasterPage } from "@/features/master-data/master-page";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useStoreSettings } from "@/features/master-data/store-settings";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import { makeLocalId } from "@/features/master-data/utils";
 
-export type OnlineBlock = { id: string; date: string; name: string; blockId: string; startTime: string; endTime: string };
+// storeId?: 店舗スコープ（非破壊・任意）。未設定の既存ブロックは全店共通として扱う。
+export type OnlineBlock = { id: string; date: string; name: string; blockId: string; startTime: string; endTime: string; storeId?: string };
 export const onlineBlocksStorageKey = "luxas-online-blocks";
 export const initialOnlineBlocks: OnlineBlock[] = [];
 
@@ -20,23 +22,25 @@ const inputClass = "rounded-md border border-luxas-line bg-white px-2.5 py-1.5 t
 
 export function OnlineBlocks() {
   const [settings] = useStoreSettings();
+  const { currentStoreId, store } = useCurrentStore();
   const [blocks, setBlocks] = useLocalCollection<OnlineBlock>(onlineBlocksStorageKey, initialOnlineBlocks);
   const [date, setDate] = useState(today());
   const [form, setForm] = useState({ name: "", startTime: "10:00", endTime: "11:00" });
 
-  const dayBlocks = blocks.filter((b) => b.date === date);
+  // 現在店舗のブロック（storeId 一致 or 未設定の全店共通）だけを表示する。
+  const dayBlocks = blocks.filter((b) => b.date === date && (!b.storeId || b.storeId === currentStoreId));
 
   function addBlock() {
     if (!form.name.trim()) return;
     setBlocks((current) => [
-      { id: makeLocalId("blk"), date, name: form.name.trim(), blockId: makeLocalId("B").toUpperCase().slice(0, 8), startTime: form.startTime, endTime: form.endTime },
+      { id: makeLocalId("blk"), date, name: form.name.trim(), blockId: makeLocalId("B").toUpperCase().slice(0, 8), startTime: form.startTime, endTime: form.endTime, storeId: currentStoreId },
       ...current
     ]);
     setForm({ name: "", startTime: "10:00", endTime: "11:00" });
   }
 
   return (
-    <MasterPage title="本日のオンライン設定状況" description="開店/閉店・オンライン公開状況の確認と、オンライン予約ブロックの設定を行います（v0.1）。">
+    <MasterPage title="本日のオンライン設定状況" description={`開店/閉店・オンライン公開状況の確認と、オンライン予約ブロックの設定を行います（v0.1）。設定対象店舗: ${store?.name ?? "現在店舗"}`}>
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg border border-luxas-line bg-white p-4"><p className="text-xs text-stone-500">開店/閉店状況</p><p className="mt-1 text-lg font-semibold text-luxas-ink">営業時間 {settings.businessStartTime}-{settings.businessEndTime}</p></div>
         <div className="rounded-lg border border-luxas-line bg-white p-4"><p className="text-xs text-stone-500">オンライン公開状況</p><p className="mt-1 text-lg font-semibold text-luxas-ink">{settings.onlineReservationEnabled ? "公開中（モック）" : "非公開"}</p></div>
