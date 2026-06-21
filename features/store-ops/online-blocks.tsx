@@ -7,9 +7,9 @@ import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useStoreSettings } from "@/features/master-data/store-settings";
 import { makeLocalId } from "@/features/master-data/utils";
 
-type OnlineBlock = { id: string; date: string; name: string; blockId: string; startTime: string; endTime: string };
-const onlineBlocksStorageKey = "luxas-online-blocks";
-const initialOnlineBlocks: OnlineBlock[] = [];
+export type OnlineBlock = { id: string; date: string; name: string; blockId: string; startTime: string; endTime: string };
+export const onlineBlocksStorageKey = "luxas-online-blocks";
+export const initialOnlineBlocks: OnlineBlock[] = [];
 
 function today() {
   const d = new Date();

@@ -222,6 +222,7 @@ export function ReservationList() {
                         <Link href={`/dashboard/reservations?date=${r.date}`} className="hover:text-luxas-green hover:underline">
                           {r.customerName}
                         </Link>
+                        {r.source === "online" ? <span className="ml-2 rounded bg-sky-100 px-1 text-[10px] font-medium text-sky-700">オンライン</span> : null}
                         <span className="ml-2 text-xs text-stone-400">{r.phone || ""}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-stone-700">{genderLabel(r)}</td>

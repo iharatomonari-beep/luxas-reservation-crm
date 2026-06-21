@@ -88,7 +88,7 @@ export const initialStoreSettings: StoreSettings = {
   hpImageUrl: "",
   hpBusinessHoursText: "",
   hpClosedDaysText: "",
-  onlineReservationEnabled: false,
+  onlineReservationEnabled: true, // プロトタイプ既定で公開（OFFにすると公開予約ページが受付停止表示）
   notifyEmail: "",
   invoiceRegistrationNumber: "",
   // T058 基本情報の初期値（単一店舗の既定）
