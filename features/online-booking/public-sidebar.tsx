@@ -1,7 +1,8 @@
 "use client";
 
-// 公開サイト右カラム: ログインカード（モック）＋店舗情報カード。
+// 公開サイト右カラム: ログイン/会員カード（モック）＋店舗情報カード。
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Apple, Chrome, Lock, Mail } from "lucide-react";
 import { useStoreSettings } from "@/features/master-data/store-settings";
@@ -16,9 +17,9 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { PM_NAVY } from "@/features/online-booking/public-shell";
 import { useMemberSession } from "@/features/online-booking/use-member-session";
 
-// ソーシャルログイン（Supabase Auth）。プロバイダ設定が済めばそのまま動く。
+// ソーシャルログイン/登録（Supabase Auth）。プロバイダ設定が済めばそのまま動く。
 // 未設定の今は案内のみ（オンボーディングは管理者が Supabase 側で実施）。
-async function signInWithProvider(provider: "google" | "apple", storeId: string) {
+export async function signInWithProvider(provider: "google" | "apple", storeId: string) {
   if (!isSupabaseConfigured()) {
     window.alert("ソーシャルログインは現在準備中です。管理者が連携設定を行うと利用できます。");
     return;
@@ -37,11 +38,12 @@ const inputCls =
 // ログインボタンで「登録済みのお客様」としてマイページに入る（モック）。
 export function LoginCard({ storeId }: { storeId: string }) {
   const router = useRouter();
-  const { login } = useMemberSession();
+  const { memberId, login, logout } = useMemberSession();
   const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const member = customers.find((c) => c.id === memberId) ?? null;
 
   // デモ: 直近のオンライン予約の顧客 → 無ければ最初の顧客 をログイン会員とする。
   function pickDemoMemberId(): string {
@@ -55,6 +57,38 @@ export function LoginCard({ storeId }: { storeId: string }) {
     if (!id) return;
     login(id);
     router.push(`/book/${storeId}/mypage`);
+  }
+
+  // ログイン中は会員パネルを表示（全画面でログイン状態を連動させる）。
+  if (memberId && member) {
+    return (
+      <section className="rounded-lg border border-luxas-line bg-white p-5">
+        <p className="text-xs text-stone-500">ログイン中</p>
+        <p className="mt-1 text-base font-bold text-luxas-ink">{member.name} さん</p>
+        <div className="mt-4 space-y-2.5">
+          <Link
+            href={`/book/${storeId}/mypage`}
+            className="block rounded-md py-2.5 text-center text-sm font-semibold text-white"
+            style={{ backgroundColor: PM_NAVY }}
+          >
+            マイページ
+          </Link>
+          <Link
+            href={`/book/${storeId}/mypage/reservations`}
+            className="block rounded-md border border-luxas-line py-2.5 text-center text-sm font-semibold text-luxas-ink hover:bg-luxas-mist/50"
+          >
+            予約情報
+          </Link>
+        </div>
+        <button
+          type="button"
+          onClick={() => logout()}
+          className="mt-3 w-full py-2 text-center text-sm font-medium text-stone-500 hover:text-luxas-ink"
+        >
+          ログアウト
+        </button>
+      </section>
+    );
   }
 
   return (

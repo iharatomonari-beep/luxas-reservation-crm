@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ChevronLeft } from "lucide-react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
@@ -18,7 +18,10 @@ import { getOpenStartTimes, isStaffWorkingOnDate, onlineMenusForStore, pickAutoS
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import type { ServiceMenu, StaffMember } from "@/features/master-data/types";
 import type { Reservation } from "@/features/reservations/types";
-import type { CustomerGender } from "@/features/customers/types";
+import type { Customer, CustomerGender } from "@/features/customers/types";
+import { useMemberSession } from "@/features/online-booking/use-member-session";
+import { signInWithProvider } from "@/features/online-booking/public-sidebar";
+import { PM_NAVY } from "@/features/online-booking/public-shell";
 
 type Step = "menu" | "datetime" | "info" | "done";
 
@@ -33,9 +36,13 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
   const [shifts] = useLocalCollection(shiftsStorageKey, initialShifts);
   const [rooms] = useLocalCollection(roomsStorageKey, initialRooms);
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
-  const [, setCustomers] = useLocalCollection(customersStorageKey, initialCustomers);
+  const [customers, setCustomers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [onlineBlocks] = useLocalCollection(onlineBlocksStorageKey, initialOnlineBlocks);
   const [settings] = useStoreSettings();
+
+  // ログイン中の会員（いれば、お客様情報入力をスキップしこの会員に予約を紐付ける）。
+  const { memberId, login } = useMemberSession();
+  const member = useMemo(() => customers.find((c) => c.id === memberId) ?? null, [customers, memberId]);
 
   const store = initialStores.find((s) => s.id === storeId);
 
@@ -44,9 +51,27 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
   const [menuId, setMenuId] = useState<string>("");
   const [date, setDate] = useState<string>(toDateInputValue(new Date()));
   const [nominatedStaffId, setNominatedStaffId] = useState<string>(""); // ""=指名なし
+  const [nominationPicked, setNominationPicked] = useState(false); // 指名/指名なしを選んだか（選ぶまで時間は出さない）
   const [slot, setSlot] = useState<OpenSlot | null>(null);
   const [info, setInfo] = useState({ name: "", phone: "", email: "", gender: "unspecified" as CustomerGender });
   const [completedId, setCompletedId] = useState<string>("");
+  // 未ログインで予約に進んだ時の「ログイン/新規登録」ゲートウェイ。
+  const [guestStep, setGuestStep] = useState<"gateway" | "register">("gateway");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  // ゲスト入力時の既存会員照合（電話 or メール一致）。一致すれば重複登録せずその会員に紐付ける。
+  const matchedCustomer = useMemo(() => {
+    if (member) return null;
+    const p = normalizeText(info.phone);
+    const e = normalizeText(info.email).toLowerCase();
+    if (!p && !e) return null;
+    return (
+      customers.find(
+        (c) => (p && normalizeText(c.phone) === p) || (e && (c.email ?? "").toLowerCase() === e)
+      ) ?? null
+    );
+  }, [customers, member, info.phone, info.email]);
 
   const onlineMenus = useMemo(
     () => onlineMenusForStore(services, storeId).sort(compareBySortOrder),
@@ -69,17 +94,10 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
       .sort(compareBySortOrder);
   }, [staff, storeId, menu, date, storeShifts]);
 
-  // 指名済みスタッフが選択日に出勤しなくなった（候補から外れた）ら指名を解除する。
-  useEffect(() => {
-    if (nominatedStaffId && !nominationStaff.some((s) => s.id === nominatedStaffId)) {
-      setNominatedStaffId("");
-      setSlot(null);
-    }
-  }, [nominationStaff, nominatedStaffId]);
-
-  // 空き枠（無指名はコース対応スタッフ全員、指名ありはその人で計算）。
+  // 指名（または指名なし）を選んでから時間を出す。
+  // 指名なし=対応スタッフ全員 / 指名あり=その人 の空き枠を表示する。
   const slots = useMemo(() => {
-    if (!menu) return [];
+    if (!menu || !nominationPicked) return [];
     const staffForMenu = nominatedStaffId ? staff : nominationStaff;
     return getOpenStartTimes({
       storeId, date, menu,
@@ -88,13 +106,32 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
       businessEndTime: settings.reservationAcceptEndTime || settings.businessEndTime,
       nominatedStaffId: nominatedStaffId || undefined
     });
-  }, [menu, nominatedStaffId, staff, nominationStaff, storeId, date, shifts, reservations, services, rooms, onlineBlocks, settings]);
+  }, [menu, nominationPicked, nominatedStaffId, staff, nominationStaff, storeId, date, shifts, reservations, services, rooms, onlineBlocks, settings]);
+
+  // 指名を選び直したら、選択中の時間は一旦クリア（その人の空き枠で取り直す）。
+  function pickNomination(staffId: string) {
+    setNominatedStaffId(staffId);
+    setNominationPicked(true);
+    setSlot(null);
+  }
 
   if (!store) {
     return <Centered title="店舗が見つかりません" body="URLの店舗IDが正しくありません。" />;
   }
   if (settings.onlineReservationEnabled === false) {
     return <Centered title={`${store.name} オンライン予約`} body="現在オンライン予約を受け付けていません。お電話にてお問い合わせください。" />;
+  }
+
+  // 会員ログイン（モック）。メール一致でログイン → member が立ち予約確認へ進む。
+  function handleGuestLogin() {
+    const e = normalizeText(loginEmail).toLowerCase();
+    if (!e) return;
+    const found = customers.find((c) => (c.email ?? "").toLowerCase() === e);
+    if (!found) {
+      window.alert("メールアドレスが見つかりません。初めての方は新規登録してください。");
+      return;
+    }
+    login(found.id);
   }
 
   function confirm() {
@@ -104,28 +141,51 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
 
     const startTime = slot.time;
     const endTime = minutesToTime(timeToMinutes(startTime) + menu.durationMinutes);
-    const customerId = makeLocalId("customer");
-    const name = normalizeText(info.name) || "オンライン予約のお客様";
 
-    setCustomers((cur) => [
-      {
-        id: customerId,
-        ...stampCreate({
-          name, nameKana: "", phone: normalizeText(info.phone), email: normalizeText(info.email),
-          birthDate: "", gender: info.gender, address: "", firstVisitDate: date, lastVisitDate: date,
-          caution: "", chartMemo: "", tags: [], isActive: true, homeStoreId: storeId
-        })
-      },
-      ...cur
-    ]);
+    // ログイン会員はその顧客に紐付け（新規作成しない）。ゲストは新規顧客を作成。
+    let customerId: string;
+    let name: string;
+    let phone: string;
+    let gender: CustomerGender;
+
+    if (member) {
+      // ログイン会員
+      customerId = member.id;
+      name = member.name;
+      phone = member.phone;
+      gender = member.gender;
+    } else if (matchedCustomer) {
+      // 入力情報が登録済み会員と一致 → その会員に紐付け（重複登録しない）
+      customerId = matchedCustomer.id;
+      name = matchedCustomer.name;
+      phone = matchedCustomer.phone;
+      gender = matchedCustomer.gender;
+    } else {
+      // 新規顧客として登録
+      customerId = makeLocalId("customer");
+      name = normalizeText(info.name) || "オンライン予約のお客様";
+      phone = normalizeText(info.phone);
+      gender = info.gender;
+      setCustomers((cur) => [
+        {
+          id: customerId,
+          ...stampCreate({
+            name, nameKana: "", phone, email: normalizeText(info.email),
+            birthDate: "", gender, address: "", firstVisitDate: date, lastVisitDate: date,
+            caution: "", chartMemo: "", tags: [], isActive: true, homeStoreId: storeId
+          })
+        },
+        ...cur
+      ]);
+    }
 
     const reservationId = makeLocalId("reservation");
     const reservation: Reservation = {
       id: reservationId, date, startTime, endTime,
-      customerName: name, phone: normalizeText(info.phone),
+      customerName: name, phone,
       serviceMenuId: menu.id, staffId: assignedStaffId, roomId: "", status: "booked",
       memo: "", storeId, source: "online", customerId,
-      nominatedStaffId: nominatedStaffId || undefined, guestGender: info.gender
+      nominatedStaffId: nominatedStaffId || undefined, guestGender: gender
     };
     setReservations((cur) => [reservation, ...cur]);
     setCompletedId(reservationId);
@@ -162,7 +222,7 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
                   <li key={m.id}>
                     <button
                       type="button"
-                      onClick={() => { setMenuId(m.id); setNominatedStaffId(""); setSlot(null); setStep("datetime"); }}
+                      onClick={() => { setMenuId(m.id); setNominatedStaffId(""); setNominationPicked(false); setSlot(null); setStep("datetime"); }}
                       className="flex w-full items-center justify-between gap-3 rounded-lg border border-luxas-line bg-white px-4 py-3 text-left hover:border-luxas-green"
                     >
                       <span>
@@ -189,7 +249,7 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
             <span className="text-xs font-medium text-stone-600">日付</span>
             <input
               type="date" value={date} min={toDateInputValue(new Date())}
-              onChange={(e) => { setDate(e.target.value); setSlot(null); }}
+              onChange={(e) => { setDate(e.target.value); setSlot(null); setNominatedStaffId(""); setNominationPicked(false); }}
               className="mt-1 w-full rounded-md border border-luxas-line bg-white px-3 py-2 text-sm outline-none focus:border-luxas-green"
             />
           </label>
@@ -197,17 +257,19 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
           <div>
             <span className="text-xs font-medium text-stone-600">指名</span>
             <div className="mt-1 flex flex-wrap gap-1.5">
-              <Chip active={nominatedStaffId === ""} onClick={() => { setNominatedStaffId(""); setSlot(null); }}>指名なし</Chip>
+              <Chip active={nominationPicked && nominatedStaffId === ""} onClick={() => pickNomination("")}>指名なし</Chip>
               {nominationStaff.map((s) => (
-                <Chip key={s.id} active={nominatedStaffId === s.id} onClick={() => { setNominatedStaffId(s.id); setSlot(null); }}>{s.displayName}</Chip>
+                <Chip key={s.id} active={nominationPicked && nominatedStaffId === s.id} onClick={() => pickNomination(s.id)}>{s.displayName}</Chip>
               ))}
             </div>
           </div>
 
           <div>
             <span className="text-xs font-medium text-stone-600">時間（空き枠）</span>
-            {slots.length === 0 ? (
-              <p className="mt-1 rounded-md border border-luxas-line bg-white p-3 text-sm text-stone-500">この日に空き枠がありません。日付や指名を変更してください。</p>
+            {!nominationPicked ? (
+              <p className="mt-1 rounded-md border border-dashed border-luxas-line bg-white p-3 text-sm text-stone-400">先に「指名」または「指名なし」を選ぶと、空き時間が表示されます。</p>
+            ) : slots.length === 0 ? (
+              <p className="mt-1 rounded-md border border-luxas-line bg-white p-3 text-sm text-stone-500">この指名・この日に空き枠がありません。指名や日付を変更してください。</p>
             ) : (
               <div className="mt-1 grid grid-cols-4 gap-2">
                 {slots.map((sl) => (
@@ -224,7 +286,7 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
           <button
             type="button" disabled={!slot} onClick={() => setStep("info")}
             className="w-full rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
-          >次へ（お客様情報）</button>
+          >次へ（予約確認）</button>
         </section>
       )}
 
@@ -236,18 +298,73 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
             <p className="mt-1 text-stone-600">{date} {slot.time}〜 ／ 担当: {assignedName}{nominatedStaffId ? "（指名）" : "（指名なし）"}</p>
             <p className="mt-1 font-semibold text-luxas-ink">{formatCurrency(menu.price)}</p>
           </div>
-          <h2 className="text-sm font-semibold text-stone-700">3. お客様情報</h2>
-          <Field label="お名前"><input value={info.name} onChange={(e) => setInfo((c) => ({ ...c, name: e.target.value }))} className={inputCls} placeholder="例: 山田 太郎" /></Field>
-          <Field label="電話番号"><input value={info.phone} onChange={(e) => setInfo((c) => ({ ...c, phone: e.target.value }))} className={inputCls} placeholder="09012345678" inputMode="tel" /></Field>
-          <Field label="メールアドレス"><input value={info.email} onChange={(e) => setInfo((c) => ({ ...c, email: e.target.value }))} className={inputCls} placeholder="任意" inputMode="email" /></Field>
-          <Field label="性別">
-            <div className="flex gap-1.5">
-              {([["female", "女性"], ["male", "男性"], ["unspecified", "未指定"]] as const).map(([v, label]) => (
-                <Chip key={v} active={info.gender === v} onClick={() => setInfo((c) => ({ ...c, gender: v }))}>{label}</Chip>
-              ))}
-            </div>
-          </Field>
-          <button type="button" onClick={confirm} className="w-full rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white">この内容で予約する</button>
+          {member ? (
+            <>
+              <h2 className="text-sm font-semibold text-stone-700">3. 予約確認</h2>
+              <div className="rounded-lg border border-luxas-line bg-white p-4 text-sm">
+                <p className="text-xs text-stone-500">ご予約者</p>
+                <p className="mt-1 font-medium text-luxas-ink">{member.name}</p>
+                {member.phone && <p className="mt-0.5 text-stone-600">{member.phone}</p>}
+                <p className="mt-2 text-[11px] text-stone-400">ログイン中のため、お客様情報の入力は不要です。</p>
+              </div>
+              <button type="button" onClick={confirm} className="w-full rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white">この内容で予約する</button>
+            </>
+          ) : guestStep === "gateway" ? (
+            <>
+              <h2 className="text-sm font-semibold text-stone-700">3. ログイン / 新規登録</h2>
+              <p className="text-xs text-stone-500">ご予約にはログインまたは新規登録が必要です。</p>
+
+              {/* ログイン（アカウントをお持ちの方） */}
+              <div className="space-y-3 rounded-lg border border-luxas-line bg-white p-4">
+                <p className="text-sm font-semibold text-luxas-ink">アカウントをお持ちの方</p>
+                <Field label="メールアドレス"><input value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className={inputCls} placeholder="メールアドレス" inputMode="email" /></Field>
+                <Field label="パスワード"><input value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className={inputCls} type="password" placeholder="パスワード" /></Field>
+                <button type="button" onClick={handleGuestLogin} className="w-full rounded-md py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: PM_NAVY }}>ログイン</button>
+              </div>
+
+              {/* 新規登録（初めての方） */}
+              <div className="rounded-lg border border-luxas-line bg-white p-4">
+                <p className="text-sm font-semibold text-luxas-ink">初めてご利用のお客様</p>
+                <button type="button" onClick={() => setGuestStep("register")} className="mt-3 w-full rounded-md border border-luxas-line py-2.5 text-sm font-semibold text-luxas-ink hover:bg-luxas-mist/50">新規登録</button>
+              </div>
+
+              {/* ソーシャル（アカウントで登録/ログイン） */}
+              <div className="rounded-lg border border-luxas-line bg-white p-4">
+                <p className="mb-3 text-sm font-semibold text-luxas-ink">アカウントで登録 / ログイン</p>
+                <div className="space-y-2">
+                  <button type="button" onClick={() => signInWithProvider("google", storeId)} className="w-full rounded-md border border-luxas-line bg-white py-2.5 text-sm font-semibold text-luxas-ink hover:bg-luxas-mist/50">Googleで続ける</button>
+                  <button type="button" onClick={() => signInWithProvider("apple", storeId)} className="w-full rounded-md border border-luxas-line bg-white py-2.5 text-sm font-semibold text-luxas-ink hover:bg-luxas-mist/50">Appleで続ける</button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={() => setGuestStep("gateway")} className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-luxas-ink"><ChevronLeft size={14} />ログイン / 新規登録に戻る</button>
+              <h2 className="text-sm font-semibold text-stone-700">3. 新規登録（お客様情報）</h2>
+              <Field label="お名前"><input value={info.name} onChange={(e) => setInfo((c) => ({ ...c, name: e.target.value }))} className={inputCls} placeholder="例: 山田 太郎" /></Field>
+              <Field label="電話番号"><input value={info.phone} onChange={(e) => setInfo((c) => ({ ...c, phone: e.target.value }))} className={inputCls} placeholder="09012345678" inputMode="tel" /></Field>
+              <Field label="メールアドレス"><input value={info.email} onChange={(e) => setInfo((c) => ({ ...c, email: e.target.value }))} className={inputCls} placeholder="任意" inputMode="email" /></Field>
+              <Field label="性別">
+                <div className="flex gap-1.5">
+                  {([["female", "女性"], ["male", "男性"], ["unspecified", "未指定"]] as const).map(([v, label]) => (
+                    <Chip key={v} active={info.gender === v} onClick={() => setInfo((c) => ({ ...c, gender: v }))}>{label}</Chip>
+                  ))}
+                </div>
+              </Field>
+
+              {/* 既存会員の照合結果（重複登録防止） */}
+              {matchedCustomer && (
+                <div className="rounded-md border border-luxas-green bg-luxas-mist/40 p-3 text-sm">
+                  <p className="text-luxas-ink">登録済みのお客様が見つかりました：<span className="font-semibold">{matchedCustomer.name}</span> 様</p>
+                  <p className="mt-0.5 text-xs text-stone-500">この方の会員情報で予約します（重複して登録しません）。</p>
+                </div>
+              )}
+
+              <button type="button" onClick={confirm} className="w-full rounded-md bg-luxas-green px-4 py-3 text-sm font-semibold text-white">
+                {matchedCustomer ? `${matchedCustomer.name} 様として予約する` : "この内容で登録して予約する"}
+              </button>
+            </>
+          )}
         </section>
       )}
 
@@ -257,7 +374,7 @@ export function OnlineBookingPage({ storeId }: { storeId: string }) {
           <h2 className="text-lg font-bold text-luxas-ink">ご予約を受け付けました</h2>
           <p className="text-sm text-stone-600">受付番号: <span className="font-mono">{completedId.replace(/^reservation-?/, "")}</span></p>
           <p className="text-xs text-stone-500">{store.name} ／ {date} {slot?.time}〜 ／ 担当 {assignedName}</p>
-          <button type="button" onClick={() => { setStep("menu"); setMenuId(""); setSlot(null); setNominatedStaffId(""); setInfo({ name: "", phone: "", email: "", gender: "unspecified" }); }}
+          <button type="button" onClick={() => { setStep("menu"); setMenuId(""); setSlot(null); setNominatedStaffId(""); setNominationPicked(false); setInfo({ name: "", phone: "", email: "", gender: "unspecified" }); setGuestStep("gateway"); setLoginEmail(""); setLoginPassword(""); }}
             className="mx-auto mt-2 rounded-md border border-luxas-line bg-white px-4 py-2 text-sm font-medium text-stone-700">続けて予約する</button>
         </section>
       )}

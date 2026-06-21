@@ -42,7 +42,7 @@ function statusInfo(r: Reservation): { label: string; cls: string } {
 // マイページで使う共通データ＋セッションを読み出す。
 function useMyPageData() {
   const { memberId, hydrated, logout } = useMemberSession();
-  const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
@@ -57,7 +57,18 @@ function useMyPageData() {
       .sort((a, b) => `${b.date}${b.startTime}`.localeCompare(`${a.date}${a.startTime}`));
   }, [reservations, memberId]);
 
-  return { memberId, hydrated, logout, member, myReservations, services, staff };
+  // お客様によるキャンセル（取消）。台帳・集計と同じ canceled / cancelType=cancel を使う。
+  function cancelReservation(id: string) {
+    setReservations((cur) =>
+      cur.map((r) =>
+        r.id === id
+          ? { ...r, status: "canceled", cancelType: "cancel", canceledAt: new Date().toISOString() }
+          : r
+      )
+    );
+  }
+
+  return { memberId, hydrated, logout, member, myReservations, services, staff, cancelReservation };
 }
 
 // ── 共通レイアウト（タブ＋右メニュー）。未ログインはログイン誘導。 ─────────────
@@ -158,16 +169,22 @@ function MenuLink({ href, label }: { href: string; label: string }) {
 function ReservationCard({
   r,
   services,
-  staff
+  staff,
+  onCancel,
+  onChange
 }: {
   r: Reservation;
   services: ServiceMenu[];
   staff: StaffMember[];
+  onCancel?: (id: string) => void;
+  onChange?: (id: string) => void;
 }) {
   const menu = services.find((m) => m.id === r.serviceMenuId);
   const assignedName = staff.find((s) => s.id === r.staffId)?.displayName ?? "スタッフ";
   const total = r.saleAmount ?? menu?.price ?? 0;
   const st = statusInfo(r);
+  // 予約中（booked）の予約は、お客様が変更/キャンセルできる。完了/取消済みは不可。
+  const cancelable = r.status === "booked";
 
   return (
     <div className="rounded-lg border border-luxas-line bg-white">
@@ -180,6 +197,29 @@ function ReservationCard({
         <Row label="スタッフ" value={`${assignedName}${r.nominatedStaffId ? "（指名）" : ""}`} />
         <Row label="合計" value={formatCurrency(total)} />
       </dl>
+      {cancelable && (onCancel || onChange) && (
+        <div className="flex gap-2 border-t border-luxas-line px-5 py-3">
+          {onChange && (
+            <button
+              type="button"
+              onClick={() => onChange(r.id)}
+              className="flex-1 rounded-md py-2 text-sm font-semibold text-white"
+              style={{ backgroundColor: PM_NAVY }}
+            >
+              日時を変更
+            </button>
+          )}
+          {onCancel && (
+            <button
+              type="button"
+              onClick={() => onCancel(r.id)}
+              className="flex-1 rounded-md border border-red-300 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+            >
+              キャンセル
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -193,9 +233,26 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+// 予約のキャンセル/変更ハンドラ（確認ダイアログ付き）を組み立てる。
+// cancelReservation は呼び出し側の useMyPageData から受け取る（state を二重に持たない）。
+function useReservationActions(storeId: string, cancelReservation: (id: string) => void) {
+  const router = useRouter();
+  function onCancel(id: string) {
+    if (window.confirm("この予約をキャンセルします。よろしいですか？")) cancelReservation(id);
+  }
+  function onChange(id: string) {
+    if (window.confirm("現在の予約をキャンセルして、新しく予約し直します。よろしいですか？")) {
+      cancelReservation(id);
+      router.push(`/book/${storeId}/reserve`);
+    }
+  }
+  return { onCancel, onChange };
+}
+
 // ── ① マイページ ホーム ───────────────────────────────────────
 export function MyPageHome({ storeId }: { storeId: string }) {
-  const { member, myReservations, services, staff } = useMyPageData();
+  const { member, myReservations, services, staff, cancelReservation } = useMyPageData();
+  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation);
   const upcoming = myReservations.filter((r) => r.status !== "canceled");
 
   return (
@@ -206,7 +263,7 @@ export function MyPageHome({ storeId }: { storeId: string }) {
           <p className="text-sm text-stone-500">現在、予約はありません。</p>
         ) : (
           <div className="space-y-3">
-            <ReservationCard r={upcoming[0]} services={services} staff={staff} />
+            <ReservationCard r={upcoming[0]} services={services} staff={staff} onCancel={onCancel} onChange={onChange} />
           </div>
         )}
         <Link href={`/book/${storeId}/mypage/reservations`} className="mt-4 block rounded-md py-2.5 text-center text-sm font-semibold text-white" style={{ backgroundColor: PM_NAVY }}>
@@ -231,7 +288,8 @@ export function MyPageHome({ storeId }: { storeId: string }) {
 
 // ── ② 予約情報 ────────────────────────────────────────────────
 export function MyPageReservations({ storeId }: { storeId: string }) {
-  const { myReservations, services, staff } = useMyPageData();
+  const { myReservations, services, staff, cancelReservation } = useMyPageData();
+  const { onCancel, onChange } = useReservationActions(storeId, cancelReservation);
 
   return (
     <MyPageShell storeId={storeId} tab="reservations">
@@ -240,7 +298,9 @@ export function MyPageReservations({ storeId }: { storeId: string }) {
           <p className="text-sm text-stone-500">現在、予約はありません。</p>
         </section>
       ) : (
-        myReservations.map((r) => <ReservationCard key={r.id} r={r} services={services} staff={staff} />)
+        myReservations.map((r) => (
+          <ReservationCard key={r.id} r={r} services={services} staff={staff} onCancel={onCancel} onChange={onChange} />
+        ))
       )}
     </MyPageShell>
   );
