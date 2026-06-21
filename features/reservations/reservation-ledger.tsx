@@ -282,6 +282,30 @@ function getVisibleStaffForSelectedDate(staffList: StaffMember[], selectedDate: 
   );
 }
 
+// 指定日のスタッフの最も早いシフト開始時刻（分）。出勤が無ければ Infinity（=最後尾）。
+function getEarliestShiftStartMinutes(staffId: string, selectedDate: string, shifts: StaffShift[]): number {
+  const normalizedDate = normalizeDateInputValue(selectedDate);
+  if (!normalizedDate) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let earliest = Number.POSITIVE_INFINITY;
+  for (const shift of shifts) {
+    if ((shift.isActive ?? true) === false || shift.staffId !== staffId) {
+      continue;
+    }
+    if (normalizeDateInputValue(shift.workDate) !== normalizedDate) {
+      continue;
+    }
+    const shiftStart = normalizeTimeInputValue(shift.startTime);
+    if (!shiftStart) {
+      continue;
+    }
+    earliest = Math.min(earliest, timeToMinutes(shiftStart));
+  }
+  return earliest;
+}
+
 export function ReservationLedger() {
   const isDebugMode = process.env.NODE_ENV !== "production";
   const searchParams = useSearchParams();
@@ -391,11 +415,18 @@ export function ReservationLedger() {
   // 名前解決用の full `staff` 配列は絞らない（縦軸・担当候補のみ店舗スコープ）。
   const storeShifts = useMemo(() => filterShiftsByStore(shifts, currentStoreId), [shifts, currentStoreId]);
   // 縦軸＝現在店舗で選択日に有効シフトがあるスタッフのみ（所属だけでは出さない／シフトが無ければ空）。
-  const timelineStaff = useMemo(() => getVisibleStaffForSelectedDate(activeStaff, selectedDate, storeShifts), [
-    activeStaff,
-    selectedDate,
-    storeShifts
-  ]);
+  // 並び順は「その日の出勤開始が早い人を上から」。同時刻は従来の表示順（order）を維持。
+  const timelineStaff = useMemo(() => {
+    const visible = getVisibleStaffForSelectedDate(activeStaff, selectedDate, storeShifts);
+    return [...visible].sort((a, b) => {
+      const startA = getEarliestShiftStartMinutes(a.id, selectedDate, storeShifts);
+      const startB = getEarliestShiftStartMinutes(b.id, selectedDate, storeShifts);
+      if (startA !== startB) {
+        return startA - startB;
+      }
+      return compareBySortOrder(a, b);
+    });
+  }, [activeStaff, selectedDate, storeShifts]);
   // 担当候補＝現在店舗でフォーム日付に有効シフトがある有効スタッフ（編集時は選択中スタッフを別途保持）。
   const formCandidateStaff = useMemo(
     () => getVisibleStaffForSelectedDate(activeStaff, form.date, storeShifts),

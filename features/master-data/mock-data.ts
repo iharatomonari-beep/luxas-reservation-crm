@@ -753,14 +753,35 @@ export const initialRooms: ServiceRoom[] = [
 ];
 
 // --- シフト自動生成 ---
-// 各スタッフの定休曜日（regularDayOffs）以外の日に、店舗営業内の標準勤務 10:00〜20:00 を生成する。
+// 各スタッフの定休曜日（regularDayOffs）以外の日に、早番/中番/遅番のいずれかの勤務帯を生成する。
 // 期間: 2026-06-13 〜 2026-08-13。曜日番号は 0=日,1=月,2=火,3=水,4=木,5=金,6=土。
 // 勤務店舗（storeId）は所属店舗（homeStoreId）を反映する。
+// 勤務帯は実勤務時間データが無いため、各店舗内の表示順で 早→中→遅 を循環割り当てして時間にばらつきを持たせる。
+const SHIFT_BANDS = [
+  { startTime: "10:00", endTime: "19:00" }, // 早番
+  { startTime: "12:00", endTime: "21:00" }, // 中番
+  { startTime: "14:00", endTime: "23:00" } // 遅番
+];
+
+// 各スタッフへ勤務帯を割り当てる（店舗ごとに表示順で早→中→遅を循環）。
+function buildStaffBandMap(): Record<string, (typeof SHIFT_BANDS)[number]> {
+  const bandOf: Record<string, (typeof SHIFT_BANDS)[number]> = {};
+  const storeCounter: Record<string, number> = {};
+  for (const staff of initialStaff) {
+    const store = staff.homeStoreId ?? "";
+    const idx = storeCounter[store] ?? 0;
+    bandOf[staff.id] = SHIFT_BANDS[idx % SHIFT_BANDS.length];
+    storeCounter[store] = idx + 1;
+  }
+  return bandOf;
+}
+
 function generateSeedShifts(): StaffShift[] {
   const shifts: StaffShift[] = [];
   const startMs = Date.UTC(2026, 5, 13); // 2026-06-13
   const endMs = Date.UTC(2026, 7, 13); // 2026-08-13（含む）
   const dayMs = 24 * 60 * 60 * 1000;
+  const bandOf = buildStaffBandMap();
 
   for (let t = startMs; t <= endMs; t += dayMs) {
     const date = new Date(t);
@@ -776,12 +797,13 @@ function generateSeedShifts(): StaffShift[] {
         continue; // 定休日はシフトなし
       }
 
+      const band = bandOf[staff.id] ?? SHIFT_BANDS[0];
       shifts.push({
         id: `shift-${staff.id}-${yyyy}${mm}${dd}`,
         staffId: staff.id,
         workDate,
-        startTime: "10:00",
-        endTime: "20:00",
+        startTime: band.startTime,
+        endTime: band.endTime,
         breakStart: "",
         breakEnd: "",
         memo: "",
