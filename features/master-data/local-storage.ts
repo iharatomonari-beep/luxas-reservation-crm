@@ -29,7 +29,12 @@ const SEED_RESET_TOKENS: Record<string, string> = {
   "luxas-master-services": "2026-06-21-services-pm-all375",
   "luxas-master-categories": "2026-06-21-categories-pm14",
   // 会計アイテムを4区分→6区分に作り直し（割引/回数券利用/チケット利用/回数券販売/チケット販売/物販）。
-  "luxas-checkout-items": "2026-06-20-checkout-6kinds"
+  "luxas-checkout-items": "2026-06-20-checkout-6kinds",
+  // 物販カテゴリ／商品を PM実データ（有効・現役7店舗＋本部・名前+価格で重複排除）に置換。
+  "luxas-retail-categories": "2026-06-21-retail-pm",
+  "luxas-retail-items": "2026-06-21-retail-pm",
+  // オプションを PM実データ（有効・現役7店舗＋本部・名前+価格で重複排除・延長/割引/他を判定）に置換。
+  "luxas-master-options": "2026-06-21-options-pm"
 };
 
 export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
