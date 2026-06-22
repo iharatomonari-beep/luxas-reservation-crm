@@ -5,6 +5,9 @@ import { MasterPage } from "@/features/master-data/master-page";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { initialShifts, initialStaff, shiftsStorageKey, staffStorageKey } from "@/features/master-data/mock-data";
 import { dailyTargetsStorageKey } from "@/features/master-data/monthly-shift-grid";
+import { isRecordInStore } from "@/features/master-data/store-record-scope";
+import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import {
   attendanceStorageKey,
   expenseAccountsStorageKey,
@@ -23,7 +26,7 @@ import { makeLocalId } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import { CashDenominationTable, type CashCounts } from "@/features/daily/cash-denomination-table";
 
-type DailyTarget = { date: string; amount: number; comment: string };
+type DailyTarget = { date: string; amount: number; comment: string; storeId?: string };
 // 独立画面の表示種別（T055）。"all"=旧/dashboard/daily の統合4タブ（後方互換）。
 export type DailyView = "all" | "attendance" | "register" | "open" | "check" | "close" | "close-history" | "report" | "expenses";
 
@@ -97,6 +100,7 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
   const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const [targets] = useLocalCollection<DailyTarget>(dailyTargetsStorageKey, EMPTY_TARGETS);
   const [accounts] = useLocalCollection<ExpenseAccount>(expenseAccountsStorageKey, initialExpenseAccounts);
+  const { currentStoreId } = useCurrentStore();
 
   const [attendance, setAttendance] = useLocalCollection<AttendanceRecord>(attendanceStorageKey, EMPTY_ATTENDANCE);
   const [registers, setRegisters] = useLocalCollection<RegisterRecord>(registerStorageKey, EMPTY_REGISTERS);
@@ -108,7 +112,11 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
   const [to, setTo] = useState(today());
 
   const dayShifts = useMemo(() => shifts.filter((s) => s.workDate === date && (s.isActive ?? true)), [shifts, date]);
-  const dayReservations = useMemo(() => reservations.filter((r) => r.date === date && r.status !== "canceled"), [reservations, date]);
+  // 売上日報は現在店舗の予約のみを集計する（店舗をまたいだ混入を防ぐ）。
+  const dayReservations = useMemo(
+    () => filterReservationsByStore(reservations, currentStoreId).filter((r) => r.date === date && r.status !== "canceled"),
+    [reservations, date, currentStoreId]
+  );
 
   function attRecord(staffId: string) {
     return attendance.find((a) => a.date === date && a.staffId === staffId);
@@ -146,9 +154,9 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
         byMethod[p.method] = (byMethod[p.method] || 0) + p.amount;
       }
     }
-    const target = targets.find((t) => t.date === date)?.amount ?? 0;
+    const target = targets.find((t) => t.date === date && isRecordInStore(t, currentStoreId))?.amount ?? 0;
     return { count: dayReservations.length, visitors: new Set(dayReservations.map((r) => r.customerName)).size, totalSales, byMethod, target };
-  }, [dayReservations, targets, date]);
+  }, [dayReservations, targets, date, currentStoreId]);
 
   // 売上日報フォーム（PM全項目・一時保存/送信）。
   const reportForm = useMemo(() => reports.find((r) => r.date === date) ?? emptyReport(date), [reports, date]);

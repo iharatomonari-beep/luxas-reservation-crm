@@ -12,11 +12,12 @@ import {
 import type { StaffMember, StaffShift } from "@/features/master-data/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useCurrentStore } from "@/features/org/use-current-store";
+import { isRecordInStore } from "@/features/master-data/store-record-scope";
 import { stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 export const dailyTargetsStorageKey = "luxas-daily-targets";
 
-type DailyTarget = { date: string; amount: number; comment: string };
+type DailyTarget = { date: string; amount: number; comment: string; storeId?: string };
 
 const WEEKDAY = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -84,17 +85,18 @@ export function MonthlyShiftGrid() {
     );
   }
 
+  // 日次目標は店舗ごとに保持する。現在店舗のレコード（未設定の既存データは既定店舗扱い）だけを対象にする。
   function targetFor(dateStr: string) {
-    return targets.find((t) => t.date === dateStr) ?? null;
+    return targets.find((t) => t.date === dateStr && isRecordInStore(t, currentStoreId)) ?? null;
   }
 
   function updateTarget(dateStr: string, patch: Partial<DailyTarget>) {
     setTargets((current) => {
-      const existing = current.find((t) => t.date === dateStr);
+      const existing = current.find((t) => t.date === dateStr && isRecordInStore(t, currentStoreId));
       if (existing) {
-        return current.map((t) => (t.date === dateStr ? { ...t, ...patch } : t));
+        return current.map((t) => (t === existing ? { ...t, ...patch } : t));
       }
-      return [...current, { date: dateStr, amount: 0, comment: "", ...patch }];
+      return [...current, { date: dateStr, amount: 0, comment: "", storeId: currentStoreId, ...patch }];
     });
   }
 

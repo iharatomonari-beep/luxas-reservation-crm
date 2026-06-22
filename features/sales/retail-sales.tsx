@@ -14,6 +14,8 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import type { RetailItem, RetailSale } from "@/features/master-data/types";
 import { compareBySortOrder, formatCurrency, makeLocalId } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { filterRecordsByStore } from "@/features/master-data/store-record-scope";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import { toDateInputValue } from "@/features/reservations/date-utils";
 
 type SaleForm = { saleDate: string; customerName: string; retailItemId: string; quantity: string; unitPrice: string };
@@ -25,23 +27,27 @@ function createEmptyForm(): SaleForm {
 export function RetailSales() {
   const [items] = useLocalCollection<RetailItem>(retailItemsStorageKey, initialRetailItems);
   const [sales, setSales] = useLocalCollection<RetailSale>(retailSalesStorageKey, initialRetailSales);
+  const { currentStoreId } = useCurrentStore();
   const [form, setForm] = useState<SaleForm>(createEmptyForm);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
 
   const activeItems = useMemo(() => [...items].sort(compareBySortOrder).filter((i) => i.isActive), [items]);
   const itemNameById = useMemo(() => new Map(items.map((i) => [i.id, i.name])), [items]);
 
+  // 現在店舗の物販販売のみ表示・集計する（未設定の既存データは既定店舗扱い）。
+  const storeSales = useMemo(() => filterRecordsByStore(sales, currentStoreId), [sales, currentStoreId]);
+
   const sortedSales = useMemo(
     () =>
-      [...sales].sort((a, b) => {
+      [...storeSales].sort((a, b) => {
         if (a.saleDate !== b.saleDate) return a.saleDate < b.saleDate ? 1 : -1;
         return a.id < b.id ? 1 : -1;
       }),
-    [sales]
+    [storeSales]
   );
 
   const formSubtotal = (Number(form.quantity) || 0) * (Number(form.unitPrice) || 0);
-  const totalSales = sales.reduce((sum, sale) => sum + sale.quantity * sale.unitPrice, 0);
+  const totalSales = storeSales.reduce((sum, sale) => sum + sale.quantity * sale.unitPrice, 0);
 
   function handleItemChange(retailItemId: string) {
     const selected = items.find((i) => i.id === retailItemId);
@@ -61,6 +67,7 @@ export function RetailSales() {
     }
     const sale: RetailSale = {
       id: makeLocalId("retail-sale"),
+      storeId: currentStoreId,
       saleDate: form.saleDate,
       customerName: form.customerName.trim(),
       retailItemId: form.retailItemId,

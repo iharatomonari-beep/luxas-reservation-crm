@@ -29,6 +29,7 @@ import {
 import type { MasterTag, RetailSale, ServiceMenu, ServiceOption, ServiceRoom, StaffMember, StaffShift } from "@/features/master-data/types";
 import { initialStoreSettings, useStoreSettings } from "@/features/master-data/store-settings";
 import { dailyTargetsStorageKey } from "@/features/master-data/monthly-shift-grid";
+import { isRecordInStore } from "@/features/master-data/store-record-scope";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import type { Store } from "@/features/org/types";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
@@ -78,7 +79,7 @@ const timelineRowHeight = 64;
 // 安定参照の空配列（useLocalCollection の initialItems に毎回 [] を渡すと無限ループになるため）。
 const EMPTY_TURNAWAYS: TurnawayRecord[] = [];
 // 日次目標（T023）の最小型。安定参照のため空配列をモジュール定数で持つ（useLocalCollection の無限ループ回避）。
-type LedgerDailyTarget = { date: string; amount: number; comment: string };
+type LedgerDailyTarget = { date: string; amount: number; comment: string; storeId?: string };
 const EMPTY_DAILY_TARGETS: LedgerDailyTarget[] = [];
 const timelineHeaderHeight = 44;
 
@@ -607,10 +608,10 @@ export function ReservationLedger() {
     }
     return { totalSales, retailSales, courseSales, methodTotals, avgPerCustomer, newCount, repeatCount };
   }, [dayCustomerReservations, normalizedReservations, selectedDate]);
-  // 日次目標（T023）と達成度。selectedDate の目標額を読み、総販売額に対する達成率を出す。
+  // 日次目標（T023）と達成度。selectedDate・現在店舗の目標額を読み、総販売額に対する達成率を出す。
   const dailyTarget = useMemo(
-    () => dailyTargets.find((t) => t.date === selectedDate)?.amount ?? 0,
-    [dailyTargets, selectedDate]
+    () => dailyTargets.find((t) => t.date === selectedDate && isRecordInStore(t, currentStoreId))?.amount ?? 0,
+    [dailyTargets, selectedDate, currentStoreId]
   );
   const targetAchievement = dailyTarget > 0 ? Math.round((checkoutSummary.totalSales / dailyTarget) * 100) : null;
   // キャンセル種別別の件数（T035）。無断キャンセル/取消を集計バーに実値表示。
@@ -626,8 +627,11 @@ export function ReservationLedger() {
   }, [dayCustomerReservations]);
   // 当日情報パネル（T036）用の派生データ。
   const dayRetailTotal = useMemo(
-    () => retailSales.filter((s) => s.saleDate === selectedDate).reduce((sum, s) => sum + s.quantity * s.unitPrice, 0),
-    [retailSales, selectedDate]
+    () =>
+      retailSales
+        .filter((s) => s.saleDate === selectedDate && isRecordInStore(s, currentStoreId))
+        .reduce((sum, s) => sum + s.quantity * s.unitPrice, 0),
+    [retailSales, selectedDate, currentStoreId]
   );
   const dayPanelReservations = useMemo(() => {
     const keyword = dayPanelSearch.trim().toLowerCase();

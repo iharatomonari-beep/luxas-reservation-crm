@@ -325,6 +325,8 @@ export type RetailItem = {
 // 物販販売（T032）。会計(T022)との結合は将来。まずは物販単体で記録する。
 export type RetailSale = {
   id: string;
+  /** 店舗スコープ（非破壊・任意）。未設定の既存データは既定店舗扱い。 */
+  storeId?: string;
   /** 販売日（"YYYY-MM-DD"） */
   saleDate: string;
   /** 顧客名（任意・空文字可） */

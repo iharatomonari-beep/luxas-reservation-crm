@@ -6,9 +6,10 @@ import { initialReservations, reservationsStorageKey } from "@/features/reservat
 import type { Reservation } from "@/features/reservations/types";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { dailyTargetsStorageKey } from "@/features/master-data/monthly-shift-grid";
+import { filterRecordsByStore } from "@/features/master-data/store-record-scope";
 import { useCurrentStore } from "@/features/org/use-current-store";
 
-type DailyTarget = { date: string; amount: number; comment: string };
+type DailyTarget = { date: string; amount: number; comment: string; storeId?: string };
 const EMPTY_TARGETS: DailyTarget[] = [];
 
 export function TopKpi() {
@@ -44,12 +45,14 @@ export function TopKpi() {
       else newCount += 1;
     }
 
-    // 月間目標 = 当月の日次目標の合計。達成度 = 売上 / 月間目標。
-    const monthlyTarget = dailyTargets.filter((t) => t.date.startsWith(month)).reduce((sum, t) => sum + (t.amount || 0), 0);
+    // 月間目標 = 当月・現在店舗の日次目標の合計。達成度 = 売上 / 月間目標。
+    const monthlyTarget = filterRecordsByStore(dailyTargets, currentStoreId)
+      .filter((t) => t.date.startsWith(month))
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
     const achievement = monthlyTarget > 0 ? Math.round((sales / monthlyTarget) * 100) : null;
 
     return { sales, count: monthRes.length, visitors, paidCount: paid.length, avgPerCustomer, newCount, repeatCount, monthlyTarget, achievement };
-  }, [reservations, dailyTargets]);
+  }, [reservations, dailyTargets, currentStoreId]);
 
   const cards = [
     { label: "当月売上（会計済）", value: `¥${kpi.sales.toLocaleString()}` },

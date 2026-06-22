@@ -17,6 +17,7 @@ import type { RetailItem, RetailSale, ServiceMenu, StaffMember } from "@/feature
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
 import type { Reservation } from "@/features/reservations/types";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { filterRecordsByStore } from "@/features/master-data/store-record-scope";
 import { useCurrentStore } from "@/features/org/use-current-store";
 
 type Tab = "staff" | "service" | "hourly" | "trend" | "retail";
@@ -93,7 +94,8 @@ export function AnalyticsReports() {
   }, [monthReservations]);
 
   const retailSalesByItem = useMemo(() => {
-    const monthSales = retailSales.filter((s) => s.saleDate.startsWith(month));
+    // 物販売上も現在店舗で絞る（未設定の既存データは既定店舗扱い）。
+    const monthSales = filterRecordsByStore(retailSales, currentStoreId).filter((s) => s.saleDate.startsWith(month));
     const nameById = new Map(retailItems.map((i) => [i.id, i.name]));
     const map = new Map<string, number>();
     for (const s of monthSales) {
@@ -101,7 +103,7 @@ export function AnalyticsReports() {
       map.set(label, (map.get(label) || 0) + s.quantity * s.unitPrice);
     }
     return [...map.entries()].map(([label, amount]) => ({ label, amount })).sort((a, b) => b.amount - a.amount);
-  }, [retailSales, retailItems, month]);
+  }, [retailSales, retailItems, month, currentStoreId]);
   const retailTotal = retailSalesByItem.reduce((sum, x) => sum + x.amount, 0);
 
   const inputClass = "rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm outline-none focus:border-luxas-green";
