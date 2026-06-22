@@ -108,12 +108,13 @@ export function LoginForm({
         </button>
       </form>
 
-      {!isSupabaseConfigured ? (
+      {/* 無認証プレビュー導線は開発環境のみ表示する（本番では fail-closed で /dashboard を保護）。 */}
+      {!isSupabaseConfigured && process.env.NODE_ENV !== "production" ? (
         <Link
           href="/dashboard"
           className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border border-luxas-line bg-white px-4 py-3 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"
         >
-          管理画面プレビューを開く
+          管理画面プレビューを開く（開発用）
           <ArrowRight size={18} aria-hidden="true" />
         </Link>
       ) : null}
