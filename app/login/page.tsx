@@ -1,12 +1,20 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const configured = isSupabaseConfigured();
+  const { error } = await searchParams;
+  // 認可拒否(=スタッフ以外のログイン済みユーザー)の場合は /dashboard へ自動で戻さない（リダイレクトループ防止）。
+  const forbidden = error === "forbidden";
 
-  if (configured) {
+  if (configured && !forbidden) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user }
@@ -47,7 +55,10 @@ export default async function LoginPage() {
           </dl>
         </section>
 
-        <LoginForm isSupabaseConfigured={configured} />
+        <div>
+          {forbidden ? <ForbiddenNotice /> : null}
+          <LoginForm isSupabaseConfigured={configured} />
+        </div>
       </div>
     </main>
   );

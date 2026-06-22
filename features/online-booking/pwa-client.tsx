@@ -14,8 +14,20 @@ type BeforeInstallPromptEvent = Event & {
 export function PwaRegister() {
   useEffect(() => {
     if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      // 旧版で root スコープ("/")に登録された Service Worker が残っていると、管理画面を含む
+      // 全ナビゲーションをキャッシュし得る。まず /book/ 以外のスコープの登録を解除してから登録し直す（移行）。
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => {
+          for (const registration of registrations) {
+            if (!registration.scope.endsWith("/book/")) {
+              registration.unregister().catch(() => {});
+            }
+          }
+        })
+        .catch(() => {});
+
       // 公開予約サイト配下のみを Service Worker のスコープにする。
-      // 既定スコープ "/" のままだと管理画面(/dashboard)のナビゲーションまでキャッシュ対象になるため限定する。
       navigator.serviceWorker.register("/sw.js", { scope: "/book/" }).catch(() => {});
     }
   }, []);
