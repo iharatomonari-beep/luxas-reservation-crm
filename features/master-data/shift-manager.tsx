@@ -8,6 +8,7 @@ import { MasterPage } from "@/features/master-data/master-page";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import type { StaffMember, StaffShift } from "@/features/master-data/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { isShiftInStore, isStaffHomeStore } from "@/features/master-data/store-staff-scope";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { stampCreate } from "@/features/master-data/timestamps";
 
@@ -53,7 +54,11 @@ export function ShiftManager() {
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [shifts, setShifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
   const { currentStoreId } = useCurrentStore();
-  const activeStaff = useMemo(() => staff.filter((item) => item.isActive), [staff]);
+  // 現在店舗に所属するスタッフのみ（未設定の既存スタッフは既定店舗扱い）。
+  const activeStaff = useMemo(
+    () => staff.filter((item) => item.isActive && isStaffHomeStore(item, currentStoreId)),
+    [staff, currentStoreId]
+  );
 
   const [selectedStaffId, setSelectedStaffId] = useState<string>(activeStaff[0]?.id ?? "");
   const [pattern, setPattern] = useState<WeeklyPattern>(makeDefaultPattern());
@@ -80,7 +85,8 @@ export function ShiftManager() {
       next[day] = { ...next[day], enabled: false };
     }
     for (const shift of shifts) {
-      if (shift.staffId !== selectedStaffId || shift.workDate < todayStr || (shift.isActive ?? true) === false) {
+      // 現在店舗のシフトのみから復元する（他店のシフトを混ぜない）。
+      if (shift.staffId !== selectedStaffId || shift.workDate < todayStr || (shift.isActive ?? true) === false || !isShiftInStore(shift, currentStoreId)) {
         continue;
       }
       const wd = weekdayOf(shift.workDate);
@@ -94,7 +100,7 @@ export function ShiftManager() {
     }
     setPattern(next);
     setMessage(null);
-  }, [selectedStaffId, shifts]);
+  }, [selectedStaffId, shifts, currentStoreId]);
 
   function updateDay(day: number, patch: Partial<DayPattern>) {
     setPattern((current) => ({ ...current, [day]: { ...current[day], ...patch } }));
@@ -160,9 +166,10 @@ export function ShiftManager() {
 
     // 対象スタッフの期間内（今日〜2ヶ月後）を全上書き。期間外・他スタッフは保持。
     setShifts((current) => {
+      // 現在店舗の対象期間のみ上書きし、他店のシフトは保持する。
       const kept = current.filter(
         (shift) =>
-          !(shift.staffId === selectedStaffId && shift.workDate >= startStr && shift.workDate <= endStr)
+          !(shift.staffId === selectedStaffId && shift.workDate >= startStr && shift.workDate <= endStr && isShiftInStore(shift, currentStoreId))
       );
       return [...kept, ...generated];
     });
@@ -175,8 +182,8 @@ export function ShiftManager() {
 
   const selectedStaffShiftCount = useMemo(() => {
     const todayStr = toYmd(new Date());
-    return shifts.filter((shift) => shift.staffId === selectedStaffId && shift.workDate >= todayStr).length;
-  }, [shifts, selectedStaffId]);
+    return shifts.filter((shift) => shift.staffId === selectedStaffId && shift.workDate >= todayStr && isShiftInStore(shift, currentStoreId)).length;
+  }, [shifts, selectedStaffId, currentStoreId]);
 
   return (
     <MasterPage

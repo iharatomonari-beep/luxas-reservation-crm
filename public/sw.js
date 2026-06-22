@@ -13,9 +13,12 @@ self.addEventListener("install", () => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      // 旧キャッシュ（v1 など現行 CACHE 以外）を削除する。
+      // 自アプリの旧キャッシュ（luxas-book-* で現行 CACHE 以外）だけを削除する。
+      // 同一origin上の無関係なキャッシュを巻き込まないよう接頭辞で限定する。
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
+      await Promise.all(
+        keys.filter((key) => key.startsWith("luxas-book") && key !== CACHE).map((key) => caches.delete(key))
+      );
       await self.clients.claim();
     })()
   );

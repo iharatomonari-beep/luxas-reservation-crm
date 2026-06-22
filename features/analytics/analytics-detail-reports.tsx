@@ -19,6 +19,7 @@ import type { RetailItem, RetailSale, ServiceMenu, StaffMember } from "@/feature
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
 import type { Reservation } from "@/features/reservations/types";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { filterRecordsByStore } from "@/features/master-data/store-record-scope";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { serializeCsv } from "@/features/import-export/csv-utils";
 
@@ -169,7 +170,8 @@ export function AnalyticsDetailReports() {
   const retailItemName = useMemo(() => new Map(retailItems.map((i) => [i.id, i.name])), [retailItems]);
   const retailRows = useMemo(() => {
     const map = new Map<string, { sales: number; qty: number }>();
-    for (const s of retailSales) {
+    // 物販売上も現在店舗で絞る（未設定の既存データは既定店舗扱い）。帳票/CSV出力も店舗別に統一。
+    for (const s of filterRecordsByStore(retailSales, currentStoreId)) {
       if (!s.saleDate.startsWith(month)) continue;
       const prev = map.get(s.retailItemId) ?? { sales: 0, qty: 0 };
       map.set(s.retailItemId, { sales: prev.sales + s.unitPrice * s.quantity, qty: prev.qty + s.quantity });
@@ -177,7 +179,7 @@ export function AnalyticsDetailReports() {
     return [...map.entries()]
       .map(([id, v]) => ({ 物販商品: retailItemName.get(id) ?? id, 数量: v.qty, 売上: v.sales }))
       .sort((a, b) => b.売上 - a.売上);
-  }, [retailSales, month, retailItemName]);
+  }, [retailSales, month, retailItemName, currentStoreId]);
 
   // 時間帯別来店（開始時刻の時で集計）
   const hourlyRows = useMemo(() => {

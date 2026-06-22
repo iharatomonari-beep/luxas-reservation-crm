@@ -13,6 +13,7 @@ import type { StaffMember, StaffShift } from "@/features/master-data/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { isRecordInStore } from "@/features/master-data/store-record-scope";
+import { isShiftInStore, isStaffHomeStore } from "@/features/master-data/store-staff-scope";
 import { stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 
 export const dailyTargetsStorageKey = "luxas-daily-targets";
@@ -38,7 +39,11 @@ export function MonthlyShiftGrid() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
 
-  const activeStaff = useMemo(() => staff.filter((s) => s.isActive), [staff]);
+  // 現在店舗に所属するスタッフのみ表示（未設定の既存スタッフは既定店舗扱い）。他店スタッフの表示・上書きを防ぐ。
+  const activeStaff = useMemo(
+    () => staff.filter((s) => s.isActive && isStaffHomeStore(s, currentStoreId)),
+    [staff, currentStoreId]
+  );
 
   const dates = useMemo(() => {
     const count = new Date(year, month + 1, 0).getDate();
@@ -49,21 +54,28 @@ export function MonthlyShiftGrid() {
     });
   }, [year, month]);
 
+  // 検索/削除/更新はすべて現在店舗のシフトに限定する（他店の同一スタッフ・同日シフトを巻き込まない）。
+  function isThisCell(s: StaffShift, staffId: string, dateStr: string) {
+    return s.staffId === staffId && s.workDate === dateStr && isShiftInStore(s, currentStoreId);
+  }
+
   function shiftFor(staffId: string, dateStr: string) {
-    return shifts.find((s) => s.staffId === staffId && s.workDate === dateStr) ?? null;
+    return shifts.find((s) => isThisCell(s, staffId, dateStr)) ?? null;
   }
 
   function toggleShift(staffId: string, dateStr: string, enabled: boolean) {
     setShifts((current) => {
-      const others = current.filter((s) => !(s.staffId === staffId && s.workDate === dateStr));
+      // 現在店舗の当該セルだけを除去し、他店のシフトは温存する。
+      const others = current.filter((s) => !isThisCell(s, staffId, dateStr));
       if (!enabled) {
         return others;
       }
-      const existing = current.find((s) => s.staffId === staffId && s.workDate === dateStr);
+      const existing = current.find((s) => isThisCell(s, staffId, dateStr));
       return [
         ...others,
         existing ?? stampCreate({
-          id: `shift-${staffId}-${dateStr.replace(/-/g, "")}`,
+          // ID に店舗を含め、店舗間のID衝突を防ぐ。
+          id: `shift-${currentStoreId}-${staffId}-${dateStr.replace(/-/g, "")}`,
           staffId,
           workDate: dateStr,
           startTime: "10:00",
@@ -81,7 +93,7 @@ export function MonthlyShiftGrid() {
 
   function updateShiftTime(staffId: string, dateStr: string, field: "startTime" | "endTime", value: string) {
     setShifts((current) =>
-      current.map((s) => (s.staffId === staffId && s.workDate === dateStr ? stampUpdate({ ...s, [field]: value }, s) : s))
+      current.map((s) => (isThisCell(s, staffId, dateStr) ? stampUpdate({ ...s, [field]: value }, s) : s))
     );
   }
 

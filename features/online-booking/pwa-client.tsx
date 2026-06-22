@@ -14,13 +14,16 @@ type BeforeInstallPromptEvent = Event & {
 export function PwaRegister() {
   useEffect(() => {
     if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-      // 旧版で root スコープ("/")に登録された Service Worker が残っていると、管理画面を含む
-      // 全ナビゲーションをキャッシュし得る。まず /book/ 以外のスコープの登録を解除してから登録し直す（移行）。
+      // 旧版で root スコープ("/")に登録された本アプリの Service Worker(/sw.js)が残っていると、
+      // 管理画面を含む全ナビゲーションをキャッシュし得る。**自アプリの /sw.js 由来の旧登録だけ**を解除する
+      // （同一origin上の無関係なSWを巻き込まないよう、scriptURL が /sw.js のものに限定）。
       navigator.serviceWorker
         .getRegistrations()
         .then((registrations) => {
           for (const registration of registrations) {
-            if (!registration.scope.endsWith("/book/")) {
+            const scriptUrl = registration.active?.scriptURL || registration.waiting?.scriptURL || registration.installing?.scriptURL || "";
+            const isOwnSw = scriptUrl.endsWith("/sw.js");
+            if (isOwnSw && !registration.scope.endsWith("/book/")) {
               registration.unregister().catch(() => {});
             }
           }
