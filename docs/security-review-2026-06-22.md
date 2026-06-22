@@ -161,3 +161,23 @@
 5. nonce付き完全CSP、監査ログ、メール/SMS実装時のPII再レビュー。
 
 クロスチェック関連コミット: `5682eb2`（SW/CSV）/ `cb89c83`（管理画面RBAC暫定）/ `20c97f2`（safeHttpUrl改善）。
+
+---
+
+## 8. Codex 第2回クロスチェックと追加対応
+
+第2回で「前回の大穴はかなり塞がった」評価。残る3点（いずれも Medium）をコードで再現確認のうえ修正。
+
+- **認可拒否のリダイレクトループ**（`5682eb2`の認可対応の副作用）→ `bd41725`: allowlist外ユーザーが `/login?error=forbidden`→`/dashboard`→…で無限ループ。`app/login/page.tsx` を `error=forbidden` 時は自動リダイレクトせず、`components/auth/forbidden-notice.tsx`（権限なし案内＋ログアウト導線）を表示するよう修正。
+- **旧rootスコープ Service Worker の移行漏れ** → `bd41725`: 既存ブラウザに残る `/` スコープ旧SWと旧キャッシュ(v1)を、`pwa-client.tsx` の getRegistrations で unregister＋`public/sw.js` のキャッシュ名を v2 に上げ activate で旧キャッシュ削除。
+- **店舗別KPI/会計の非スコープ混入（最重要）** → `50c1e42`: 日次目標(DailyTarget)・物販売上(RetailSale)・売上日報が店舗スコープされておらず店舗間で混入（日次目標は日付キーのみで衝突）。汎用ヘルパー `features/master-data/store-record-scope.ts` を新設し、storeId 付与＋現在店舗で絞り込み（top-kpi/ledger/analytics/daily-ops/retail-sales/monthly-shift-grid）。未設定の既存データは既定店舗扱い＝非破壊。
+
+### Codex 第2回で「OK」とされた点
+- CSV無害化（LF/BOM/先頭空白まで中和。全角＝は数式トリガでないため許容）、`safeHttpUrl`/`resolveSafeNext` の主要バイパス耐性、`/dashboard/**` の共通layout経由の迂回なし。
+
+### この時点の残課題（外販前・DB/インフラ前提は不変）
+- 本丸（localStorage全保存・会員偽装・IDOR・RLS未実装・公開予約の濫用対策なし）は未解消＝Supabaseバックエンド前提。
+- daily-ops の出勤/レジ金/経費/日報レコード自体は date キーのみで未スコープ（運用記録・別途対応）。
+- 依存（Next/postcss Moderate）の更新、nonce付き完全CSP、middleware、監査ログ。
+
+第2回関連コミット: `bd41725`（ループ/SW移行）/ `50c1e42`（店舗スコープ完成）。
