@@ -1,57 +1,125 @@
-# セキュリティレビュー（外販・SaaS化前提）2026-06-22
+# LUXAS 予約・顧客管理システム セキュリティレビュー（外販・SaaS化前提）
 
-4領域（認証・セッション／データ分離・マルチテナント／シークレット・設定・依存／アプリ層脆弱性）を監査し、外部設定なしで直せる項目を実装した記録。本システムは現状 **localStorage プロトタイプ**（データは全てブラウザ保存・サーバー側強制なし）であり、外販SaaSにするには後述のサーバーデータ層＋RLSの構築が前提。
+- 日付: 2026-06-22
+- 対象: `/Users/C.C/claude code/luxas-reservation-crm`（Next.js 15 App Router + Supabase / 現状 localStorage プロトタイプ）
+- 目的: マルチテナントSaaSとして外販する前提で、攻撃される前提でも壊れにくい構造かを全面監査し、外部設定なしで直せる項目を実装する。
+- 監査範囲: ①認証・セッション ②データ分離・マルチテナント ③シークレット・設定・依存 ④アプリ層脆弱性・入力検証
 
-## 0. 最重要（ユーザー対応が必要・コードでは直せない）
+> 結論（先に）: **現状はデータが全てブラウザの localStorage に保存され、サーバー側のアクセス制御が一切ない**プロトタイプ。「店舗スコープ」も画面上のフィルタにすぎない。このままでは外販不可。今回、**現公開サイトで到達可能な実害2件を修正**し、**本番化前提の認証 fail-closed 化＋セキュリティヘッダ**を実装した。本丸（テナント分離・RLS・本格認証）は Supabase バックエンド構築が前提。
 
-1. **【至急】OpenAI APIキーのローテーション**: `.env.local` に実在の `sk-proj-...` キーがある。**git管理対象外（コミット履歴にも無し）で漏えいはしていない**が、ツール文脈で読み取られたため**無効化＆再発行を推奨**。保管場所(.env.local)は正しい。
+---
+
+## 0. 最優先アクション（コードでは直せない・ユーザー対応）
+
+1. **【至急】OpenAI APIキーのローテーション**: `.env.local` に実在の `sk-proj-...` キーがある。**git管理対象外（履歴にも無し）で漏えいはしていない**が、無効化＆再発行を推奨。保管場所(.env.local)は正しい。
 2. **本番の核＝Supabase接続**: データ永続化・本格認証・RLSは Supabase プロジェクト作成＋`.env.local` への `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` 設定が前提（現状 preview mode）。
+3. **`npm audit` の実行**: ネットワーク制約で今回未実行。オンライン環境で実行し依存脆弱性を確認。
 
-## 1. 実装した修正（このセッション・push済み）
+---
 
-### 実害（現公開サイトで到達可能）— commit `89bbb10`
-- **CSV数式インジェクション(CWE-1236)**: `features/import-export/csv-utils.ts` の `escapeCsvValue` で、先頭が `= + - @`・タブ・CR のセルにシングルクオートを付与。顧客名/メモ/注意事項など利用者入力がCSV出力されるため、Excel/Sheetsでの数式実行（情報窃取・コマンド実行）を防止。
-- **URLスキームXSS**: 公開サイトのHP URL(`public-sidebar.tsx`)・店舗画像(`home-view.tsx`)を `safeHttpUrl()`（`features/master-data/utils.ts` 新設・**許可リスト方式**で http(s) のみ許可）でガード。`javascript:`/`data:`/`vbscript:` を遮断。外部リンクは `rel="noreferrer noopener"`。
-- **オープンリダイレクト**: `app/auth/callback/route.ts` の `next` を `new URL()`＋同一オリジン検証で許可リスト化。`//evil.com` 等のプロトコル相対バイパスを遮断。`exchangeCodeForSession` の失敗を検査し、内部情報を出さずログイン誘導。
+## 1. 今回実装した修正（すべて main に push 済み・`npx tsc --noEmit`/`npm run lint` クリーン）
 
-### 認証・ヘッダ堅牢化 — commit `45296c9`
-- **fail-closed認証**: `app/dashboard/layout.tsx` で、Supabase未設定時の無認証プレビューを**開発環境(NODE_ENV!=="production")のみ**に限定。本番は必ず `/login` へ。env注入漏れ・誤設定で管理画面（顧客/予約/会計）が無認証全開放される fail-open を解消。`login-form.tsx` のプレビュー導線も開発環境のみ表示。
-- **セキュリティヘッダ**: `next.config.ts` で全レスポンスに `X-Frame-Options: SAMEORIGIN`・`X-Content-Type-Options: nosniff`・`Referrer-Policy`・`Permissions-Policy`・`Strict-Transport-Security`・`Content-Security-Policy: frame-ancestors 'self'` を付与。
+### commit `89bbb10` — 公開サイトの実害脆弱性（現状で到達可能）
+- **CSV数式インジェクション (CWE-1236)** — `features/import-export/csv-utils.ts` `escapeCsvValue`
+  - 先頭が `= + - @`・タブ・CR のセルにシングルクオートを付与して無害化。
+  - 顧客名・メモ・注意事項など利用者入力がCSV出力されるため、Excel/Sheets で開くと数式が実行され情報窃取/コマンド実行の恐れがあった。**現公開サイトの予約者名から到達可能**だった実害。
+- **URLスキームXSS** — `features/online-booking/public-sidebar.tsx`（HP URL）, `features/online-booking/home-view.tsx`（店舗画像）
+  - 新ヘルパー `safeHttpUrl()`（`features/master-data/utils.ts`）で **http(s) のみ許可（許可リスト方式）**。`javascript:` / `data:` / `vbscript:` を遮断。
+  - 外部リンクは `rel="noreferrer noopener"`。
+- **オープンリダイレクト** — `app/auth/callback/route.ts`
+  - `next` を `new URL()`＋同一オリジン検証で許可リスト化し、`//evil.com` 等のプロトコル相対バイパスを遮断。
+  - `exchangeCodeForSession` の失敗を検査し、内部情報を返さずログインへ誘導。
 
-## 2. 監査で確認した良好点
-- `service_role` キーはクライアント/サーバーいずれにも露出なし。Supabaseクライアントは anon キーのみ。
-- サーバー認証は `getUser()`（検証あり）を使用。`getSession()`（cookie盲信）は不使用。
-- `dangerouslySetInnerHTML`/`eval`/`innerHTML` は皆無。動的値は全てJSXエスケープ。
-- 顧客PIIを第三者へ送信していない（天気=店舗座標のみ、地図=店舗住所のみ、メール/SMSはモックで実送信なし）。
-- `.gitignore` は `.env*` を網羅、シークレットのコミット履歴なし。依存は小さくlockfileあり。
+### commit `45296c9` — 認証 fail-closed 化＋セキュリティヘッダ
+- **fail-closed認証** — `app/dashboard/layout.tsx`
+  - Supabase未設定時の無認証プレビューを **開発環境(`NODE_ENV!=="production"`)のみ** に限定。本番は必ず `/login` へ。
+  - これにより、env注入漏れ・誤設定で **管理画面（顧客/予約/会計）が無認証で全開放される fail-open** を解消。
+  - `components/auth/login-form.tsx` の「管理画面プレビューを開く」導線も開発環境のみ表示。
+- **セキュリティレスポンスヘッダ** — `next.config.ts`（全レスポンス）
+  - `X-Frame-Options: SAMEORIGIN`（クリックジャッキング）/ `X-Content-Type-Options: nosniff` / `Referrer-Policy: strict-origin-when-cross-origin` / `Permissions-Policy: camera=(),microphone=(),geolocation=(),payment=()` / `Strict-Transport-Security: max-age=31536000; includeSubDomains` / `Content-Security-Policy: frame-ancestors 'self'`。
+  - ※ スクリプト制限の完全CSPは nonce 配布(middleware)が前提のため後続課題。ヘッダは dev 再起動／本番ビルドで反映。
 
-## 3. 未対応（サーバーデータ層が前提・外販前に必須）
+### commit `767c4f1` / 本ファイル — レビュー記録
 
-これらは **localStorage プロトタイプである限り「設計上の負債」で、Supabase移行時に必ず実装が必要**。現状はサーバーが無いため即時の実被害は限定的だが、サーバー化した瞬間に脆弱性になる。
+---
 
-| 重大度 | 項目 | 内容 |
-|---|---|---|
-| CRITICAL | サーバーデータ層が無い | 予約/顧客PII/カルテ/会計が全てブラウザ localStorage（41キー・46利用箇所）。サーバー強制ゼロ。 |
-| CRITICAL | テナント分離なし | `supabase/schema.sql` は store_id 列ありだが **RLS未設定・tenant_id/areas列なし**。デプロイすると anon キーで全テナント素通し。 |
-| CRITICAL | 顧客PII/カルテが全件グローバル | `caution`/`chartMemo`（医療隣接情報）含め店舗/テナント絞りなしで全ロード。APPI(個人情報保護法)観点で要対応。 |
-| CRITICAL | 会員ログインが偽装可能 | `use-member-session.ts`＝localStorageのID文字列のみ。`handleGuestLogin` はメール存在のみでパスワード未検証。任意顧客になりすまし可能。 |
-| CRITICAL | IDOR | mypageの予約キャンセル/変更/会員更新が id 指定で所有権再検証なし。サーバー化で他人のデータ改変が成立。 |
-| HIGH | 公開予約の濫用対策なし | 認証/レート制限/CAPTCHA/サーバー側空き再検証なし。サーバー化で大量作成・枠占有・顧客レコード乗っ取り。 |
-| HIGH | currentStoreId がクライアント可変 | `use-current-store.ts`＝localStorage値。認証セッションから店舗/テナントを導出していない。 |
-| HIGH | 「店舗スコープ」は画面フィルタのみ | `store-scope.ts` 等は読込済みデータの `.filter()`。サーバー制約クエリではない。 |
-| MEDIUM | 完全CSP未設定 | nonce配布(middleware)が前提。スクリプト制限CSPは未導入。 |
-| MEDIUM | middleware.ts 無し | エッジでの fail-closed ゲート／Supabaseセッション更新が無い。 |
+## 2. 監査の詳細所見
+
+### ① 認証・セッション
+- **CRITICAL**: `/dashboard` が preview mode（Supabase未設定）で完全ノーガード。`app/dashboard/layout.tsx` が `if (configured)` でのみ認証チェックし、未設定時は `preview@luxas.local` で全描画。ログイン画面に「管理画面プレビューを開く」リンクまであった。→ **本セッションで fail-closed 化して解消**（本番のみ）。
+- **CRITICAL（会員領域）**: 公開予約サイトの会員ログインは `localStorage["luxas-book-member-id"]` の文字列のみ。`handleGuestLogin` は**メール存在のみでパスワード未検証**、`pickDemoMemberId` は任意顧客を選べる。誰でも devtools で任意顧客になりすまし、PII閲覧・予約改ざんが可能。→ **サーバー認証が前提のため未対応**（プロトタイプの設計限界）。
+- **HIGH**: `middleware.ts` が存在せず、エッジでの fail-closed ゲート／Supabaseセッション更新が無い。
+- **HIGH**: 「認証ON/OFF」を公開env変数の有無で判定していた（fail-openの根因）。→ fail-closed 化で緩和。
+- **MEDIUM**: OAuthコールバックの open-redirect ガードが `startsWith("/")` のみで `//` を通す＋ exchange 結果未検査。→ **修正済**。
+- 良好: `service_role` キーはどこにも露出なし。anonキーのみ。サーバーは `getUser()`（検証あり）使用、`getSession()` 不使用。
+
+### ② データ分離・マルチテナント
+- **CRITICAL**: サーバーデータ層が無い。`features/master-data/local-storage.ts` の `useLocalCollection` が唯一の永続化で、**41種の `luxas-*` キー・46利用箇所**に予約/顧客PII/スタッフ/会計が全てブラウザ保存。Supabaseは認証(`auth.*`)のみ使用しデータCRUDはゼロ。
+- **CRITICAL（PII）**: 顧客が店舗/テナント絞りなしで全件ロード（`customer-manager.tsx`）。`caution`/`chartMemo`（医療隣接の注意事項・カルテ）含む。APPI(個人情報保護法)観点で要対応。
+- **CRITICAL（スキーマ）**: `supabase/schema.sql` は store_id 列ありだが **RLS未設定・`tenant_id`/`areas` 無し**。デプロイすると anon キーで全テナント素通し（Supabaseはデフォルトでテーブル全開放）。
+- **HIGH**: `currentStoreId` は `use-current-store.ts` の localStorage 値でユーザーが自由に変更可能。認証セッションから店舗/テナントを導出していない。
+- **HIGH**: 「店舗スコープ」(`store-scope.ts` 等)は読込済みデータの `.filter()` ＝画面フィルタのみ。「storeId未設定→既定店舗に表示」のフォールバックは漏えい/誤表示の footgun。
+
+### ③ シークレット・設定・依存
+- **CRITICAL（要ローテーション）**: `.env.local` に実在 OpenAI キー（git管理外・履歴に無し・漏えいなし。再発行推奨）。
+- **MEDIUM**: セキュリティヘッダが全く無かった（CSP/HSTS/X-Frame-Options等）。→ **本セッションで付与**。
+- 良好: `.gitignore` は `.env*` 網羅。コミット履歴にシークレット無し。`dangerouslySetInnerHTML` 皆無。依存は小さくlockfileあり。
+- 注意（運用）: `scripts/ask-chatgpt.mjs` は `--file` で渡したファイルをOpenAIへ送る。**顧客データを渡さない**運用ルールを徹底。
+- 注意: メール/SMSは現状モックで実送信なし＝PIIは外部に出ていない。実プロバイダ(SendGrid/Twilio等)連携時にサーバー専用シークレット管理とPII再レビューが必要。
+
+### ④ アプリ層脆弱性・入力検証
+- **MEDIUM（実害）**: CSV数式インジェクション。→ **修正済**。
+- **MEDIUM（実害）**: `href={settings.hpUrl}` のスキーム未検証で `javascript:` XSS。→ **修正済**。`<img src>` も同様にガード済。
+- **MEDIUM**: open-redirect（`//host`）。→ **修正済**。
+- **CRITICAL（サーバー化時）**: 公開予約 `confirm()` がクライアント構築のレコードをそのまま保存。サーバー化すると `status/customerId/staffId/storeId` を任意指定可能・空き判定がクライアントのみ・レート制限/CAPTCHA無しで大量作成や枠占有が成立。
+- **CRITICAL（サーバー化時）**: mypage の予約キャンセル/変更/会員更新が id 指定で所有権再検証なし＝IDOR。
+- 良好: Google Maps 埋め込みは固定ベース＋`encodeURIComponent` で安全。`.ics` 生成は RFC5545 エスケープ済。
+
+---
+
+## 3. 残課題（localStorageプロトタイプである限り解消不可・Supabaseバックエンド前提）
+
+| 重大度 | 項目 |
+|---|---|
+| CRITICAL | サーバーデータ層が無い（全データ localStorage） |
+| CRITICAL | テナント分離なし（RLS未設定・tenant_id無し） |
+| CRITICAL | 顧客PII/カルテが全件グローバル（医療隣接情報・APPI） |
+| CRITICAL | 会員ログイン偽装可能（パスワード未検証・localStorage ID） |
+| CRITICAL | IDOR（mypageの予約/会員操作で所有権チェックなし） |
+| HIGH | 公開予約の濫用対策なし（認証/レート制限/CAPTCHA/サーバー側空き再検証） |
+| HIGH | currentStoreId がクライアント可変 |
+| HIGH | 店舗スコープが画面フィルタのみ |
+| MEDIUM | 完全CSP（nonce/ middleware）未導入 |
+| MEDIUM | middleware.ts 無し／監査ログ未使用 |
+
+---
 
 ## 4. 外販に向けた推奨ロードマップ（優先順）
 
-1. **【至急】OpenAIキーをローテーション**（ユーザー作業）。
-2. **Supabaseバックエンド構築**（ユーザーのプロジェクト作成＋env）→ 全データを Postgres へ移し、クライアントを source of truth から外す。
-3. **スキーマに `tenants`/`areas` テーブルと全テーブル `tenant_id` 追加 ＋ 全テーブルRLS有効化**。ポリシーは `auth.uid()`→`users`/`user_roles` 経由でテナント/店舗を導出（クライアント値は使わない）。`caution`/`chartMemo`/CSV出力は列・ロール単位ポリシー＋`audit_logs`（既存・未使用）への記録。
-4. **認証を Supabase 由来に**: 会員/管理ともサーバーセッションから identity 導出。会員ログインのパスワード検証、管理は RBAC。
-5. **サーバー側の認可・入力検証**: 予約作成/キャンセル/会員更新で所有権チェック、空き枠のサーバー再検証、レート制限＋CAPTCHA、Zod等で全入力を許可リスト検証。クライアント送信の `status/customerId/staffId/storeId` は信用せずサーバー導出。
-6. **middleware.ts**＋nonce付き完全CSP、監査ログ、メール/SMS実装時のサーバー専用シークレット管理とPII再レビュー。
+1. **【至急・ユーザー】OpenAIキーをローテーション**。
+2. **【ユーザー】Supabaseプロジェクト作成＋`.env.local` に2行**（本格認証/RLSの土台）。
+3. **【実装可・SQLのみ先行】スキーマに `tenants`/`areas` ＋ 全テーブル `tenant_id` 追加 ＋ 全テーブルRLS有効化**。ポリシーは `auth.uid()`→`users`/`user_roles` 経由でテナント/店舗導出（クライアント値は使わない）。`caution`/`chartMemo`/CSV出力は列・ロール単位ポリシー＋`audit_logs`（既存・未使用）への記録。
+4. **【実装】データ層を localStorage→Supabase へ移行**（source of truth をサーバーへ）。
+5. **【実装】サーバー側の認可・入力検証**: 予約作成/キャンセル/会員更新で所有権チェック、空き枠のサーバー再検証、レート制限＋CAPTCHA、Zod等で許可リスト検証。クライアント送信の `status/customerId/staffId/storeId` は信用せずサーバー導出。会員ログインのパスワード検証、管理は RBAC。
+6. **【実装】middleware.ts ＋ nonce付き完全CSP、監査ログ、メール/SMS実装時のサーバー専用シークレット管理とPII再レビュー**。
 
-## 5. テスト/確認
-- 実装修正は `npx tsc --noEmit` / `npm run lint` クリーン、主要ルート200。
-- セキュリティヘッダは dev 再起動後／本番ビルドで反映（curl確認は再起動後）。
-- 自動セキュリティテストは未整備（要: open-redirect/CSV/認可の回帰テスト追加）。
+---
+
+## 5. テスト/確認状況
+- 実装修正は `npx tsc --noEmit` / `npm run lint` クリーン、主要ルート(login/dashboard/book/map) 200。
+- 開発環境ではプレビュー継続＝既存の作業フローは不変。
+- セキュリティヘッダは **dev再起動／本番ビルド後に反映**（稼働中devを止めない方針のため未再起動）。curl検証は再起動後に可。
+- 自動セキュリティ回帰テスト（open-redirect/CSV/認可）は未整備＝今後の課題。
+- `npm audit` はネットワーク制約で未実行。
+
+## 6. 変更ファイル一覧（今回）
+- `features/import-export/csv-utils.ts`（CSV無害化）
+- `features/master-data/utils.ts`（`safeHttpUrl` 新設）
+- `features/online-booking/public-sidebar.tsx` / `features/online-booking/home-view.tsx`（URL/画像ガード）
+- `app/auth/callback/route.ts`（open-redirect/エラー処理）
+- `app/dashboard/layout.tsx`（fail-closed）
+- `components/auth/login-form.tsx`（プレビュー導線を開発限定）
+- `next.config.ts`（セキュリティヘッダ）
+- `docs/security-review-2026-06-22.md`（本ファイル）
+
+関連コミット: `89bbb10`（実害修正）/ `45296c9`（fail-closed＋ヘッダ）/ `767c4f1`（本ファイル初版）。
