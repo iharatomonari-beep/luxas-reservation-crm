@@ -123,3 +123,41 @@
 - `docs/security-review-2026-06-22.md`（本ファイル）
 
 関連コミット: `89bbb10`（実害修正）/ `45296c9`（fail-closed＋ヘッダ）/ `767c4f1`（本ファイル初版）。
+
+---
+
+## 7. Codex 独立クロスチェックと追加対応
+
+別エージェント(Codex)に `docs/codex-security-crosscheck-prompt.md` で**反証レビュー**を依頼。先行監査の見落とし/不十分を指摘させ、各指摘をコードで再現確認のうえ対応した。
+
+### 検証で有効と確認し**修正した**指摘
+- **CRITICAL: 管理画面の認可抜け（権限昇格）** — `app/dashboard/layout.tsx`
+  - `/dashboard` は `getUser()`（認証）のみ確認。公開予約サイトと**同じ Supabase Auth** を共有するため、顧客のOAuthアカウントでも管理画面に入れてしまう。先行監査は「認証」評価で「認可」を見落としていた。
+  - **対応** `cb89c83`: サーバー専用の許可リスト `STAFF_EMAIL_ALLOWLIST` でスタッフ/管理者のみ許可。許可外は `/login?error=forbidden`。本番で未設定は fail-closed。恒久対応は `users/user_roles` の RBAC（DB/RLS後）＋Supabaseの公開サインアップ無効化。
+- **HIGH: Service Worker が root スコープで管理画面ナビゲーションまでキャッシュ** — `features/online-booking/pwa-client.tsx` / `public/sw.js`
+  - 既定スコープ `/` ＋ 全ナビゲーションキャッシュ。先行監査は完全に見落とし。
+  - **対応** `5682eb2`: 登録を `scope: "/book/"` に限定、sw.js も `/book/` 配下のみ対象化、会員ページ(`/book/*/mypage`)はキャッシュ除外。
+- **MEDIUM: CSV数式インジェクションの境界値漏れ** — `features/import-export/csv-utils.ts`
+  - 先頭の LF/BOM/空白で数式トリガを隠す回避（`"\n=1+1"`, BOM+`=1+1`）が中和されていなかった。
+  - **対応** `5682eb2`: 先頭の制御文字(C0)/BOM/空白も判定して中和。単体テストで全ケース確認。
+- **（自己チェック）`safeHttpUrl` の過剰拒否** — `20c97f2` で裸ドメインに `https://` 補完（危険スキームは拒否）。
+
+### 同意（対応はロードマップどおり・DB前提）
+- **CRITICAL: `supabase/schema.sql` が RLS未実装・tenant_id無し** — 先行監査と一致。ロードマップ3で対応。
+
+### 記録（フレームワーク更新が必要・今回はブラインド更新しない）
+- **MEDIUM: 依存の既知脆弱性** — `npm audit --omit=dev` で **postcss <8.5.10 の Moderate XSS（GHSA-qx2v-qp2m-jg93）が Next 同梱経由で2件**。High/Critical は0。`npm audit fix --force` は next を 9.x へダウングレードする誤修正のため不可。**正しくは Next の安全なパッチ版へ更新**だが、回帰テスト無しのフレームワーク更新はリスクのため、CI/検証環境での `npm update next`（または overrides で postcss 固定）＋再auditを推奨。本XSSはビルド時CSS処理の話で当アプリの実行時導線は限定的。
+
+### Codex 検証で「概ねOK」とされた点
+- `safeHttpUrl()` は `javascript:`/`data:`/`vbscript:`/タブ・改行混入/大文字/`https:javascript:` を拒否。
+- `resolveSafeNext()` は `//evil` / `/\evil` / `/%2F%2Fevil` / `/\t/evil` を外部遷移にできず。
+- 未設定本番での `/dashboard` 直URL迂回・route handler 経由の抜けは見当たらず（route handler は `app/auth/callback` のみ）。
+
+### この時点の残課題（外販前・DB/インフラ前提）
+1. **RBAC本実装**: `users/user_roles` 参照、公開会員と管理者のロール分離、middleware で同一判定共有、Supabase公開サインアップ無効化。
+2. **RLS＋tenant_id**（ロードマップ3）。
+3. **データ層 localStorage→Supabase 移行**＋サーバー側の認可・所有権・入力検証・レート制限。
+4. **依存更新**（Next/postcss）と CI への `npm audit` 組み込み。
+5. nonce付き完全CSP、監査ログ、メール/SMS実装時のPII再レビュー。
+
+クロスチェック関連コミット: `5682eb2`（SW/CSV）/ `cb89c83`（管理画面RBAC暫定）/ `20c97f2`（safeHttpUrl改善）。
