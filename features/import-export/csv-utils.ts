@@ -124,10 +124,13 @@ function formatCsvValue(value: string | number | boolean | null | undefined) {
 
 function escapeCsvValue(value: string) {
   // CSV/数式インジェクション対策（CWE-1236）。
-  // Excel/Google Sheets は先頭が = + - @ （およびタブ/CR）で始まるセルを数式として実行する。
+  // Excel/Google Sheets は先頭が = + - @ で始まるセルを数式として実行する。
   // 顧客名・メモ・注意事項など利用者入力がそのまま出力されるため、先頭にシングルクオートを付与して無害化する。
+  // 先頭の制御文字(タブ/CR/LF/その他C0)・BOM・空白で数式トリガを隠す回避（例 "\n=1+1", "﻿=1+1"）も防ぐ。
   let safe = value;
-  if (/^[=+\-@\t\r]/.test(safe)) {
+  const startsWithControl = /^[\u0000-\u001F\uFEFF]/.test(safe); // 先頭が制御文字(C0)/BOM
+  const hidesFormula = /^[\s\uFEFF]*[=+\-@]/.test(safe); // 先頭の空白/BOMを飛ばすと数式トリガ
+  if (startsWithControl || hidesFormula) {
     safe = `'${safe}`;
   }
 

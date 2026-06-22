@@ -14,7 +14,9 @@ type BeforeInstallPromptEvent = Event & {
 export function PwaRegister() {
   useEffect(() => {
     if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      // 公開予約サイト配下のみを Service Worker のスコープにする。
+      // 既定スコープ "/" のままだと管理画面(/dashboard)のナビゲーションまでキャッシュ対象になるため限定する。
+      navigator.serviceWorker.register("/sw.js", { scope: "/book/" }).catch(() => {});
     }
   }, []);
   return null;

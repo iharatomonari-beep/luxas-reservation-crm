@@ -15,16 +15,24 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
+  if (request.mode !== "navigate") return;
 
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match(FALLBACK)))
-    );
-  }
+  // 公開予約サイト(/book/)配下のナビゲーションのみをキャッシュ対象にする。
+  // 管理画面(/dashboard)や会員ページ(/book/*/mypage)の認証済み/個人情報HTMLはキャッシュしない。
+  const url = new URL(request.url);
+  const inScope =
+    url.origin === self.location.origin &&
+    url.pathname.startsWith("/book/") &&
+    !url.pathname.includes("/mypage");
+  if (!inScope) return;
+
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+        return response;
+      })
+      .catch(() => caches.match(request).then((cached) => cached || caches.match(FALLBACK)))
+  );
 });
