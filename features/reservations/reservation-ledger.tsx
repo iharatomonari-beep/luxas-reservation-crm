@@ -28,6 +28,7 @@ import {
 } from "@/features/master-data/mock-data";
 import type { MasterTag, RetailSale, ServiceMenu, ServiceOption, ServiceRoom, StaffMember, StaffShift } from "@/features/master-data/types";
 import { initialStoreSettings, useStoreSettings } from "@/features/master-data/store-settings";
+import { dailyTargetsStorageKey } from "@/features/master-data/monthly-shift-grid";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import type { Store } from "@/features/org/types";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
@@ -76,6 +77,9 @@ const staffColumnWidth = 168;
 const timelineRowHeight = 64;
 // 安定参照の空配列（useLocalCollection の initialItems に毎回 [] を渡すと無限ループになるため）。
 const EMPTY_TURNAWAYS: TurnawayRecord[] = [];
+// 日次目標（T023）の最小型。安定参照のため空配列をモジュール定数で持つ（useLocalCollection の無限ループ回避）。
+type LedgerDailyTarget = { date: string; amount: number; comment: string };
+const EMPTY_DAILY_TARGETS: LedgerDailyTarget[] = [];
 const timelineHeaderHeight = 44;
 
 type ReservationForm = {
@@ -394,6 +398,8 @@ export function ReservationLedger() {
   const [allTags] = useLocalCollection<MasterTag>(tagsStorageKey, initialTags);
   const [allOptions] = useLocalCollection<ServiceOption>(optionsStorageKey, initialOptions);
   const [retailSales] = useLocalCollection<RetailSale>(retailSalesStorageKey, initialRetailSales);
+  // 日次目標（T023・月間シフトグリッドで入力）。集計バーの「目標」「達成度」を実値化する。
+  const [dailyTargets] = useLocalCollection<LedgerDailyTarget>(dailyTargetsStorageKey, EMPTY_DAILY_TARGETS);
   // 当日情報パネル（T036）のタブと顧客名クイック検索。
   const [dayPanelTab, setDayPanelTab] = useState<"reservation" | "sales" | "return">("reservation");
   const [dayPanelSearch, setDayPanelSearch] = useState("");
@@ -601,6 +607,12 @@ export function ReservationLedger() {
     }
     return { totalSales, retailSales, courseSales, methodTotals, avgPerCustomer, newCount, repeatCount };
   }, [dayCustomerReservations, normalizedReservations, selectedDate]);
+  // 日次目標（T023）と達成度。selectedDate の目標額を読み、総販売額に対する達成率を出す。
+  const dailyTarget = useMemo(
+    () => dailyTargets.find((t) => t.date === selectedDate)?.amount ?? 0,
+    [dailyTargets, selectedDate]
+  );
+  const targetAchievement = dailyTarget > 0 ? Math.round((checkoutSummary.totalSales / dailyTarget) * 100) : null;
   // キャンセル種別別の件数（T035）。無断キャンセル/取消を集計バーに実値表示。
   const cancelStats = useMemo(() => {
     let noShow = 0;
@@ -2006,8 +2018,11 @@ export function ReservationLedger() {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="rounded-full bg-luxas-mist px-2 py-0.5 font-medium text-luxas-green">予約中 {reservationStats.booked}</span>
             <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800">完了 {reservationStats.completed}</span>
-            <span>目標 <b className="text-stone-400">¥0</b></span>
+            <span>目標 <b className={dailyTarget > 0 ? "text-luxas-ink" : "text-stone-400"}>¥{dailyTarget.toLocaleString()}</b></span>
             <span>総販売額 <b className="text-luxas-ink">¥{checkoutSummary.totalSales.toLocaleString()}</b></span>
+            {targetAchievement !== null ? (
+              <span>達成度 <b className={targetAchievement >= 100 ? "text-emerald-700" : "text-luxas-ink"}>{targetAchievement}%</b></span>
+            ) : null}
             <span>新規 <b className="text-luxas-ink">{checkoutSummary.newCount}名</b></span>
             <span>リピート <b className="text-luxas-ink">{checkoutSummary.repeatCount}名</b></span>
             <span>総来店 <b className="text-luxas-ink">{new Set(dayCustomerReservations.filter((r) => r.status !== "canceled").map((r) => r.customerName.trim()).filter(Boolean)).size}名</b></span>
@@ -2034,7 +2049,7 @@ export function ReservationLedger() {
             <span>EPARK ¥{checkoutSummary.methodTotals.epark.toLocaleString()}</span>
           </div>
           <p className="text-[10px] text-stone-400">
-            ※ 総販売額・支払方法別・客単価・新規/リピートは会計（予約詳細→会計）確定分の当日集計。新規/リピート=当日来店客のうち過去の会計済来店有無で判定（電話番号優先・無ければ顧客名）。目標・物販・回数券/プリペイド販売・無断/返客は別管理または未整備のためダミー（0）。表示は5分刻み。
+            ※ 総販売額・支払方法別・客単価・新規/リピートは会計（予約詳細→会計）確定分の当日集計。新規/リピート=当日来店客のうち過去の会計済来店有無で判定（電話番号優先・無ければ顧客名）。目標・達成度は月間シフトグリッドの日次目標を参照（未入力日は¥0）。回数券/プリペイド販売は会計未整備のため0。表示は5分刻み。
           </p>
         </div>
 
