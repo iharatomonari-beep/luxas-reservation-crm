@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Apple, Chrome, Lock, Mail } from "lucide-react";
 import { useStoreSettings } from "@/features/master-data/store-settings";
+import { safeHttpUrl } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import { initialStores } from "@/features/org/mock-data";
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
@@ -176,6 +177,8 @@ export function StoreInfoCard({ storeId }: { storeId: string }) {
   const store = initialStores.find((s) => s.id === storeId);
 
   const address = [settings.prefecture, settings.city, settings.address2].filter(Boolean).join("");
+  // 店舗設定のHP URLは http(s) のみ許可（javascript: 等のスキームXSSを防ぐ）。
+  const safeHpUrl = safeHttpUrl(settings.hpUrl);
 
   const rows: { label: string; value: React.ReactNode }[] = [
     { label: "店舗名", value: store?.name ?? "LUXAS" },
@@ -187,9 +190,9 @@ export function StoreInfoCard({ storeId }: { storeId: string }) {
     { label: "定休日", value: settings.hpClosedDaysText || "なし" },
     {
       label: "ホームページ",
-      value: settings.hpUrl ? (
-        <a href={settings.hpUrl} target="_blank" rel="noreferrer" className="text-luxas-green underline">
-          {settings.hpUrl}
+      value: safeHpUrl ? (
+        <a href={safeHpUrl} target="_blank" rel="noreferrer noopener" className="text-luxas-green underline">
+          {safeHpUrl}
         </a>
       ) : (
         "-"

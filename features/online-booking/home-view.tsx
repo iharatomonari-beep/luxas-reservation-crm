@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { CalendarCheck } from "lucide-react";
 import { useStoreSettings } from "@/features/master-data/store-settings";
+import { safeHttpUrl } from "@/features/master-data/utils";
 import { initialStores } from "@/features/org/mock-data";
 import { LoginCard, StoreInfoCard } from "@/features/online-booking/public-sidebar";
 import { PM_NAVY } from "@/features/online-booking/public-shell";
@@ -74,9 +75,11 @@ function HeroGallery({ storeName, imageUrl }: { storeName: string; imageUrl?: st
 }
 
 function Tile({ imageUrl }: { imageUrl?: string }) {
-  if (imageUrl) {
+  // 店舗設定の画像URLは http(s) のみ許可（data:/javascript: 等の不正スキームを描画しない）。
+  const safeUrl = safeHttpUrl(imageUrl);
+  if (safeUrl) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={imageUrl} alt="" className="aspect-[4/3] w-full object-cover" />;
+    return <img src={safeUrl} alt="" className="aspect-[4/3] w-full object-cover" />;
   }
   return <div className="flex aspect-[4/3] items-center justify-center bg-luxas-mist text-xs text-stone-400">写真</div>;
 }

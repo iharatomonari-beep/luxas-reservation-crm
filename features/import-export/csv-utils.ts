@@ -123,9 +123,17 @@ function formatCsvValue(value: string | number | boolean | null | undefined) {
 }
 
 function escapeCsvValue(value: string) {
-  if (/[",\r\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  // CSV/数式インジェクション対策（CWE-1236）。
+  // Excel/Google Sheets は先頭が = + - @ （およびタブ/CR）で始まるセルを数式として実行する。
+  // 顧客名・メモ・注意事項など利用者入力がそのまま出力されるため、先頭にシングルクオートを付与して無害化する。
+  let safe = value;
+  if (/^[=+\-@\t\r]/.test(safe)) {
+    safe = `'${safe}`;
   }
 
-  return value;
+  if (/[",\r\n]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
+  }
+
+  return safe;
 }

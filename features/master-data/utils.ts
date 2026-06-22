@@ -28,6 +28,23 @@ export function normalizeText(value: string) {
   return value.trim();
 }
 
+// 利用者/店舗が入力したURLを表示・遷移に使う前に、http(s) スキームのみ許可する（XSS対策）。
+// javascript:, data:, vbscript: などのスキームや不正値は null を返す（許可リスト方式）。
+export function safeHttpUrl(value?: string): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function compareBySortOrder<T extends { sortOrder?: number }>(left: T, right: T) {
   return (left.sortOrder ?? Number.MAX_SAFE_INTEGER) - (right.sortOrder ?? Number.MAX_SAFE_INTEGER);
 }
