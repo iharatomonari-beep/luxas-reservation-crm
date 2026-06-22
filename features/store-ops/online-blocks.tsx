@@ -21,8 +21,8 @@ function today() {
 const inputClass = "rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm outline-none focus:border-luxas-green";
 
 export function OnlineBlocks() {
-  const [settings] = useStoreSettings();
   const { currentStoreId, store } = useCurrentStore();
+  const [settings] = useStoreSettings(currentStoreId);
   const [blocks, setBlocks] = useLocalCollection<OnlineBlock>(onlineBlocksStorageKey, initialOnlineBlocks);
   const [date, setDate] = useState(today());
   const [form, setForm] = useState({ name: "", startTime: "10:00", endTime: "11:00" });

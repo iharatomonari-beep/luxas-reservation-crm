@@ -42,7 +42,7 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const [customers, setCustomers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [onlineBlocks] = useLocalCollection(onlineBlocksStorageKey, initialOnlineBlocks);
-  const [settings] = useStoreSettings();
+  const [settings] = useStoreSettings(storeId);
 
   // ログイン中の会員（いれば、お客様情報入力をスキップしこの会員に予約を紐付ける）。
   const { memberId, login } = useMemberSession();

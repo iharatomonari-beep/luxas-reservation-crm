@@ -6,6 +6,7 @@ import { TextField, ToggleField } from "@/features/master-data/form-controls";
 import { MasterPage } from "@/features/master-data/master-page";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import { useStoreSettings, type StoreSettings } from "@/features/master-data/store-settings";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
   creditCardsStorageKey,
@@ -98,7 +99,9 @@ function Section({ title, summary, children }: { title: string; summary: string;
 }
 
 export function StoreSettingsManager() {
-  const [settings, setSettings, isHydrated] = useStoreSettings();
+  // 現在店舗の設定を編集する（店舗別保持・T064）。未保存ならグローバル/初期値からフォールバック。
+  const { currentStoreId, store } = useCurrentStore();
+  const [settings, setSettings, isHydrated] = useStoreSettings(currentStoreId);
   const [form, setForm] = useState<StoreSettingsForm>(() => toForm(settings));
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
   const [creditCards] = useLocalCollection<CreditCardCompany>(creditCardsStorageKey, initialCreditCards);
@@ -177,6 +180,9 @@ export function StoreSettingsManager() {
       title="店舗設定"
       description="営業時間・会員番号採番・予約用HP・オンライン予約/通知・インボイスをローカルに保持します。外部連携・実送信・決済は行いません（v0.1）。"
     >
+      <div className="mb-4 rounded-md border border-luxas-line bg-luxas-mist/40 px-4 py-2.5 text-sm text-luxas-ink">
+        編集対象店舗: <b>{store?.name ?? "現在店舗"}</b>　<span className="text-xs text-stone-500">（店舗別に保存されます。上部バーの店舗切替で対象が変わります）</span>
+      </div>
       <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
         ※ オンライン予約の公開・店舗通知・決済は実連携しません。設定値の保持のみです。各セクションの内部仕様はPM標準で設計（相違あれば実機再確認）。
       </div>

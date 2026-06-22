@@ -13,7 +13,7 @@ const DEFAULT_DESC =
   "ご予約はページ上部の「予約」ボタンから進めます。コースを選択後、スタッフのご希望（指名・男性・女性）がございましたらスタッフリストよりお選びください。ご連絡のないキャンセルや当日キャンセルが続いた場合、次回以降のご予約をお断りする場合がございます。キャンセル・遅刻の際は必ずお電話またはメールでご連絡ください。";
 
 export function HomeView({ storeId }: { storeId: string }) {
-  const [settings] = useStoreSettings();
+  const [settings] = useStoreSettings(storeId);
   const store = initialStores.find((s) => s.id === storeId);
   const description = settings.hpDescription || DEFAULT_DESC;
 

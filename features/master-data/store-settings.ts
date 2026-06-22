@@ -111,20 +111,18 @@ export const initialStoreSettings: StoreSettings = {
   themeColor: ""
 };
 
-function readStoredStoreSettings(): StoreSettings | null {
+// 店舗別の保存キー。storeId 指定時は `luxas-store-settings::<storeId>`、
+// 未指定時は従来のグローバルキー（後方互換）。
+function storeSettingsKeyFor(storeId?: string): string {
+  return storeId ? `${storeSettingsStorageKey}::${storeId}` : storeSettingsStorageKey;
+}
+
+function readAt(key: string): StoreSettings | null {
   try {
-    const saved = window.localStorage.getItem(storeSettingsStorageKey);
-
-    if (!saved) {
-      return null;
-    }
-
+    const saved = window.localStorage.getItem(key);
+    if (!saved) return null;
     const parsed = JSON.parse(saved) as Partial<StoreSettings> | null;
-
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
+    if (!parsed || typeof parsed !== "object") return null;
     // 欠損キーは初期値で補完する（後方互換）。
     return { ...initialStoreSettings, ...parsed };
   } catch {
@@ -132,32 +130,39 @@ function readStoredStoreSettings(): StoreSettings | null {
   }
 }
 
+// 店舗別キー → （無ければ）グローバルキー の順でフォールバック。
+// これにより、既存のグローバル保存値が各店舗の初期表示としてそのまま効く（非破壊）。
+function readStoredStoreSettings(storeId?: string): StoreSettings | null {
+  if (storeId) {
+    return readAt(storeSettingsKeyFor(storeId)) ?? readAt(storeSettingsStorageKey);
+  }
+  return readAt(storeSettingsStorageKey);
+}
+
 /**
- * 店舗設定を localStorage から読み出すフック（単一オブジェクト）。
- * 設定画面が未実装のため現状は読み取り中心だが、将来の設定画面で書き込みできるよう
- * setter も返す。SSR では初期値、ハイドレーション後に保存値へ更新する。
+ * 店舗設定を localStorage から読み出すフック。
+ * storeId を渡すと店舗別に保持（未保存なら従来のグローバル値→初期値へフォールバック）。
+ * storeId 省略時は従来どおりグローバル単一オブジェクト。
+ * SSR では初期値、ハイドレーション後に保存値へ更新する。store 切替時は再読込する。
  */
-export function useStoreSettings() {
+export function useStoreSettings(storeId?: string) {
   const [settings, setSettings] = useState<StoreSettings>(initialStoreSettings);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    const stored = readStoredStoreSettings();
-
-    if (stored) {
-      setSettings(stored);
-    }
-
+    const stored = readStoredStoreSettings(storeId);
+    // store 切替時は、保存が無ければフォールバック（グローバル/初期）に戻す。
+    setSettings(stored ?? initialStoreSettings);
     setIsHydrated(true);
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
     if (!isHydrated) {
       return;
     }
 
-    window.localStorage.setItem(storeSettingsStorageKey, JSON.stringify(settings));
-  }, [isHydrated, settings]);
+    window.localStorage.setItem(storeSettingsKeyFor(storeId), JSON.stringify(settings));
+  }, [isHydrated, settings, storeId]);
 
   return [settings, setSettings, isHydrated] as const;
 }

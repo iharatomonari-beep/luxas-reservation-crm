@@ -6,7 +6,7 @@ import { initialStores } from "@/features/org/mock-data";
 import { LoginCard, StoreInfoCard } from "@/features/online-booking/public-sidebar";
 
 export function MapView({ storeId }: { storeId: string }) {
-  const [settings] = useStoreSettings();
+  const [settings] = useStoreSettings(storeId);
   const store = initialStores.find((s) => s.id === storeId);
 
   const address = [settings.prefecture, settings.city, settings.address2].filter(Boolean).join("");

@@ -172,7 +172,7 @@ function SocialButton({ icon, label, onClick }: { icon: React.ReactNode; label: 
 
 // 店舗情報カード（store-settings ＋ org 店舗名から表示）。
 export function StoreInfoCard({ storeId }: { storeId: string }) {
-  const [settings] = useStoreSettings();
+  const [settings] = useStoreSettings(storeId);
   const store = initialStores.find((s) => s.id === storeId);
 
   const address = [settings.prefecture, settings.city, settings.address2].filter(Boolean).join("");

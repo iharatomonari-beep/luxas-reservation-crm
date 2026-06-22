@@ -411,7 +411,7 @@ export function ReservationLedger() {
   // 日付バーの天気（Open-Meteo・現在店舗の所在地×選択日）。表示専用。
   const weather = useDailyWeather(currentStoreId, selectedDate);
   // 店舗設定（営業時間・時間きざみ）をランタイム参照する（T031）。設定画面の保存値が台帳に反映される。
-  const [storeSettings] = useStoreSettings();
+  const [storeSettings] = useStoreSettings(currentStoreId);
   const businessStart = storeSettings.businessStartTime;
   const businessEnd = storeSettings.businessEndTime;
   const slotMinutes = storeSettings.slotMinutes;
