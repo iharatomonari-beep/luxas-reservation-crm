@@ -218,15 +218,16 @@ create policy customers_rw on public.customers for all to authenticated
   using ( tenant_id = public.app_user_tenant_id() )
   with check ( tenant_id = public.app_user_tenant_id() );
 
--- カルテ等のノート: 機微(is_sensitive)は owner/manager のみ
+-- カルテ等のノート: 当面はスタッフ全員が閲覧/編集可（施術に必要なため）。
+-- 将来、機微(is_sensitive)を owner/manager 限定にする場合は、下記 using に
+--   and (is_sensitive = false or public.app_has_role(array['owner','manager']))
+-- を足すだけでよい（is_sensitive 列は将来の制限用に残してある）。
 drop policy if exists customer_notes_select on public.customer_notes;
 create policy customer_notes_select on public.customer_notes for select to authenticated
-  using ( tenant_id = public.app_user_tenant_id()
-          and (is_sensitive = false or public.app_has_role(array['owner','manager'])) );
+  using ( tenant_id = public.app_user_tenant_id() );
 drop policy if exists customer_notes_write on public.customer_notes;
 create policy customer_notes_write on public.customer_notes for all to authenticated
-  using ( tenant_id = public.app_user_tenant_id()
-          and (is_sensitive = false or public.app_has_role(array['owner','manager'])) )
+  using ( tenant_id = public.app_user_tenant_id() )
   with check ( tenant_id = public.app_user_tenant_id() );
 
 -- 監査ログ: 参照は owner/manager。書き込みは原則 definer 関数 or service_role。
@@ -235,9 +236,10 @@ create policy audit_logs_select on public.audit_logs for select to authenticated
   using ( tenant_id = public.app_user_tenant_id() and public.app_has_role(array['owner','manager']) );
 
 -- ============================================================
--- 6. 機微列(caution / chart_memo)の列制御
---    PostgreSQL のRLSは行単位。列を隠すには「機微列を除いたビュー」を一般スタッフに使わせる。
---    例（一般スタッフ向けの顧客ビュー。owner/manager はベーステーブルを直接参照）:
+-- 6. 機微列(caution / chart_memo)の列制御 — 当面は「全スタッフ閲覧可」のため未適用。
+--    現状はスタッフ全員が customers 本体（caution / chart_memo 含む）を参照できる（施術に必要）。
+--    将来「一般スタッフには機微列を隠す」とする場合に備え、機微列を除いたビューを用意しておく（今は未使用）。
+--    そのときは一般スタッフ向け画面をこのビューに切替え、本体の SELECT を owner/manager に限定する。
 -- ============================================================
 -- security_invoker=true: ビューを「呼び出したユーザーの権限/RLS」で評価させる（既定の所有者権限だとRLSを迂回するため必須）。
 create or replace view public.customers_basic
@@ -245,7 +247,6 @@ create or replace view public.customers_basic
   select id, tenant_id, home_store_id, name, name_kana, phone, email, birth_date,
          gender, membership_number, rank, total_visits, last_visit_at, is_active
   from public.customers;
--- アプリ側で「機微を見せない画面」はこのビューを使う。owner/manager だけ customers 本体＋caution/chart_memo を参照。
 
 -- ============================================================
 -- 7. 公開オンライン予約（anon は生テーブル不可・RPCのみ）

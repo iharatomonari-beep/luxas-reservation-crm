@@ -27,8 +27,8 @@ user（ログインする人）→ user_roles（owner / manager / staff …）
 ### 採用した方針（要確認・後で変更可）
 1. **テナント分離が「硬い壁」**: すべての業務テーブルに `tenant_id` を持たせ、RLSは「自分のテナントのデータだけ」を強制。会社をまたいだ閲覧・更新は**DBレベルで不可能**にする。
 2. **店舗(store)は「柔らかい絞り」**: テナント内での絞り込み。店舗限定ロール（その店舗のスタッフ）はその店舗だけ、全店ロール（オーナー等）はテナント内の全店舗。
-3. **顧客は会社内共有**（`customers.tenant_id` で分離、`home_store_id` は初回/所属店舗の参照のみ）。→ 整体チェーンで「どの店舗でも同じ顧客台帳」が一般的なため。**「店舗専属にしたい」場合は customers の RLS を store ベースに変えるだけ**（差し替え容易）。
-4. **機微情報の追加制御**: カルテ(`chart_memo`)・注意事項(`caution`)・`customer_notes.is_sensitive` は **owner / manager のみ**。一般スタッフから隠す（列はビュー、機微ノートは行ポリシーで制御）。
+3. **顧客は会社内共有**（`customers.tenant_id` で分離、`home_store_id` は初回/所属店舗の参照のみ）【確定: 会社内共有】。整体チェーンで「どの店舗でも同じ顧客台帳」が一般的なため。**「店舗専属にしたい」場合は customers の RLS を store ベースに変えるだけ**（差し替え容易）。
+4. **カルテ・注意事項は当面スタッフ全員が閲覧/編集可**【確定: 施術に必要なため全員可】。`is_sensitive` 列と機微列ビュー(`customers_basic`)は**将来制限をかける場合の土台として残す**（ポリシーに1行足すだけで owner/manager 限定に切替できる）。
 5. **監査ログ(`audit_logs`)** は owner / manager のみ閲覧。重要操作（CSV出力・削除・会計）を記録。
 6. **公開オンライン予約**は anon（未ログイン）から**生テーブルに触らせない**。空き照会・予約確定は **SECURITY DEFINER 関数(RPC)経由**にし、検証と最小権限を担保（他人の予約・顧客は読めない）。
 
@@ -58,8 +58,9 @@ user（ログインする人）→ user_roles（owner / manager / staff …）
   → これ1本で「自テナント＋触ってよい店舗」を同時に強制（`app_user_store_ids()` は自テナントの店舗しか返さないため、テナント分離も担保）。
 - 顧客（会社共有）:
   `using ( tenant_id = app_user_tenant_id() )`
-- 機微ノート:
-  `using ( tenant_id = app_user_tenant_id() and (is_sensitive = false or app_has_role(array['owner','manager'])) )`
+- カルテ等のノート（当面・全スタッフ可）:
+  `using ( tenant_id = app_user_tenant_id() )`
+  ※将来制限する場合は `and (is_sensitive = false or app_has_role(array['owner','manager']))` を足すだけ。
 - 監査ログ:
   参照は `app_has_role(array['owner','manager'])` のみ。
 
@@ -84,10 +85,10 @@ user（ログインする人）→ user_roles（owner / manager / staff …）
 
 ---
 
-## 7. 確認したい点（設計を確定するため）
+## 7. 確定事項（2026-06-23 ユーザー確認済み）
 
-1. **顧客は会社内共有でよいか**（本設計の既定）／それとも**店舗専属**か。
-2. ロール体系: `owner`（経営）/`manager`（店長）/`staff`（施術者）の3段で十分か。
-3. カルテ・注意事項を見てよいのは owner/manager のみで合っているか（店長は見える想定）。
+1. **顧客は会社内共有**（どの店舗でも同じ顧客台帳）。→ customers の RLS はテナント単位。
+2. ロール体系は **owner（経営）/ manager（店長）/ staff（施術者）の3段**で確定。
+3. **カルテ・注意事項は当面スタッフ全員が閲覧可**（施術に必要）。将来制限する可能性は残す（`is_sensitive` 列・`customers_basic` ビューを土台として保持）。
 
-> 上記は後から変更可能だが、1 は customers の RLS 方針に直結するため早めに確定したい。
+これらを `rls.sql` に反映済み。第2区切り（Supabase接続＋認証本実装）で適用・検証する。
