@@ -12,6 +12,10 @@ import type { Reservation, ReservationStatus } from "@/features/reservations/typ
 import { isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import { parseCsvRows, parseCsvText, serializeCsv } from "@/features/import-export/csv-utils";
+import { filterReservationsByStore } from "@/features/reservations/store-scope";
+import { isStaffHomeStore } from "@/features/master-data/store-staff-scope";
+import { filterMenusByStore } from "@/features/master-data/store-menu-scope";
+import { useCurrentStore } from "@/features/org/use-current-store";
 
 type DatasetKey = "customers" | "staff" | "services" | "reservations";
 type PeakManagerPreviewFields =
@@ -119,6 +123,7 @@ export function ImportExportManager() {
   const [services, setServices] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [rooms] = useLocalCollection<ServiceRoom>(roomsStorageKey, initialRooms);
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  const { currentStoreId } = useCurrentStore();
   const [peakManagerPreview, setPeakManagerPreview] = useState<PeakManagerPreviewState | null>(null);
   const [peakManagerMessage, setPeakManagerMessage] = useState<StatusMessageValue | null>(null);
   const [previewMap, setPreviewMap] = useState<Record<DatasetKey, PreviewState | null>>({
@@ -213,7 +218,11 @@ export function ImportExportManager() {
     }
 
     if (dataset === "staff") {
-      const nextItems = acceptedRows.map((row) => toStaff(row.values));
+      // 取り込んだスタッフは現在店舗の所属として扱う（未指定なら currentStoreId を付与）。
+      const nextItems = acceptedRows.map((row) => {
+        const s = toStaff(row.values);
+        return { ...s, homeStoreId: s.homeStoreId ?? currentStoreId };
+      });
       setStaff((current) => [...nextItems, ...current]);
     }
 
@@ -223,16 +232,18 @@ export function ImportExportManager() {
     }
 
     if (dataset === "reservations") {
-      const nextItems = acceptedRows.map((row) =>
-        toReservation(row.values, {
+      // 取り込んだ予約は現在店舗に紐付ける（未指定なら currentStoreId を付与）。
+      const nextItems = acceptedRows.map((row) => {
+        const r = toReservation(row.values, {
           staffNameMap,
           serviceNameMap,
           roomNameMap,
           staffByIdMap,
           serviceByIdMap,
           roomByIdMap
-        })
-      );
+        });
+        return { ...r, storeId: r.storeId ?? currentStoreId };
+      });
       setReservations((current) => [...nextItems, ...current]);
     }
 
@@ -248,11 +259,13 @@ export function ImportExportManager() {
 
   function handleExport(dataset: DatasetKey) {
     const fileName = datasetSummaries[dataset].fileName;
+    // CSV出力は現在店舗のデータのみに絞る（他店舗の予約/スタッフ/メニューを書き出さない）。
+    // ※顧客は per-store フィールドが無く全件のまま（顧客の店舗スコープ化は別途・要モデル拡張）。
     const csv = buildExportCsv(dataset, {
       customers,
-      staff,
-      services,
-      reservations,
+      staff: staff.filter((s) => isStaffHomeStore(s, currentStoreId)),
+      services: filterMenusByStore(services, currentStoreId),
+      reservations: filterReservationsByStore(reservations, currentStoreId),
       staffNameMap,
       serviceNameMap,
       roomNameMap,
