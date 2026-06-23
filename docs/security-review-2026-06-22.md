@@ -181,3 +181,24 @@
 - 依存（Next/postcss Moderate）の更新、nonce付き完全CSP、middleware、監査ログ。
 
 第2回関連コミット: `bd41725`（ループ/SW移行）/ `50c1e42`（店舗スコープ完成）。
+
+---
+
+## 9. Codex 第3回クロスチェックと追加対応
+
+第3回で「店舗スコープ化済み」がまだ穴だらけと指摘（CSV・シフト・詳細帳票・日次運用）。いずれもコードで確認し対応。
+
+- **CSV入出力の全店PII漏えい（High）** → `2d8d3d2`: エクスポートが customers/staff/services/reservations を全店全件で出力していた。予約=filterReservationsByStore / スタッフ=isStaffHomeStore / メニュー=filterMenusByStore で現在店舗に限定。インポート分にも storeId/homeStoreId を付与。※顧客は per-store フィールドが無く全件のまま（顧客の店舗スコープ化＝要モデル拡張・別途）。
+- **シフトの他店破壊的上書き（High）** → `aa75034`: 既存ヘルパー filterShiftsByStore/isStaffHomeStore が monthly-shift-grid/shift-manager で未使用だった。staff一覧・シフトの検索/削除/更新/上書きを現在店舗に限定、シフトIDに店舗を含め衝突防止。
+- **詳細帳票の物販が全店集計（Medium）** → `aa75034`: analytics-detail-reports の retailRows を filterRecordsByStore で現在店舗に限定。
+- **日次運用記録（出勤/レジ金/経費/日報）の店舗未スコープ・ID衝突（Medium）** → `5110984`: 各型に storeId? 追加、新規IDに店舗を含め、読み書き/検索/コピー/履歴を現在店舗に限定。
+- **Service Worker 移行の過剰削除（Low/Medium）** → `aa75034`: unregister/キャッシュ削除を自アプリ（/sw.js, luxas-book-*）に限定し、同一origin上の無関係なSW/Cacheを巻き込まないように。
+
+### Codex 第3回で「OK」とされた点
+- fail-closed認証の直URL回避なし、CSV無害化（LF/BOM/空白）、URLスキームXSS拒否、open-redirect耐性。
+- `npm audit`: 本番依存 moderate 2件（next同梱 postcss）・high/critical 0。
+
+### 重要な構造的所見（再掲）
+クライアント側の店舗スコープは画面ごとに塞ぐ**もぐら叩き**であり、根本解決は**サーバー側RLS**。今回で予約/目標/物販/日報/出勤/レジ金/経費/シフト/CSV出力までは絞ったが、**顧客(customers)は per-store フィールドが無く全件のまま**（＝顧客の店舗スコープ化は要モデル拡張で、本質的にはRLSが必要）。外販前にデータ層を Supabase へ移しRLSで強制するのが正道。
+
+第3回関連コミット: `aa75034`（シフト/詳細帳票/SW限定）/ `2d8d3d2`（CSV）/ `5110984`（日次運用）。
