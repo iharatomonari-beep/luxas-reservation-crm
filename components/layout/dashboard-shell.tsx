@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, Menu, X } from "lucide-react";
+import { ExternalLink, LogOut, Menu, X } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { TopMenu } from "@/components/layout/top-menu";
 import { StoreSwitcher } from "@/components/layout/store-switcher";
+import { useCurrentStore } from "@/features/org/use-current-store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function DashboardShell({
@@ -19,6 +20,7 @@ export function DashboardShell({
 }) {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { currentStoreId } = useCurrentStore();
 
   async function handleSignOut() {
     if (!isPreviewMode) {
@@ -54,6 +56,18 @@ export function DashboardShell({
           </div>
 
           <StoreSwitcher />
+
+          {/* 現在店舗の公開オンライン予約ページを新規タブで開く（管理画面からの導線）。 */}
+          <a
+            href={`/book/${currentStoreId}`}
+            target="_blank"
+            rel="noreferrer noopener"
+            title="公開オンライン予約ページを新規タブで開く"
+            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-luxas-ink transition hover:bg-luxas-mist"
+          >
+            <ExternalLink size={16} aria-hidden="true" />
+            <span className="hidden sm:inline">予約ページ</span>
+          </a>
 
           <p className="hidden truncate text-xs text-stone-500 lg:block">{userEmail}</p>
           <button
