@@ -32,6 +32,7 @@ export type DailyView = "all" | "attendance" | "register" | "open" | "check" | "
 
 type DailyReport = {
   date: string;
+  storeId?: string;
   result: string;
   achievement: string;
   staffProposals: string;
@@ -118,29 +119,31 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
     [reservations, date, currentStoreId]
   );
 
+  // 出勤・レジ金・経費・日報も現在店舗のレコードに限定する（未設定の既存データは既定店舗扱い）。
+  // 旧データは決定論的IDが店舗を含まず店舗間で衝突したため、新規IDには店舗を含める。
   function attRecord(staffId: string) {
-    return attendance.find((a) => a.date === date && a.staffId === staffId);
+    return attendance.find((a) => a.date === date && a.staffId === staffId && isRecordInStore(a, currentStoreId));
   }
   function updateAtt(staffId: string, field: "clockIn" | "clockOut", value: string) {
     setAttendance((current) => {
-      const existing = current.find((a) => a.date === date && a.staffId === staffId);
+      const existing = current.find((a) => a.date === date && a.staffId === staffId && isRecordInStore(a, currentStoreId));
       if (existing) {
         return current.map((a) => (a.id === existing.id ? { ...a, [field]: value } : a));
       }
-      return [...current, { id: `${date}:${staffId}`, date, staffId, clockIn: "", clockOut: "", [field]: value }];
+      return [...current, { id: `${date}:${currentStoreId}:${staffId}`, storeId: currentStoreId, date, staffId, clockIn: "", clockOut: "", [field]: value }];
     });
   }
 
   function regRecord(kind: RegisterRecord["kind"]) {
-    return registers.find((r) => r.date === date && r.kind === kind);
+    return registers.find((r) => r.date === date && r.kind === kind && isRecordInStore(r, currentStoreId));
   }
   function updateReg(kind: RegisterRecord["kind"], counts: CashCounts) {
     setRegisters((current) => {
-      const existing = current.find((r) => r.date === date && r.kind === kind);
+      const existing = current.find((r) => r.date === date && r.kind === kind && isRecordInStore(r, currentStoreId));
       if (existing) {
         return current.map((r) => (r.id === existing.id ? { ...r, counts } : r));
       }
-      return [...current, { id: `${date}:${kind}`, date, kind, counts, memo: "" }];
+      return [...current, { id: `${date}:${currentStoreId}:${kind}`, storeId: currentStoreId, date, kind, counts, memo: "" }];
     });
   }
 
@@ -159,24 +162,27 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
   }, [dayReservations, targets, date, currentStoreId]);
 
   // 売上日報フォーム（PM全項目・一時保存/送信）。
-  const reportForm = useMemo(() => reports.find((r) => r.date === date) ?? emptyReport(date), [reports, date]);
+  const reportForm = useMemo(
+    () => reports.find((r) => r.date === date && isRecordInStore(r, currentStoreId)) ?? emptyReport(date),
+    [reports, date, currentStoreId]
+  );
   const [reportMessage, setReportMessage] = useState<StatusMessageValue | null>(null);
   function updateReport(field: keyof DailyReport, value: string) {
     setReports((current) => {
-      const existing = current.find((r) => r.date === date);
+      const existing = current.find((r) => r.date === date && isRecordInStore(r, currentStoreId));
       if (existing) {
-        return current.map((r) => (r.date === date ? { ...r, [field]: value } : r));
+        return current.map((r) => (r === existing ? { ...r, [field]: value } : r));
       }
-      return [...current, { ...emptyReport(date), [field]: value }];
+      return [...current, { ...emptyReport(date), storeId: currentStoreId, [field]: value }];
     });
   }
   function saveReport(submit: boolean) {
     setReports((current) => {
-      const existing = current.find((r) => r.date === date);
+      const existing = current.find((r) => r.date === date && isRecordInStore(r, currentStoreId));
       if (existing) {
-        return current.map((r) => (r.date === date ? { ...r, submitted: submit || r.submitted } : r));
+        return current.map((r) => (r === existing ? { ...r, submitted: submit || r.submitted } : r));
       }
-      return [...current, { ...emptyReport(date), submitted: submit }];
+      return [...current, { ...emptyReport(date), storeId: currentStoreId, submitted: submit }];
     });
     setReportMessage({ type: "success", text: submit ? "日報を送信しました（モック）。" : "日報を一時保存しました。" });
   }
@@ -190,7 +196,7 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
       return;
     }
     setExpenses((current) => [
-      { id: makeLocalId("exp"), date, accountId: expForm.accountId, amount, note: expForm.note, targetMonth: expForm.targetMonth },
+      { id: makeLocalId("exp"), storeId: currentStoreId, date, accountId: expForm.accountId, amount, note: expForm.note, targetMonth: expForm.targetMonth },
       ...current
     ]);
     setExpForm((c) => ({ ...c, amount: "0", note: "" }));
@@ -200,25 +206,26 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
     const [y, m] = expForm.targetMonth.split("-").map(Number);
     const prev = new Date(y, m - 2, 1);
     const prevMonth = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
-    const src = expenses.filter((e) => e.targetMonth === prevMonth);
+    // コピー元も現在店舗の経費に限定する。
+    const src = expenses.filter((e) => e.targetMonth === prevMonth && isRecordInStore(e, currentStoreId));
     if (src.length === 0) {
       return;
     }
     setExpenses((current) => [
-      ...src.map((e) => ({ ...e, id: makeLocalId("exp"), targetMonth: expForm.targetMonth, date })),
+      ...src.map((e) => ({ ...e, id: makeLocalId("exp"), storeId: currentStoreId, targetMonth: expForm.targetMonth, date })),
       ...current
     ]);
   }
 
-  const dayExpenses = expenses.filter((e) => e.date === date);
+  const dayExpenses = expenses.filter((e) => e.date === date && isRecordInStore(e, currentStoreId));
   const accName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "-";
 
   const closeHistory = useMemo(
     () =>
       registers
-        .filter((r) => r.kind === "close" && r.date >= from && r.date <= to)
+        .filter((r) => r.kind === "close" && r.date >= from && r.date <= to && isRecordInStore(r, currentStoreId))
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [registers, from, to]
+    [registers, from, to, currentStoreId]
   );
 
   // ---- セクション描画 ----

@@ -10,6 +10,8 @@ export type ExpenseAccount = {
 
 export type ExpenseEntry = {
   id: string;
+  /** 店舗スコープ（非破壊・任意）。未設定の既存データは既定店舗扱い。 */
+  storeId?: string;
   date: string;
   accountId: string;
   amount: number;
@@ -19,7 +21,9 @@ export type ExpenseEntry = {
 };
 
 export type AttendanceRecord = {
-  id: string; // `${date}:${staffId}`
+  id: string; // `${date}:${storeId}:${staffId}`（旧データは `${date}:${staffId}`）
+  /** 店舗スコープ（非破壊・任意）。未設定の既存データは既定店舗扱い。 */
+  storeId?: string;
   date: string;
   staffId: string;
   clockIn: string;
@@ -27,7 +31,9 @@ export type AttendanceRecord = {
 };
 
 export type RegisterRecord = {
-  id: string; // `${date}:${kind}`
+  id: string; // `${date}:${storeId}:${kind}`（旧データは `${date}:${kind}`）
+  /** 店舗スコープ（非破壊・任意）。未設定の既存データは既定店舗扱い。 */
+  storeId?: string;
   date: string;
   kind: "open" | "check" | "close";
   counts: Record<string, number>;
