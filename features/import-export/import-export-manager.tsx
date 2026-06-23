@@ -146,6 +146,16 @@ export function ImportExportManager() {
   const serviceByIdMap = useMemo(() => buildServiceIdMap(services), [services]);
   const roomByIdMap = useMemo(() => buildRoomIdMap(rooms), [rooms]);
 
+  // CSVインポートの参照解決・重複判定は「現在店舗の候補」に限定する（他店スタッフ/メニュー/予約への誤紐付けを防ぐ）。
+  // 名前→IDの解決を現在店舗のスタッフ/メニューだけで行う。ブースは店舗スコープ未対応のため全体のまま。
+  const importStaff = useMemo(() => staff.filter((s) => isStaffHomeStore(s, currentStoreId)), [staff, currentStoreId]);
+  const importServices = useMemo(() => filterMenusByStore(services, currentStoreId), [services, currentStoreId]);
+  const importReservations = useMemo(() => filterReservationsByStore(reservations, currentStoreId), [reservations, currentStoreId]);
+  const importStaffNameMap = useMemo(() => buildStaffNameMap(importStaff), [importStaff]);
+  const importServiceNameMap = useMemo(() => buildServiceNameMap(importServices), [importServices]);
+  const importStaffByIdMap = useMemo(() => buildStaffIdMap(importStaff), [importStaff]);
+  const importServiceByIdMap = useMemo(() => buildServiceIdMap(importServices), [importServices]);
+
   const summaries = useMemo(
     () => [
       { label: "顧客", value: `${customers.length}件` },
@@ -167,15 +177,15 @@ export function ImportExportManager() {
     void file.text().then((text) => {
       const preview = buildPreview(dataset, file.name, text, {
         customers,
-        staff,
-        services,
+        staff: importStaff,
+        services: importServices,
         rooms,
-        reservations,
-        staffNameMap,
-        serviceNameMap,
+        reservations: importReservations,
+        staffNameMap: importStaffNameMap,
+        serviceNameMap: importServiceNameMap,
         roomNameMap,
-        staffByIdMap,
-        serviceByIdMap,
+        staffByIdMap: importStaffByIdMap,
+        serviceByIdMap: importServiceByIdMap,
         roomByIdMap
       });
 
@@ -241,11 +251,11 @@ export function ImportExportManager() {
       // 取り込んだ予約は現在店舗に紐付ける（未指定なら currentStoreId を付与）。
       const nextItems = acceptedRows.map((row) => {
         const r = toReservation(row.values, {
-          staffNameMap,
-          serviceNameMap,
+          staffNameMap: importStaffNameMap,
+          serviceNameMap: importServiceNameMap,
           roomNameMap,
-          staffByIdMap,
-          serviceByIdMap,
+          staffByIdMap: importStaffByIdMap,
+          serviceByIdMap: importServiceByIdMap,
           roomByIdMap
         });
         return { ...r, storeId: r.storeId ?? currentStoreId };
