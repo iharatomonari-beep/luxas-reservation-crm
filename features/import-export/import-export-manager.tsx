@@ -227,7 +227,13 @@ export function ImportExportManager() {
     }
 
     if (dataset === "services") {
-      const nextItems = acceptedRows.map((row) => toService(row.values));
+      // 取り込んだメニューは現在店舗の提供に限定する（未指定だと storeScope!=="selected" で全店共通になり、他店の予約候補に出てしまう）。
+      const nextItems = acceptedRows.map((row) => {
+        const m = toService(row.values);
+        return m.storeScope === "selected"
+          ? m
+          : { ...m, storeScope: "selected" as const, storeIds: [currentStoreId] };
+      });
       setServices((current) => [...nextItems, ...current]);
     }
 

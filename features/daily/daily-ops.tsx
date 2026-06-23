@@ -6,6 +6,7 @@ import { useLocalCollection } from "@/features/master-data/local-storage";
 import { initialShifts, initialStaff, shiftsStorageKey, staffStorageKey } from "@/features/master-data/mock-data";
 import { dailyTargetsStorageKey } from "@/features/master-data/monthly-shift-grid";
 import { isRecordInStore } from "@/features/master-data/store-record-scope";
+import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import {
@@ -112,7 +113,11 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
   const [from, setFrom] = useState(today().slice(0, 8) + "01");
   const [to, setTo] = useState(today());
 
-  const dayShifts = useMemo(() => shifts.filter((s) => s.workDate === date && (s.isActive ?? true)), [shifts, date]);
+  // 出勤表は現在店舗のシフトのみ（他店スタッフのシフト表示・他店出勤記録の作成を防ぐ）。
+  const dayShifts = useMemo(
+    () => filterShiftsByStore(shifts, currentStoreId).filter((s) => s.workDate === date && (s.isActive ?? true)),
+    [shifts, date, currentStoreId]
+  );
   // 売上日報は現在店舗の予約のみを集計する（店舗をまたいだ混入を防ぐ）。
   const dayReservations = useMemo(
     () => filterReservationsByStore(reservations, currentStoreId).filter((r) => r.date === date && r.status !== "canceled"),

@@ -11,6 +11,7 @@ import { initialReservations, reservationsStorageKey } from "@/features/reservat
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import type { ServiceMenu, StaffMember } from "@/features/master-data/types";
 import type { Reservation } from "@/features/reservations/types";
+import { isReservationInStore } from "@/features/reservations/store-scope";
 import type { Customer } from "@/features/customers/types";
 import { formatCurrency } from "@/features/master-data/utils";
 import { initialStores } from "@/features/org/mock-data";
@@ -42,7 +43,8 @@ function statusInfo(r: Reservation): { label: string; cls: string } {
 }
 
 // マイページで使う共通データ＋セッションを読み出す。
-function useMyPageData() {
+// storeId: 公開URLの店舗。会員の予約はこの店舗のものだけを扱う（同一会員IDで他店予約を表示/操作しない）。
+function useMyPageData(storeId: string) {
   const { memberId, hydrated, logout } = useMemberSession();
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const [customers, setCustomers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
@@ -60,7 +62,8 @@ function useMyPageData() {
     const key = (r: Reservation) => `${r.date}${r.startTime ?? "00:00"}`;
     const isUpcoming = (r: Reservation) => key(r) >= nowKey;
     return reservations
-      .filter((r) => r.customerId === memberId)
+      // この会員かつ現在店舗の予約のみ（未設定の既存予約は既定店舗扱い）。他店予約のキャンセル等を防ぐ。
+      .filter((r) => r.customerId === memberId && isReservationInStore(r, storeId))
       .slice()
       .sort((a, b) => {
         const ua = isUpcoming(a);
@@ -69,7 +72,7 @@ function useMyPageData() {
         // 未来は近い順（昇順）＝次の予約が最上、過去は新しい順（降順）。
         return ua ? key(a).localeCompare(key(b)) : key(b).localeCompare(key(a));
       });
-  }, [reservations, memberId]);
+  }, [reservations, memberId, storeId]);
 
   // お客様によるキャンセル（取消）。台帳・集計と同じ canceled / cancelType=cancel を使う。
   function cancelReservation(id: string) {
@@ -294,7 +297,7 @@ function useReservationActions(
 
 // ── ① マイページ ホーム ───────────────────────────────────────
 export function MyPageHome({ storeId }: { storeId: string }) {
-  const { member, myReservations, services, staff, cancelReservation } = useMyPageData();
+  const { member, myReservations, services, staff, cancelReservation } = useMyPageData(storeId);
   const { onCancel, onChange } = useReservationActions(storeId, cancelReservation, { services, staff, memberEmail: member?.email });
   const upcoming = myReservations.filter((r) => r.status !== "canceled");
 
@@ -331,7 +334,7 @@ export function MyPageHome({ storeId }: { storeId: string }) {
 
 // ── ② 予約情報 ────────────────────────────────────────────────
 export function MyPageReservations({ storeId }: { storeId: string }) {
-  const { member, myReservations, services, staff, cancelReservation } = useMyPageData();
+  const { member, myReservations, services, staff, cancelReservation } = useMyPageData(storeId);
   const { onCancel, onChange } = useReservationActions(storeId, cancelReservation, { services, staff, memberEmail: member?.email });
 
   return (
@@ -351,7 +354,7 @@ export function MyPageReservations({ storeId }: { storeId: string }) {
 
 // ── ③ 会員情報 ────────────────────────────────────────────────
 export function MyPageMember({ storeId }: { storeId: string }) {
-  const { member, updateMember } = useMyPageData();
+  const { member, updateMember } = useMyPageData(storeId);
 
   // 基本情報の編集（名前/電話/誕生日/メール）。編集→保存で localStorage に実保存。
   const [editing, setEditing] = useState(false);

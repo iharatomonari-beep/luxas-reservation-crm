@@ -39,10 +39,15 @@ export function MonthlyShiftGrid() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
 
-  // 現在店舗に所属するスタッフのみ表示（未設定の既存スタッフは既定店舗扱い）。他店スタッフの表示・上書きを防ぐ。
+  // 現在店舗にシフトを持つスタッフID（ヘルプ勤務＝他店所属でも応援シフトがあれば表示・編集できるように）。
+  const staffIdsWithShiftHere = useMemo(
+    () => new Set(shifts.filter((s) => isShiftInStore(s, currentStoreId)).map((s) => s.staffId)),
+    [shifts, currentStoreId]
+  );
+  // 表示対象＝現在店舗の所属スタッフ ＋ 現在店舗に応援シフトを持つスタッフ（未設定の既存は既定店舗扱い）。
   const activeStaff = useMemo(
-    () => staff.filter((s) => s.isActive && isStaffHomeStore(s, currentStoreId)),
-    [staff, currentStoreId]
+    () => staff.filter((s) => s.isActive && (isStaffHomeStore(s, currentStoreId) || staffIdsWithShiftHere.has(s.id))),
+    [staff, currentStoreId, staffIdsWithShiftHere]
   );
 
   const dates = useMemo(() => {

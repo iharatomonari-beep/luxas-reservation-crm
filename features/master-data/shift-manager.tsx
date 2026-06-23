@@ -54,10 +54,15 @@ export function ShiftManager() {
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [shifts, setShifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
   const { currentStoreId } = useCurrentStore();
-  // 現在店舗に所属するスタッフのみ（未設定の既存スタッフは既定店舗扱い）。
+  // 現在店舗にシフトを持つスタッフID（ヘルプ勤務＝他店所属でも応援シフトがあれば編集できるように）。
+  const staffIdsWithShiftHere = useMemo(
+    () => new Set(shifts.filter((s) => isShiftInStore(s, currentStoreId)).map((s) => s.staffId)),
+    [shifts, currentStoreId]
+  );
+  // 表示対象＝現在店舗の所属スタッフ ＋ 現在店舗に応援シフトを持つスタッフ。
   const activeStaff = useMemo(
-    () => staff.filter((item) => item.isActive && isStaffHomeStore(item, currentStoreId)),
-    [staff, currentStoreId]
+    () => staff.filter((item) => item.isActive && (isStaffHomeStore(item, currentStoreId) || staffIdsWithShiftHere.has(item.id))),
+    [staff, currentStoreId, staffIdsWithShiftHere]
   );
 
   const [selectedStaffId, setSelectedStaffId] = useState<string>(activeStaff[0]?.id ?? "");
