@@ -108,10 +108,9 @@ export function LoginForm({
         </button>
       </form>
 
-      {/* 無認証プレビュー導線は、開発環境または NEXT_PUBLIC_ALLOW_PREVIEW=1 のデプロイでのみ表示する
-          （既定の本番では fail-closed で /dashboard を保護）。 */}
-      {!isSupabaseConfigured &&
-      (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ALLOW_PREVIEW === "1") ? (
+      {/* Supabase 未設定（プロトタイプ/デモモード）では無認証プレビュー導線を表示する。
+          NEXT_PUBLIC_LOCK_PREVIEW=1 でロックした場合は非表示。 */}
+      {!isSupabaseConfigured && process.env.NEXT_PUBLIC_LOCK_PREVIEW !== "1" ? (
         <Link
           href="/dashboard"
           className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border border-luxas-line bg-white px-4 py-3 text-sm font-semibold text-luxas-ink transition hover:bg-luxas-mist"

@@ -10,17 +10,16 @@ export default async function DashboardLayout({
 }>) {
   const configured = isSupabaseConfigured();
 
-  // 認証は既定 fail-closed。Supabase 未設定のとき無認証プレビューを許可するのは、
-  //  (a) 開発環境(NODE_ENV!=="production")、または
-  //  (b) 明示的に NEXT_PUBLIC_ALLOW_PREVIEW="1" を設定したデプロイ（チームによる動作確認用）
-  // のみ。既定（フラグ未設定の本番）は必ずログインへ送る。
-  // ⚠ NEXT_PUBLIC_ALLOW_PREVIEW=1 のデプロイは URL を知る誰でも管理画面を閲覧できる。
-  //    実顧客データを入れる前に必ず外すこと（現状はモックデータのため確認用に許容）。
-  const previewAllowed =
-    process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ALLOW_PREVIEW === "1";
+  // Supabase 未設定＝バックエンド無しの「プロトタイプ/デモモード」。
+  // この状態では本番(Vercel)でも無認証プレビューを許可し、チームが動作確認できるようにする。
+  // ロックしたい場合は NEXT_PUBLIC_LOCK_PREVIEW="1" を設定すると未設定でもログイン必須にできる。
+  // ※Supabase を設定すると下の本認証＋スタッフ許可リスト経路になり、自動的に保護される。
+  // ⚠ プレビュー可のデプロイは URL を知る誰でも管理画面を閲覧できる。実顧客データを入れる前に
+  //    必ず Supabase を設定（または LOCK_PREVIEW=1）すること。現状はモックデータのため確認用に許容。
+  const lockPreview = process.env.NEXT_PUBLIC_LOCK_PREVIEW === "1";
 
   if (!configured) {
-    if (!previewAllowed) {
+    if (lockPreview) {
       redirect("/login");
     }
 
