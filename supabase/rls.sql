@@ -108,11 +108,14 @@ returns setof uuid language sql stable security definer set search_path = public
       where u.auth_user_id = auth.uid() and u.is_active and r.scope_store_id is null
     )
   union
-  -- 店舗限定ロール: その店舗のみ
+  -- 店舗限定ロール: その店舗のみ。ただし「自テナントの店舗」に限る（他テナント店舗UUIDの混入を拒否）。
   select r.scope_store_id
   from public.users u
   join public.user_roles r on r.user_id = u.id
-  where u.auth_user_id = auth.uid() and u.is_active and r.scope_store_id is not null
+  join public.stores s on s.id = r.scope_store_id
+  where u.auth_user_id = auth.uid() and u.is_active
+    and r.scope_store_id is not null
+    and s.tenant_id = u.tenant_id
 $$;
 
 -- ============================================================
@@ -169,41 +172,83 @@ create policy users_write on public.users for all to authenticated
   using ( tenant_id = public.app_user_tenant_id() and public.app_has_role(array['owner']) )
   with check ( tenant_id = public.app_user_tenant_id() and public.app_has_role(array['owner']) );
 
+-- user_roles: owner のみ管理。さらに「付与先ユーザー」「scope_store_id」「scope_tenant_id」が
+-- すべて自テナントに属することを WITH CHECK で強制（他テナント店舗UUIDを scope に混ぜる攻撃を防止）。
 drop policy if exists user_roles_rw on public.user_roles;
 create policy user_roles_rw on public.user_roles for all to authenticated
   using ( exists (select 1 from public.users u where u.id = user_roles.user_id and u.tenant_id = public.app_user_tenant_id())
           and public.app_has_role(array['owner']) )
-  with check ( exists (select 1 from public.users u where u.id = user_roles.user_id and u.tenant_id = public.app_user_tenant_id())
-          and public.app_has_role(array['owner']) );
+  with check (
+    public.app_has_role(array['owner'])
+    and exists (select 1 from public.users u where u.id = user_roles.user_id and u.tenant_id = public.app_user_tenant_id())
+    and (scope_store_id is null
+         or exists (select 1 from public.stores s where s.id = user_roles.scope_store_id and s.tenant_id = public.app_user_tenant_id()))
+    and (scope_tenant_id is null or scope_tenant_id = public.app_user_tenant_id())
+  );
 
--- 店舗を持つ業務テーブル: store_id ∈ app_user_store_ids() で「自テナント＋触ってよい店舗」を一括強制
+-- 店舗を持つ業務テーブル: store_id ∈ app_user_store_ids() で「自テナント＋触ってよい店舗」を強制。
+-- さらに SELECT と更新系(INSERT/UPDATE/DELETE)を分け、ロールごとに許可範囲を明示する。
+-- マスタ（staff/services/rooms）: 参照=店舗内スタッフ全員 / 変更=owner・manager のみ。
 drop policy if exists staff_rw on public.staff;
-create policy staff_rw on public.staff for all to authenticated
-  using ( store_id in (select public.app_user_store_ids()) )
-  with check ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists staff_select on public.staff;
+create policy staff_select on public.staff for select to authenticated
+  using ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists staff_write on public.staff;
+create policy staff_write on public.staff for all to authenticated
+  using ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) )
+  with check ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) );
 
 drop policy if exists services_rw on public.services;
-create policy services_rw on public.services for all to authenticated
-  using ( store_id in (select public.app_user_store_ids()) )
-  with check ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists services_select on public.services;
+create policy services_select on public.services for select to authenticated
+  using ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists services_write on public.services;
+create policy services_write on public.services for all to authenticated
+  using ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) )
+  with check ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) );
 
 drop policy if exists rooms_rw on public.rooms;
-create policy rooms_rw on public.rooms for all to authenticated
-  using ( store_id in (select public.app_user_store_ids()) )
-  with check ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists rooms_select on public.rooms;
+create policy rooms_select on public.rooms for select to authenticated
+  using ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists rooms_write on public.rooms;
+create policy rooms_write on public.rooms for all to authenticated
+  using ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) )
+  with check ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) );
 
+-- シフト: 参照=店舗内スタッフ全員 / 変更=owner・manager。
 drop policy if exists shifts_rw on public.shifts;
-create policy shifts_rw on public.shifts for all to authenticated
-  using ( store_id in (select public.app_user_store_ids()) )
-  with check ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists shifts_select on public.shifts;
+create policy shifts_select on public.shifts for select to authenticated
+  using ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists shifts_write on public.shifts;
+create policy shifts_write on public.shifts for all to authenticated
+  using ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) )
+  with check ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) );
 
+-- 予約: 参照/作成/更新=店舗内スタッフ全員（日々の運用） / 削除=owner・manager のみ。
 drop policy if exists reservations_rw on public.reservations;
-create policy reservations_rw on public.reservations for all to authenticated
+drop policy if exists reservations_select on public.reservations;
+create policy reservations_select on public.reservations for select to authenticated
+  using ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists reservations_insert on public.reservations;
+create policy reservations_insert on public.reservations for insert to authenticated
+  with check ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists reservations_update on public.reservations;
+create policy reservations_update on public.reservations for update to authenticated
   using ( store_id in (select public.app_user_store_ids()) )
   with check ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists reservations_delete on public.reservations;
+create policy reservations_delete on public.reservations for delete to authenticated
+  using ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) );
 
+-- 予約付帯リソース: 予約に準ずる（参照/作成/更新=スタッフ / 削除=owner・manager）。
 drop policy if exists reservation_resources_rw on public.reservation_resources;
-create policy reservation_resources_rw on public.reservation_resources for all to authenticated
+drop policy if exists reservation_resources_select on public.reservation_resources;
+create policy reservation_resources_select on public.reservation_resources for select to authenticated
+  using ( store_id in (select public.app_user_store_ids()) );
+drop policy if exists reservation_resources_write on public.reservation_resources;
+create policy reservation_resources_write on public.reservation_resources for all to authenticated
   using ( store_id in (select public.app_user_store_ids()) )
   with check ( store_id in (select public.app_user_store_ids()) );
 
@@ -212,11 +257,22 @@ create policy import_jobs_rw on public.import_jobs for all to authenticated
   using ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) )
   with check ( store_id in (select public.app_user_store_ids()) and public.app_has_role(array['owner','manager']) );
 
--- 顧客: 会社内共有（テナント単位）。店舗専属にする場合はここを store ベースへ差し替える。
+-- 顧客: 会社内共有（テナント単位）。参照/作成/更新=スタッフ全員 / 削除=owner・manager のみ。
+-- （店舗専属にする場合は tenant_id 条件を store ベースへ差し替える。）
 drop policy if exists customers_rw on public.customers;
-create policy customers_rw on public.customers for all to authenticated
+drop policy if exists customers_select on public.customers;
+create policy customers_select on public.customers for select to authenticated
+  using ( tenant_id = public.app_user_tenant_id() );
+drop policy if exists customers_insert on public.customers;
+create policy customers_insert on public.customers for insert to authenticated
+  with check ( tenant_id = public.app_user_tenant_id() );
+drop policy if exists customers_update on public.customers;
+create policy customers_update on public.customers for update to authenticated
   using ( tenant_id = public.app_user_tenant_id() )
   with check ( tenant_id = public.app_user_tenant_id() );
+drop policy if exists customers_delete on public.customers;
+create policy customers_delete on public.customers for delete to authenticated
+  using ( tenant_id = public.app_user_tenant_id() and public.app_has_role(array['owner','manager']) );
 
 -- カルテ等のノート: 当面はスタッフ全員が閲覧/編集可（施術に必要なため）。
 -- 将来、機微(is_sensitive)を owner/manager 限定にする場合は、下記 using に
@@ -234,6 +290,29 @@ create policy customer_notes_write on public.customer_notes for all to authentic
 drop policy if exists audit_logs_select on public.audit_logs;
 create policy audit_logs_select on public.audit_logs for select to authenticated
   using ( tenant_id = public.app_user_tenant_id() and public.app_has_role(array['owner','manager']) );
+
+-- ============================================================
+-- 5.5 二重予約のDBレベル防止（排他制約）
+--    同一店舗で「同じスタッフ」「同じブース」が時間帯重複する予約を、DBが物理的に拒否する。
+--    並行リクエストでも安全（アプリ側チェックのレースを塞ぐ）。取消(canceled)は対象外。
+-- ============================================================
+create extension if not exists btree_gist;
+
+alter table public.reservations drop constraint if exists reservations_no_overlap_staff;
+alter table public.reservations add constraint reservations_no_overlap_staff
+  exclude using gist (
+    store_id with =,
+    staff_id with =,
+    tsrange(reservation_date + start_time, reservation_date + end_time) with &&
+  ) where (status <> 'canceled');
+
+alter table public.reservations drop constraint if exists reservations_no_overlap_room;
+alter table public.reservations add constraint reservations_no_overlap_room
+  exclude using gist (
+    store_id with =,
+    room_id with =,
+    tsrange(reservation_date + start_time, reservation_date + end_time) with &&
+  ) where (status <> 'canceled');
 
 -- ============================================================
 -- 6. 機微列(caution / chart_memo)の列制御 — 当面は「全スタッフ閲覧可」のため未適用。
@@ -322,7 +401,26 @@ begin
   if v_dur is null then raise exception 'invalid service'; end if;
   v_end := (p_start + (v_dur || ' minutes')::interval)::time;
 
-  -- 空き再検証（同店舗・同枠の重複を拒否）
+  -- スタッフ・ブースが「同じ店舗の有効レコード」か検証（他店舗UUIDの持ち込みを拒否）。
+  if not exists (select 1 from public.staff s where s.id = p_staff_id and s.store_id = p_store_id and s.is_active) then
+    raise exception 'invalid staff';
+  end if;
+  if not exists (select 1 from public.rooms rm where rm.id = p_room_id and rm.store_id = p_store_id and rm.is_active) then
+    raise exception 'invalid room';
+  end if;
+
+  -- 過去日時・営業時間外を拒否（最低限の妥当性。完全な空き判定は get_open_slots/availability に準拠）。
+  if (p_date + p_start) < now() at time zone 'Asia/Tokyo' then
+    raise exception 'past datetime';
+  end if;
+  if not exists (
+    select 1 from public.stores s
+    where s.id = p_store_id and p_start >= s.business_start and v_end <= s.business_end
+  ) then
+    raise exception 'outside business hours';
+  end if;
+
+  -- 空き再検証（同店舗・同枠の重複を拒否）。最終的な二重予約防止は下の排他制約(EXCLUDE)が担保。
   if exists (
     select 1 from public.reservations r
     where r.store_id = p_store_id and r.reservation_date = p_date and r.status <> 'canceled'

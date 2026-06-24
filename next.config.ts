@@ -10,7 +10,9 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-  { key: "Content-Security-Policy", value: "frame-ancestors 'self'" }
+  { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+  // プロトタイプ/デモ公開を検索エンジンにインデックスさせない（実顧客データ前提の本番では方針見直し）。
+  { key: "X-Robots-Tag", value: "noindex, nofollow" }
 ];
 
 const nextConfig: NextConfig = {

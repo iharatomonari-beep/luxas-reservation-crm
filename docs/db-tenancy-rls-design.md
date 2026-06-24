@@ -92,3 +92,15 @@ user（ログインする人）→ user_roles（owner / manager / staff …）
 3. **カルテ・注意事項は当面スタッフ全員が閲覧可**（施術に必要）。将来制限する可能性は残す（`is_sensitive` 列・`customers_basic` ビューを土台として保持）。
 
 これらを `rls.sql` に反映済み。第2区切り（Supabase接続＋認証本実装）で適用・検証する。
+
+---
+
+## 8. Codex 第5回レビューを受けた設計修正（2026-06-24）
+
+独立レビュー(Codex)で見つかった RLS設計の穴を修正:
+
+1. **テナント越え防止（Critical）**: `app_user_store_ids()` の店舗限定ロールに `stores.tenant_id = users.tenant_id` 検証を追加。`user_roles` の WITH CHECK に「付与先ユーザー・scope_store_id・scope_tenant_id がすべて自テナント」を強制。→ 他テナント店舗UUIDを scope に混ぜる越境を遮断。
+2. **ロール粒度の明確化（High）**: `for all` の一括ポリシーを **SELECT（店舗内スタッフ全員）/ 更新系（owner・manager）** に分割（staff/services/rooms/shifts）。予約・顧客は参照/作成/更新=スタッフ、削除=owner・manager。
+3. **公開予約RPCの濫用対策（High）**: `create_online_booking` に staff/room の同一店舗検証・過去日時/営業時間外の拒否を追加。さらに **DBレベルの排他制約(EXCLUDE using gist)** で同一スタッフ/ブースの時間重複予約を物理的に拒否（並行リクエストでも安全）。※レート制限/CAPTCHA/冪等キーはアプリ/エッジ層で別途。
+4. **デモ公開の露出低減（Medium）**: 全レスポンスに `X-Robots-Tag: noindex` ＋ `app/robots.ts` で全クロール禁止。※無認証デモ公開そのものの是非はユーザー判断（モックデータ前提で許容中。Vercelのデプロイ保護/パスワード or `NEXT_PUBLIC_LOCK_PREVIEW=1` でのロックを推奨）。
+5. **残課題**: get_open_slots の availability 完全移植、nonce付き完全CSP、依存(Next/postcss)更新は第2区切り以降。
