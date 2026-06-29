@@ -5,6 +5,7 @@ import type { ServiceMenu, ServiceRoom, StaffMember, StaffShift } from "@/featur
 import type { Reservation } from "@/features/reservations/types";
 import { hasBoothCapacity } from "@/features/master-data/mock-data";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
+import { filterRoomsByStore } from "@/features/master-data/store-room-scope";
 import { isMenuInStore } from "@/features/master-data/store-menu-scope";
 import type { OnlineBlock } from "@/features/store-ops/online-blocks";
 import { minutesToTime, normalizeDateInputValue, normalizeTimeInputValue, timeToMinutes } from "@/features/reservations/date-utils";
@@ -190,7 +191,7 @@ export function getOpenStartTimes(params: {
       serviceMenuId: menu.id,
       currentReservations: storeReservations,
       services,
-      rooms,
+      rooms: filterRoomsByStore(rooms, storeId),
       intervalMinutes: menu.cleanupMinutes ?? 0
     });
     if (!boothOk) continue;

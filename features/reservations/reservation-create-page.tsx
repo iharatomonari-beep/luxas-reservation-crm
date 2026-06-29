@@ -7,9 +7,13 @@ import { Save, ChevronLeft } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { backendFor } from "@/features/master-data/migration-config";
+import { insertViaMapper } from "@/features/master-data/remote-collection";
+import { reservationMapper } from "@/features/master-data/mappers/reservation-mapper";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import { filterMenusByStore } from "@/features/master-data/store-menu-scope";
+import { filterRoomsByStore } from "@/features/master-data/store-room-scope";
 import {
   hasBoothCapacity,
   initialRooms,
@@ -182,11 +186,12 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
     setForm(nextForm);
   }
 
-  function saveReservation(event: FormEvent<HTMLFormElement>) {
+  async function saveReservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const currentReservations = readStoredReservations(reservations);
-    const validationError = validateReservationForm(form, currentReservations, staff, rooms, shifts, services);
+    // ブースは現在店舗のものだけで容量判定する（多店舗・案B）。
+    const validationError = validateReservationForm(form, currentReservations, staff, filterRoomsByStore(rooms, currentStoreId), shifts, services);
     if (validationError) {
       setFormMessage({ type: "error", text: validationError });
       setMessage(null);
@@ -206,19 +211,42 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
       createdAt: Date.now()
     };
 
-    try {
-      window.localStorage.setItem(reservationsStorageKey, JSON.stringify(nextReservations));
-      window.localStorage.setItem(reservationLedgerDateStorageKey, payload.date);
-      window.localStorage.setItem(reservationLedgerUpdateStorageKey, JSON.stringify(ledgerNotification));
-    } catch {
-      setFormMessage({ type: "error", text: "ブラウザの保存領域に書き込めませんでした。空き容量または閲覧設定を確認してください。" });
-      setMessage(null);
-      setSavedReservation(null);
-      setCloseFallbackVisible(false);
-      return;
+    if (backendFor(reservationsStorageKey) === "supabase") {
+      // Supabase モード: ウィンドウクローズで保存がabortされないよう、DBへ確実にINSERTしてから進む。
+      // reservations本体はlocalStorageに書かない（DBが正・残骸を作らない）。
+      try {
+        await insertViaMapper(reservationMapper, nextReservation);
+      } catch (error) {
+        console.error("[supabase] insert reservation failed", error);
+        setFormMessage({ type: "error", text: "予約の保存に失敗しました。時間をおいて再度お試しください。" });
+        setMessage(null);
+        setSavedReservation(null);
+        setCloseFallbackVisible(false);
+        return;
+      }
+      // 台帳には「日付遷移＋作成通知」だけ伝える（台帳はDBから取り直す）。
+      try {
+        window.localStorage.setItem(reservationLedgerDateStorageKey, payload.date);
+        window.localStorage.setItem(reservationLedgerUpdateStorageKey, JSON.stringify(ledgerNotification));
+      } catch {
+        // localStorage 不可でも DB 保存は完了済み。
+      }
+    } else {
+      // localStorage モード（従来動作）。
+      try {
+        window.localStorage.setItem(reservationsStorageKey, JSON.stringify(nextReservations));
+        window.localStorage.setItem(reservationLedgerDateStorageKey, payload.date);
+        window.localStorage.setItem(reservationLedgerUpdateStorageKey, JSON.stringify(ledgerNotification));
+      } catch {
+        setFormMessage({ type: "error", text: "ブラウザの保存領域に書き込めませんでした。空き容量または閲覧設定を確認してください。" });
+        setMessage(null);
+        setSavedReservation(null);
+        setCloseFallbackVisible(false);
+        return;
+      }
+      setReservations(nextReservations);
     }
 
-    setReservations(nextReservations);
     setSavedReservation(nextReservation);
     setMessage({ type: "success", text: "予約を保存しました" });
     setFormMessage(null);

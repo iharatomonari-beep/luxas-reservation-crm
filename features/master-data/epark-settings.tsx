@@ -9,8 +9,11 @@ import { StatusMessage, type StatusMessageValue } from "@/features/master-data/s
 import type { ServiceMenu } from "@/features/master-data/types";
 import { compareBySortOrder } from "@/features/master-data/utils";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { settingsBackendFor } from "@/features/master-data/migration-config";
+import { loadTenantSettings, saveTenantSettings } from "@/features/master-data/remote-collection";
 
 const eparkStorageKey = "luxas-epark-settings";
+const eparkTable = "epark_settings";
 
 type EparkSettings = { recommendedCourse1Id: string; recommendedCourse2Id: string };
 const emptySettings: EparkSettings = { recommendedCourse1Id: "", recommendedCourse2Id: "" };
@@ -19,9 +22,23 @@ export function EparkSettings() {
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [settings, setSettings] = useState<EparkSettings>(emptySettings);
   const [message, setMessage] = useState<StatusMessageValue | null>(null);
+  const backend = settingsBackendFor(eparkStorageKey);
 
-  // 単一オブジェクトをlocalStorageから読み込み（hydration後）。
+  // 単一オブジェクトを読み込み（hydration後）。supabase時はDBの jsonb、local時は localStorage。
   useEffect(() => {
+    let cancelled = false;
+    if (backend === "supabase") {
+      loadTenantSettings(eparkTable)
+        .then((json) => {
+          if (!cancelled && json) {
+            setSettings({ ...emptySettings, ...(json as Partial<EparkSettings>) });
+          }
+        })
+        .catch((error) => console.error("[supabase] load epark_settings failed", error));
+      return () => {
+        cancelled = true;
+      };
+    }
     try {
       const stored = window.localStorage.getItem(eparkStorageKey);
       if (stored) {
@@ -30,14 +47,21 @@ export function EparkSettings() {
     } catch {
       // 破損時は既定のまま。
     }
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [backend]);
 
   const courseOptions = [...services].filter((s) => s.isActive).sort(compareBySortOrder);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      window.localStorage.setItem(eparkStorageKey, JSON.stringify(settings));
+      if (backend === "supabase") {
+        await saveTenantSettings(eparkTable, { ...settings });
+      } else {
+        window.localStorage.setItem(eparkStorageKey, JSON.stringify(settings));
+      }
       setMessage({ type: "success", text: "EPARK掲載設定を保存しました。" });
     } catch {
       setMessage({ type: "error", text: "保存に失敗しました。" });

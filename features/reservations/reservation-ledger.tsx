@@ -9,6 +9,7 @@ import { initialCustomers, customersStorageKey } from "@/features/customers/mock
 import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
 import { searchCustomers } from "@/features/customers/customer-search";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { backendFor } from "@/features/master-data/migration-config";
 import {
   hasBoothCapacity,
   initialOptions,
@@ -35,6 +36,7 @@ import type { Store } from "@/features/org/types";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import { filterMenusByStore } from "@/features/master-data/store-menu-scope";
+import { filterRoomsByStore } from "@/features/master-data/store-room-scope";
 import { menuColorStyle, reservationCardStyle } from "@/features/master-data/menu-colors";
 import { isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
@@ -695,10 +697,15 @@ export function ReservationLedger() {
 
   useEffect(() => {
     function syncReservationsFromStorage(nextDate?: string) {
-      const storedReservations = readStoredReservations();
-
-      if (storedReservations) {
-        setReservations(storedReservations);
+      // localStorage バックエンドのときだけ localStorage から再ハイドレートする。
+      // Supabase バックエンドでは DB が正なので、ここで localStorage を読むと
+      // DB由来のデータを古い localStorage で上書きし、切替層が「差分=削除」と誤判定して
+      // DB行を消してしまう（リロードで予約が消える不具合）。DBの同期は切替層の focus 再取得が担う。
+      if (backendFor(reservationsStorageKey) === "local") {
+        const storedReservations = readStoredReservations();
+        if (storedReservations) {
+          setReservations(storedReservations);
+        }
       }
 
       const normalizedDate = nextDate ? normalizeDateInputValue(nextDate) : null;
@@ -879,7 +886,7 @@ export function ReservationLedger() {
       currentReservations: data.reservations,
       staffList: data.staff,
       services: data.services,
-      rooms: data.rooms,
+      rooms: filterRoomsByStore(data.rooms, currentStoreId),
       shifts: data.shifts
     });
 
@@ -1205,7 +1212,7 @@ export function ReservationLedger() {
       currentReservations: reservations,
       staffList: staff,
       services,
-      rooms,
+      rooms: filterRoomsByStore(rooms, currentStoreId),
       shifts
     });
 
@@ -1551,7 +1558,7 @@ export function ReservationLedger() {
       serviceMenuId: value.serviceMenuId,
       currentReservations,
       services,
-      rooms,
+      rooms: filterRoomsByStore(rooms, currentStoreId),
       excludeReservationId: currentReservationId ?? undefined
     });
 

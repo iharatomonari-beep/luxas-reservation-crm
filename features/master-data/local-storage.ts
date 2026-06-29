@@ -1,6 +1,9 @@
 "use client";
 
-import { Dispatch, SetStateAction, useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
+import { tableConfig } from "./migration-config";
+import type { DbContext, TableMapper } from "./mappers/types";
+import { loadDbContext, loadRows, syncToSupabase } from "./remote-collection";
 
 function readStoredCollection<T>(storageKey: string) {
   try {
@@ -38,10 +41,57 @@ const SEED_RESET_TOKENS: Record<string, string> = {
 };
 
 export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
+  const config = tableConfig(storageKey);
+  const backend = config?.backend ?? "local";
+  const mapper = (config?.mapper as unknown as TableMapper<T> | undefined) ?? undefined;
+  const useSupabase = backend === "supabase" && Boolean(mapper);
+
   const [items, setItems] = useState<T[]>(initialItems);
   const [isHydrated, setIsHydrated] = useState(false);
+  // Supabase書き込みの差分検出に使う「直前に永続化済みの配列」。
+  const prevRef = useRef<T[]>(initialItems);
+  // Supabaseの実行コンテキスト（テナント・店舗解決）。
+  const ctxRef = useRef<DbContext | null>(null);
 
+  // ---- ハイドレート（初期読み込み）----
   useEffect(() => {
+    if (useSupabase && mapper) {
+      // Supabase 管理のテーブルは localStorage を「正」にしない。移行前の古い残骸が
+      // 残っていると、再ハイドレート経路（台帳の focus/storage 同期等）がそれでDBデータを
+      // 上書きし、切替層が「差分=削除」と誤判定してDB行を消す事故につながる。
+      // ハイドレート時に当該キーの localStorage を破棄して根絶する。
+      try {
+        window.localStorage.removeItem(storageKey);
+        window.localStorage.removeItem(`${storageKey}::seed`);
+      } catch {
+        // localStorage 不可環境でも処理継続。
+      }
+      let cancelled = false;
+      (async () => {
+        try {
+          const ctx = await loadDbContext();
+          const rows = await loadRows(mapper.table);
+          if (cancelled) {
+            return;
+          }
+          ctxRef.current = ctx;
+          const mapped = rows.map((row) => mapper.fromRow(row));
+          prevRef.current = mapped;
+          setItems(mapped);
+        } catch (error) {
+          console.error(`[supabase] load ${mapper.table} failed`, error);
+        } finally {
+          if (!cancelled) {
+            setIsHydrated(true);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // ---- localStorage 経路（従来動作）----
     const resetToken = SEED_RESET_TOKENS[storageKey];
 
     if (resetToken) {
@@ -51,6 +101,7 @@ export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
         // 古いデータを破棄して初期データで再シード（stale localStorage の自動修復）
         window.localStorage.setItem(tokenKey, resetToken);
         window.localStorage.setItem(storageKey, JSON.stringify(initialItems));
+        prevRef.current = initialItems;
         setItems(initialItems);
         setIsHydrated(true);
         return;
@@ -60,23 +111,61 @@ export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
     const storedItems = readStoredCollection<T>(storageKey);
 
     if (storedItems) {
+      prevRef.current = storedItems;
       setItems(storedItems);
     }
 
     setIsHydrated(true);
-  }, [storageKey, initialItems]);
+    return;
+  }, [storageKey, backend, initialItems, mapper, useSupabase]);
 
+  // ---- 永続化（変更の保存）----
   useEffect(() => {
     if (!isHydrated) {
       return;
     }
 
-    window.localStorage.setItem(storageKey, JSON.stringify(items));
-  }, [isHydrated, items, storageKey]);
+    if (useSupabase && mapper) {
+      const prev = prevRef.current;
+      void syncToSupabase(mapper, ctxRef.current, prev, items)
+        .then(() => {
+          prevRef.current = items;
+        })
+        .catch((error) => {
+          console.error(`[supabase] sync ${mapper.table} failed`, error);
+        });
+      return;
+    }
 
+    window.localStorage.setItem(storageKey, JSON.stringify(items));
+    prevRef.current = items;
+  }, [isHydrated, items, storageKey, backend, mapper, useSupabase]);
+
+  // ---- 別タブ/復帰時の同期 ----
   useEffect(() => {
     if (!isHydrated) {
       return () => undefined;
+    }
+
+    if (useSupabase && mapper) {
+      // 復帰時にDBから取り直す（簡易同期）。
+      const refetch = () => {
+        loadRows(mapper.table)
+          .then((rows) => {
+            const mapped = rows.map((row) => mapper.fromRow(row));
+            prevRef.current = mapped;
+            setItems(mapped);
+          })
+          .catch(() => undefined);
+      };
+
+      window.addEventListener("focus", refetch);
+      window.addEventListener("pageshow", refetch);
+
+      return () => {
+        window.removeEventListener("focus", refetch);
+        window.removeEventListener("pageshow", refetch);
+      };
     }
 
     // Sync from other tabs so a save in the reservation popup shows up on the ledger immediately.
@@ -88,6 +177,7 @@ export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
       const storedItems = readStoredCollection<T>(storageKey);
 
       if (storedItems) {
+        prevRef.current = storedItems;
         setItems(storedItems);
       }
     }
@@ -96,6 +186,7 @@ export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
       const storedItems = readStoredCollection<T>(storageKey);
 
       if (storedItems) {
+        prevRef.current = storedItems;
         setItems(storedItems);
       }
     }
@@ -109,7 +200,7 @@ export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
       window.removeEventListener("focus", syncOnFocus);
       window.removeEventListener("pageshow", syncOnFocus);
     };
-  }, [isHydrated, storageKey]);
+  }, [isHydrated, storageKey, backend, mapper, useSupabase]);
 
   return [items, setItems] as const satisfies readonly [T[], Dispatch<SetStateAction<T[]>>];
 }

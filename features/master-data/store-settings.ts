@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { settingsBackendFor } from "@/features/master-data/migration-config";
+import { loadStoreSettings, saveStoreSettings } from "@/features/master-data/remote-collection";
 
 /**
  * 店舗設定マスタ（単一オブジェクト）。
@@ -146,23 +148,68 @@ function readStoredStoreSettings(storeId?: string): StoreSettings | null {
  * SSR では初期値、ハイドレーション後に保存値へ更新する。store 切替時は再読込する。
  */
 export function useStoreSettings(storeId?: string) {
+  const backend = settingsBackendFor(storeSettingsStorageKey);
   const [settings, setSettings] = useState<StoreSettings>(initialStoreSettings);
   const [isHydrated, setIsHydrated] = useState(false);
+  // ハイドレート/ストア切替直後の「エコー保存」を抑止（旧設定を別店舗へ誤upsertしない）。
+  const skipSaveRef = useRef(false);
+  // 公開ページ(anon)は保存しない（管理=authenticatedのみ書込）。
+  const canWriteRef = useRef(true);
 
   useEffect(() => {
+    let cancelled = false;
+    if (backend === "supabase") {
+      skipSaveRef.current = true; // storeId 切替時の即時 persist（旧設定）をスキップ
+      (async () => {
+        try {
+          const { settings: loaded, canWrite } = await loadStoreSettings(storeId);
+          if (cancelled) return;
+          canWriteRef.current = canWrite;
+          // null/undefined は除いて初期値へマージ（公開RPCの未設定キーで既定値を潰さない）。
+          const merged = loaded
+            ? ({ ...initialStoreSettings, ...Object.fromEntries(Object.entries(loaded).filter(([, val]) => val != null)) } as StoreSettings)
+            : initialStoreSettings;
+          skipSaveRef.current = true; // ロード値の setSettings によるエコー保存もスキップ
+          setSettings(merged);
+        } catch (error) {
+          console.error("[supabase] load store_settings failed", error);
+        } finally {
+          if (!cancelled) setIsHydrated(true);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // ---- localStorage 経路（従来動作）----
     const stored = readStoredStoreSettings(storeId);
-    // store 切替時は、保存が無ければフォールバック（グローバル/初期）に戻す。
     setSettings(stored ?? initialStoreSettings);
     setIsHydrated(true);
-  }, [storeId]);
+    return;
+  }, [storeId, backend]);
 
   useEffect(() => {
     if (!isHydrated) {
       return;
     }
 
+    if (backend === "supabase") {
+      if (skipSaveRef.current) {
+        skipSaveRef.current = false; // ハイドレート/切替のエコーは保存しない
+        return;
+      }
+      if (!canWriteRef.current) {
+        return; // 公開ページ(anon)は read-only
+      }
+      void saveStoreSettings(storeId, settings as unknown as Record<string, unknown>).catch((error) =>
+        console.error("[supabase] save store_settings failed", error)
+      );
+      return;
+    }
+
     window.localStorage.setItem(storeSettingsKeyFor(storeId), JSON.stringify(settings));
-  }, [isHydrated, settings, storeId]);
+  }, [isHydrated, settings, storeId, backend]);
 
   return [settings, setSettings, isHydrated] as const;
 }

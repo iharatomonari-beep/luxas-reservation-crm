@@ -19,6 +19,10 @@ import type { Reservation } from "@/features/reservations/types";
 import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { filterRecordsByStore } from "@/features/master-data/store-record-scope";
 import { useCurrentStore } from "@/features/org/use-current-store";
+import { dailyTargetsStorageKey } from "@/features/master-data/monthly-shift-grid";
+
+type DailyTarget = { date: string; amount: number; comment: string; storeId?: string };
+const EMPTY_TARGETS: DailyTarget[] = [];
 
 type Tab = "staff" | "service" | "hourly" | "trend" | "retail";
 
@@ -43,6 +47,16 @@ function Bar({ value, max, label, sub }: { value: number; max: number; label: st
   );
 }
 
+function HeadlineCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg border border-luxas-line bg-white p-4">
+      <p className="text-xs font-medium text-stone-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-luxas-ink">{value}</p>
+      {sub ? <p className="mt-0.5 text-[11px] text-stone-400">{sub}</p> : null}
+    </div>
+  );
+}
+
 export function AnalyticsReports() {
   const [allReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const { currentStoreId } = useCurrentStore();
@@ -52,6 +66,7 @@ export function AnalyticsReports() {
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [retailItems] = useLocalCollection<RetailItem>(retailItemsStorageKey, initialRetailItems);
   const [retailSales] = useLocalCollection<RetailSale>(retailSalesStorageKey, initialRetailSales);
+  const [dailyTargets] = useLocalCollection<DailyTarget>(dailyTargetsStorageKey, EMPTY_TARGETS);
   const [tab, setTab] = useState<Tab>("staff");
 
   const now = new Date();
@@ -106,6 +121,20 @@ export function AnalyticsReports() {
   }, [retailSales, retailItems, month, currentStoreId]);
   const retailTotal = retailSalesByItem.reduce((sum, x) => sum + x.amount, 0);
 
+  // 対象月のヘッドライン集計（top-kpi と同じ定義。ただしこちらは選択月に追従）。
+  const headline = useMemo(() => {
+    const treatmentSales = paid.reduce((sum, r) => sum + (r.saleAmount ?? 0), 0);
+    const paidCount = paid.length;
+    const avgSpend = paidCount > 0 ? Math.round(treatmentSales / paidCount) : 0;
+    const paymentRate = monthReservations.length > 0 ? Math.round((paidCount / monthReservations.length) * 100) : 0;
+    // 月間目標 = 当月・現在店舗の日次目標の合計。達成度 = 施術売上 / 月間目標。
+    const monthlyTarget = filterRecordsByStore(dailyTargets, currentStoreId)
+      .filter((t) => t.date.startsWith(month))
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const achievement = monthlyTarget > 0 ? Math.round((treatmentSales / monthlyTarget) * 100) : null;
+    return { treatmentSales, paidCount, avgSpend, paymentRate, monthlyTarget, achievement };
+  }, [paid, monthReservations, dailyTargets, currentStoreId, month]);
+
   const inputClass = "rounded-md border border-luxas-line bg-white px-2.5 py-1.5 text-sm outline-none focus:border-luxas-green";
   const maxStaff = Math.max(1, ...staffSales.map((x) => x.amount));
   const maxService = Math.max(1, ...serviceSales.map((x) => x.amount));
@@ -123,6 +152,18 @@ export function AnalyticsReports() {
           ))}
         </div>
       </div>
+
+      <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <HeadlineCard label="施術売上合計（会計済）" value={`¥${headline.treatmentSales.toLocaleString()}`} />
+        <HeadlineCard label="物販売上合計（施術と別）" value={`¥${retailTotal.toLocaleString()}`} />
+        <HeadlineCard label="会計件数" value={`${headline.paidCount}件`} />
+        <HeadlineCard label="客単価（会計済）" value={headline.paidCount > 0 ? `¥${headline.avgSpend.toLocaleString()}` : "—"} />
+        <HeadlineCard label="会計率" value={`${headline.paymentRate}%`} sub={`予約${monthReservations.length}件中`} />
+        <HeadlineCard
+          label="月間目標 / 達成度"
+          value={headline.monthlyTarget > 0 ? `¥${headline.monthlyTarget.toLocaleString()} / ${headline.achievement}%` : "未設定"}
+        />
+      </section>
 
       <section className="rounded-lg border border-luxas-line bg-white p-5">
         {tab === "staff" ? (
@@ -149,7 +190,7 @@ export function AnalyticsReports() {
             <p className="text-sm text-stone-500">物販販売の登録がありません（物販販売画面から登録できます）。</p>
           )
         ) : null}
-        <p className="mt-4 text-[11px] text-stone-400">※ 売上系は会計確定済みの予約のみ集計。会計未実装の予約は0。前年比・目標達成度は基準データが無いため省略（要確認）。</p>
+        <p className="mt-4 text-[11px] text-stone-400">※ 売上系は会計（予約詳細→会計）確定分のみ集計。会計未確定の予約は0。客単価=施術売上÷会計件数、会計率=会計件数÷当月予約件数。月間目標・達成度は月間シフトグリッドの日次目標（当月・現在店舗合計）を参照（未入力なら「未設定」）。前年比は基準データが無いため省略。</p>
       </section>
     </MasterPage>
   );

@@ -64,9 +64,14 @@ create table if not exists public.staff (
   service_menu_ids uuid[] not null default '{}'::uuid[],
   is_active boolean not null default true,
   memo text,
+  -- 移行パイロット（第3区切り）: PM拡張項目を格納する profile と、旧localStorage文字列IDを保持する legacy_id。
+  profile jsonb not null default '{}'::jsonb,
+  legacy_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create unique index if not exists uq_staff_legacy_id on public.staff(legacy_id);
 
 create table if not exists public.services (
   id uuid primary key default gen_random_uuid(),
@@ -78,9 +83,14 @@ create table if not exists public.services (
   sort_order integer not null default 0,
   is_active boolean not null default true,
   memo text,
+  -- 移行パイロット（第3区切り）: PM拡張項目を格納する profile と、旧localStorage文字列IDを保持する legacy_id。
+  profile jsonb not null default '{}'::jsonb,
+  legacy_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create unique index if not exists uq_services_legacy_id on public.services(legacy_id);
 
 create table if not exists public.rooms (
   id uuid primary key default gen_random_uuid(),
@@ -89,9 +99,14 @@ create table if not exists public.rooms (
   kind text not null,
   memo text,
   is_active boolean not null default true,
+  -- 移行パイロット（第3区切り）: PM拡張項目を格納する profile と、旧localStorage文字列IDを保持する legacy_id。
+  profile jsonb not null default '{}'::jsonb,
+  legacy_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create unique index if not exists uq_rooms_legacy_id on public.rooms(legacy_id);
 
 create table if not exists public.shifts (
   id uuid primary key default gen_random_uuid(),
@@ -104,6 +119,9 @@ create table if not exists public.shifts (
   break_end time,
   memo text,
   is_active boolean not null default true,
+  -- 移行パイロット（第3区切り）: round-trip用 profile（staffLegacyId等）と、旧localStorage文字列ID。
+  profile jsonb not null default '{}'::jsonb,
+  legacy_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint shifts_end_after_start check (end_time > start_time),
@@ -112,6 +130,8 @@ create table if not exists public.shifts (
     or (break_start is not null and break_end is not null and break_end > break_start)
   )
 );
+
+create unique index if not exists uq_shifts_legacy_id on public.shifts(legacy_id);
 
 create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
@@ -161,7 +181,8 @@ create table if not exists public.reservations (
   customer_phone text,
   staff_id uuid not null references public.staff(id) on delete restrict,
   service_id uuid not null references public.services(id) on delete restrict,
-  room_id uuid not null references public.rooms(id) on delete restrict,
+  -- 通常の施術ブースは容量ベースで部屋を固定しない（T011）。個室予約のみ room_id を持つため NULL 許容。
+  room_id uuid references public.rooms(id) on delete restrict,
   reservation_date date not null,
   start_time time not null,
   end_time time not null,
@@ -169,10 +190,15 @@ create table if not exists public.reservations (
   memo text,
   created_by uuid references public.users(id) on delete set null,
   updated_by uuid references public.users(id) on delete set null,
+  -- 移行（第3区切り）: JS拡張項目＋round-trip用 profile（参照IDの legacy 保持）と、旧localStorage文字列ID。
+  profile jsonb not null default '{}'::jsonb,
+  legacy_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint reservations_end_after_start check (end_time > start_time)
 );
+
+create unique index if not exists uq_reservations_legacy_id on public.reservations(legacy_id);
 
 create table if not exists public.customer_notes (
   id uuid primary key default gen_random_uuid(),

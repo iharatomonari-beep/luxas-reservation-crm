@@ -13,8 +13,10 @@ import {
   checkoutItemsStorageKey,
   computeReservationPricing,
   creditCardsStorageKey,
+  emoneyStorageKey,
   initialCheckoutItems,
   initialCreditCards,
+  initialEmoney,
   initialOptions,
   initialServices,
   initialStaff,
@@ -26,6 +28,7 @@ import type {
   CheckoutItem,
   CheckoutItemKind,
   CreditCardCompany,
+  EmoneyBrand,
   ServiceMenu,
   ServiceOption,
   StaffMember
@@ -63,17 +66,20 @@ export function CheckoutModal({
   // 現金以外の支払（手入力）。
   const [credit, setCredit] = useState("0");
   const [creditBrand, setCreditBrand] = useState("");
-  const [paypay, setPaypay] = useState("0");
+  const [emoney, setEmoney] = useState("0");
+  const [emoneyBrand, setEmoneyBrand] = useState("");
   const [pointUse, setPointUse] = useState("0"); // ポイント利用（手入力・−）
   const [cashReceived, setCashReceived] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [creditCards] = useLocalCollection<CreditCardCompany>(creditCardsStorageKey, initialCreditCards);
+  const [emoneyBrands] = useLocalCollection<EmoneyBrand>(emoneyStorageKey, initialEmoney);
   const [services] = useLocalCollection<ServiceMenu>(servicesStorageKey, initialServices);
   const [options] = useLocalCollection<ServiceOption>(optionsStorageKey, initialOptions);
   const [checkoutItems] = useLocalCollection<CheckoutItem>(checkoutItemsStorageKey, initialCheckoutItems);
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const activeCards = [...creditCards].sort(compareBySortOrder).filter((c) => c.isActive);
+  const activeEmoney = [...emoneyBrands].sort(compareBySortOrder).filter((e) => e.isActive);
   const activeStaff = [...staff].sort(compareBySortOrder).filter((s) => s.isActive);
   const activeServices = [...services].sort(compareBySortOrder).filter((s) => s.isActive);
   const activeCheckoutItems = [...checkoutItems].sort(compareBySortOrder).filter((i) => i.isActive);
@@ -98,7 +104,8 @@ export function CheckoutModal({
       const sum = (m: PaymentMethod) => p.filter((x) => x.method === m).reduce((s, x) => s + x.amount, 0);
       setCredit(String(sum("credit")));
       setCreditBrand(p.find((x) => x.method === "credit")?.cardBrand ?? "");
-      setPaypay(String(sum("emoney")));
+      setEmoney(String(sum("emoney")));
+      setEmoneyBrand(p.find((x) => x.method === "emoney")?.emoneyBrand ?? "");
       setPointUse(String(sum("point")));
       setCashReceived(String(sum("cash")));
       return;
@@ -123,7 +130,7 @@ export function CheckoutModal({
   }
 
   const totalSales = toNum(courseTotal) + plusItems - minusItems;
-  const otherPaid = toNum(credit) + toNum(paypay) + toNum(pointUse);
+  const otherPaid = toNum(credit) + toNum(emoney) + toNum(pointUse);
   const cashDue = Math.max(0, totalSales - otherPaid);
   const change = Math.max(0, toNum(cashReceived) - cashDue);
 
@@ -166,10 +173,13 @@ export function CheckoutModal({
     const payments: ReservationPayment[] = [];
     if (cashDue > 0) payments.push({ method: "cash", amount: cashDue });
     if (toNum(credit) > 0) payments.push({ method: "credit", amount: toNum(credit), cardBrand: creditBrand || undefined });
-    if (toNum(paypay) > 0) payments.push({ method: "emoney", amount: toNum(paypay), emoneyBrand: "PayPay" });
+    if (toNum(emoney) > 0) payments.push({ method: "emoney", amount: toNum(emoney), emoneyBrand: emoneyBrand || undefined });
     if (toNum(pointUse) > 0) payments.push({ method: "point", amount: toNum(pointUse) });
     if (payments.length === 0) payments.push({ method: "cash", amount: 0 });
     onSave(reservation.id, totalSales, payments, checkoutLines);
+    // 会計確定後はモーダルを閉じる。台帳に戻ると「会計を確定しました」表示＋会計済み状態が見え、
+    // 確定したかどうかが分かるようにする（別の「完了」ボタンは不要）。
+    onClose();
   }
 
   const selectedService = services.find((s) => s.id === reservation.serviceMenuId);
@@ -297,7 +307,7 @@ export function CheckoutModal({
             <div className="my-1 border-t border-luxas-line" />
             <p className="text-[11px] font-semibold text-stone-500">支払（現金以外）</p>
             <PayRow label="クレジット" value={credit} onChange={setCredit} brand={{ value: creditBrand, onChange: setCreditBrand, options: activeCards.map((c) => c.name) }} />
-            <PayRow label="PayPay" value={paypay} onChange={setPaypay} />
+            <PayRow label="電子マネー" value={emoney} onChange={setEmoney} brand={{ value: emoneyBrand, onChange: setEmoneyBrand, options: activeEmoney.map((e) => e.name) }} />
 
             <div className="my-1 border-t border-luxas-line" />
             <p className="text-[11px] font-semibold text-stone-500">販売（販売額に＋）</p>

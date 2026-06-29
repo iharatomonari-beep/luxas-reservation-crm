@@ -1,8 +1,10 @@
 "use client";
 
-import { ChangeEvent, useMemo, useState, type ReactNode } from "react";
+import { ChangeEvent, useEffect, useMemo, useState, type ReactNode } from "react";
 import { CheckCircle2, Download, FileText, ListFilter, Upload } from "lucide-react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { exportCustomersViaRpc, isOwner, logAudit } from "@/features/master-data/remote-collection";
+import { backendFor } from "@/features/master-data/migration-config";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import type { Customer } from "@/features/customers/types";
 import { initialStaff, initialServices, initialRooms, staffStorageKey, servicesStorageKey, roomsStorageKey } from "@/features/master-data/mock-data";
@@ -124,6 +126,23 @@ export function ImportExportManager() {
   const [rooms] = useLocalCollection<ServiceRoom>(roomsStorageKey, initialRooms);
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
   const { currentStoreId } = useCurrentStore();
+  // 顧客CSVエクスポートの owner ゲート（フェーズ4 S3）。
+  // supabase バックエンド時のみ owner 限定。local（開発・supabase未使用）は従来どおり許可。
+  const customersAreSupabase = backendFor(customersStorageKey) === "supabase";
+  const [canExportCustomers, setCanExportCustomers] = useState<boolean>(!customersAreSupabase);
+  useEffect(() => {
+    if (!customersAreSupabase) {
+      setCanExportCustomers(true);
+      return;
+    }
+    let cancelled = false;
+    isOwner().then((owner) => {
+      if (!cancelled) setCanExportCustomers(owner);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [customersAreSupabase]);
   const [peakManagerPreview, setPeakManagerPreview] = useState<PeakManagerPreviewState | null>(null);
   const [peakManagerMessage, setPeakManagerMessage] = useState<StatusMessageValue | null>(null);
   const [previewMap, setPreviewMap] = useState<Record<DatasetKey, PreviewState | null>>({
@@ -225,6 +244,8 @@ export function ImportExportManager() {
     if (dataset === "customers") {
       const nextItems = acceptedRows.map((row) => toCustomer(row.values));
       setCustomers((current) => [...nextItems, ...current]);
+      // ★件数のみ記録（取り込んだ氏名・電話等の本文は渡さない）。
+      void logAudit("import", "customer_csv", null, { count: nextItems.length, format: "standard" });
     }
 
     if (dataset === "staff") {
@@ -273,10 +294,49 @@ export function ImportExportManager() {
     }));
   }
 
-  function handleExport(dataset: DatasetKey) {
+  async function handleExport(dataset: DatasetKey) {
     const fileName = datasetSummaries[dataset].fileName;
+
+    // ★顧客（supabase）は owner 限定の export_customers() RPC 経由でのみ出力する。
+    //   UIを迂回しても non-owner はサーバーで拒否される。監査記録は RPC 内部で行われる。
+    if (dataset === "customers" && customersAreSupabase) {
+      try {
+        const rows = await exportCustomersViaRpc();
+        const csv = serializeCsv(
+          ["name", "nameKana", "phone", "email", "birthDate", "gender", "address", "firstVisitDate", "lastVisitDate", "caution", "chartMemo", "tags", "isActive"],
+          rows.map((r) => ({
+            name: (r.name as string) ?? "",
+            nameKana: (r.name_kana as string) ?? "",
+            phone: (r.phone as string) ?? "",
+            email: (r.email as string) ?? "",
+            birthDate: (r.birth_date as string) ?? "",
+            gender: (r.gender as string) ?? "",
+            address: (r.address as string) ?? "",
+            firstVisitDate: (r.first_visit_date as string) ?? "",
+            lastVisitDate: (r.last_visit_date as string) ?? "",
+            caution: (r.caution as string) ?? "",
+            chartMemo: (r.chart_memo as string) ?? "",
+            tags: Array.isArray(r.tags) ? (r.tags as string[]).join(", ") : "",
+            isActive: r.is_active ? "true" : "false"
+          }))
+        );
+        downloadCsv(fileName, csv);
+        setMessageMap((current) => ({
+          ...current,
+          [dataset]: { type: "success", text: `${fileName} をダウンロードしました。（${rows.length}件）` }
+        }));
+      } catch {
+        // owner 以外はサーバーで拒否される。
+        setMessageMap((current) => ({
+          ...current,
+          [dataset]: { type: "error", text: "顧客CSVの書き出しは owner 権限が必要です。" }
+        }));
+      }
+      return;
+    }
+
     // CSV出力は現在店舗のデータのみに絞る（他店舗の予約/スタッフ/メニューを書き出さない）。
-    // ※顧客は per-store フィールドが無く全件のまま（顧客の店舗スコープ化は別途・要モデル拡張）。
+    // ※顧客（local時）は per-store フィールドが無く全件のまま（顧客の店舗スコープ化は別途・要モデル拡張）。
     const csv = buildExportCsv(dataset, {
       customers,
       staff: staff.filter((s) => isStaffHomeStore(s, currentStoreId)),
@@ -347,6 +407,8 @@ export function ImportExportManager() {
     setCustomers((current) => [...nextItems, ...current]);
     setPeakManagerPreview(null);
     setPeakManagerMessage({ type: "success", text: `${acceptedRows.length}件を追加しました。` });
+    // ★件数のみ記録（PM名簿の氏名・電話等の本文は渡さない）。
+    void logAudit("import", "customer_csv", null, { count: nextItems.length, format: "peakmanager" });
   }
 
   return (
@@ -383,7 +445,10 @@ export function ImportExportManager() {
             message={messageMap[dataset]}
             onFileChange={(event) => handleFileChange(dataset, event)}
             onImport={() => handleImport(dataset)}
-            onExport={() => handleExport(dataset)}
+            onExport={() => {
+              void handleExport(dataset);
+            }}
+            exportHidden={dataset === "customers" && customersAreSupabase && !canExportCustomers}
           />
         ))}
       </section>
@@ -397,7 +462,8 @@ function DatasetSection({
   message,
   onFileChange,
   onImport,
-  onExport
+  onExport,
+  exportHidden = false
 }: {
   summary: DatasetSummary;
   preview: PreviewState | null;
@@ -405,6 +471,7 @@ function DatasetSection({
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onImport: () => void;
   onExport: () => void;
+  exportHidden?: boolean;
 }) {
   return (
     <section className="rounded-lg border border-luxas-line bg-white">
@@ -418,14 +485,21 @@ function DatasetSection({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-luxas-ink transition hover:bg-luxas-paper"
-            onClick={onExport}
-          >
-            <Download size={16} aria-hidden="true" />
-            {summary.exportLabel}
-          </button>
+          {exportHidden ? (
+            <span className="inline-flex items-center gap-2 rounded-md border border-luxas-line bg-luxas-paper px-3 py-2 text-sm font-medium text-stone-400">
+              <Download size={16} aria-hidden="true" />
+              書き出しは owner のみ
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-luxas-ink transition hover:bg-luxas-paper"
+              onClick={onExport}
+            >
+              <Download size={16} aria-hidden="true" />
+              {summary.exportLabel}
+            </button>
+          )}
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-luxas-green px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#285f51]">
             <Upload size={16} aria-hidden="true" />
             {summary.importLabel}

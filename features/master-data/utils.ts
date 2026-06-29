@@ -24,8 +24,9 @@ export function isBlank(value: string) {
   return value.trim().length === 0;
 }
 
-export function normalizeText(value: string) {
-  return value.trim();
+export function normalizeText(value?: string | null) {
+  // undefined/null でも落ちないようにする（DB由来やオンライン予約で欠損し得るため）。
+  return (value ?? "").trim();
 }
 
 // 利用者/店舗が入力したURLを表示・遷移に使う前に、http(s) スキームのみ許可する（XSS対策）。

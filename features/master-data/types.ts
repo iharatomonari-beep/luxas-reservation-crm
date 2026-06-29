@@ -150,6 +150,8 @@ export type ServiceRoom = {
   kind: RoomKind;
   memo: string;
   isActive: boolean;
+  /** 所属店舗ID（staff の homeStoreId と同命名）。未設定＝既定店舗(渋谷)所属扱い。 */
+  homeStoreId?: string;
 };
 
 export type StaffShift = {
