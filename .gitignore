@@ -11,3 +11,7 @@ pnpm-debug.log*
 .DS_Store
 *.tsbuildinfo
 .vercel
+
+# OS / test artifacts
+.DS_Store
+test-results/

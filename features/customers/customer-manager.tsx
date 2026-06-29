@@ -21,6 +21,7 @@ import {
   X
 } from "lucide-react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { logAudit } from "@/features/master-data/remote-collection";
 import { initialReservations, reservationsStorageKey } from "@/features/reservations/mock-data";
 import type { Reservation } from "@/features/reservations/types";
 import { reservationStatusLabels } from "@/features/reservations/types";
@@ -163,13 +164,28 @@ export function CustomerManager() {
       .map((r) => r.date)
       .filter(Boolean)
       .sort();
+    const firstVisit = visitDates[0] ?? "";
+    const lastVisit = visitDates[visitDates.length - 1] ?? "";
+    // 客単価 = 会計済売上 / 会計済件数（経営指標トップと同じく会計確定分のみ）。
+    const avgSpend = paid.length > 0 ? Math.round(salesTotal / paid.length) : 0;
+    // 最終来店からの経過日数（来店履歴がある場合のみ）。
+    const daysSinceLastVisit = lastVisit ? daysBetween(lastVisit, todayStr()) : null;
+    // 平均来店間隔 = （最終来店 − 初回来店）/（来店回数 − 1）。2回以上の来店がある場合のみ。
+    const avgIntervalDays =
+      visitDates.length >= 2 ? Math.round(daysBetween(firstVisit, lastVisit) / (visitDates.length - 1)) : null;
+    // 区分: 完了来店2回以上=リピート／1回=新規／0回=未来店。
+    const visitorType = completed.length >= 2 ? "リピート" : completed.length === 1 ? "新規" : "未来店";
     return {
       reservationTotal: relatedReservations.length,
       visitCount: completed.length,
       paidCount: paid.length,
       salesTotal,
-      firstVisit: visitDates[0] ?? "",
-      lastVisit: visitDates[visitDates.length - 1] ?? "",
+      avgSpend,
+      firstVisit,
+      lastVisit,
+      daysSinceLastVisit,
+      avgIntervalDays,
+      visitorType,
       canceledCount: canceled.length
     };
   }, [relatedReservations]);
@@ -255,19 +271,36 @@ export function CustomerManager() {
     const payload = toCustomerPayload(form);
 
     if (editingCustomerId) {
+      const before = customers.find((customer) => customer.id === editingCustomerId);
+      // 変更した「列名」のみ算出（値は記録しない＝PIIを残さない）。
+      const changedFields = before
+        ? Object.keys(payload).filter(
+            (key) =>
+              JSON.stringify((before as unknown as Record<string, unknown>)[key]) !==
+              JSON.stringify((payload as unknown as Record<string, unknown>)[key])
+          )
+        : Object.keys(payload);
       setCustomers((current) =>
         current.map((customer) => (customer.id === editingCustomerId ? { ...customer, ...stampUpdate(payload, customer) } : customer))
       );
       setSelectedCustomerId(editingCustomerId);
       setMessage({ type: "success", text: "顧客情報を更新しました。" });
+      void logAudit("update", "customer", editingCustomerId, { changedFields });
     } else {
       const id = makeLocalId("customer");
       setCustomers((current) => [{ id, ...stampCreate(payload) }, ...current]);
       setSelectedCustomerId(id);
       setMessage({ type: "success", text: "顧客を新規作成しました。" });
+      void logAudit("create", "customer", id);
     }
 
     closeForm();
+  }
+
+  // 顧客詳細を開く＝監査ログに「閲覧」を記録（target_id のみ。氏名等の本文は渡さない）。
+  function openDetail(customerId: string) {
+    setSelectedCustomerId(customerId);
+    void logAudit("view", "customer", customerId);
   }
 
   function saveMemo() {
@@ -290,6 +323,8 @@ export function CustomerManager() {
       )
     );
     setMessage({ type: "success", text: "カルテメモを保存しました。" });
+    // ★変更した「列名」のみ記録（カルテ本文・注意事項の中身は渡さない）。
+    void logAudit("update", "customer", selectedCustomer.id, { changedFields: ["caution", "chartMemo"] });
   }
 
   return (
@@ -395,7 +430,7 @@ export function CustomerManager() {
                         "flex w-full items-start gap-4 px-5 py-4 text-left transition",
                         isSelected ? "bg-luxas-mist/60" : "hover:bg-luxas-paper"
                       ].join(" ")}
-                      onClick={() => setSelectedCustomerId(customer.id)}
+                      onClick={() => openDetail(customer.id)}
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-luxas-green ring-1 ring-inset ring-luxas-line">
                         <UserRound size={18} aria-hidden="true" />
@@ -556,14 +591,27 @@ export function CustomerManager() {
                   <span className="text-xs text-stone-500">予約履歴から自動集計</span>
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <InfoCard label="区分" value={visitSummary.visitorType} />
                   <InfoCard label="予約総数" value={`${visitSummary.reservationTotal}件`} />
                   <InfoCard label="来店（完了）" value={`${visitSummary.visitCount}件`} />
                   <InfoCard label="会計済" value={`${visitSummary.paidCount}件`} />
                   <InfoCard label="売上合計（会計済）" value={formatCurrency(visitSummary.salesTotal)} />
+                  <InfoCard label="客単価（会計済）" value={visitSummary.paidCount > 0 ? formatCurrency(visitSummary.avgSpend) : "—"} />
                   <InfoCard label="初回来店（履歴）" value={visitSummary.firstVisit ? formatDateLabel(visitSummary.firstVisit) : "—"} />
                   <InfoCard label="最終来店（履歴）" value={visitSummary.lastVisit ? formatDateLabel(visitSummary.lastVisit) : "—"} />
+                  <InfoCard
+                    label="最終来店からの経過"
+                    value={visitSummary.daysSinceLastVisit !== null ? `${visitSummary.daysSinceLastVisit}日` : "—"}
+                  />
+                  <InfoCard
+                    label="平均来店間隔"
+                    value={visitSummary.avgIntervalDays !== null ? `${visitSummary.avgIntervalDays}日` : "—"}
+                  />
                   <InfoCard label="キャンセル" value={`${visitSummary.canceledCount}件`} />
                 </div>
+                <p className="mt-3 text-[11px] text-stone-400">
+                  ※ 予約履歴（台帳）から自動集計。客単価=会計済売上÷会計済件数、来店間隔=（最終−初回来店）÷（来店回数−1）、区分=完了来店2回以上でリピート。
+                </p>
               </section>
 
               <section className="rounded-md border border-luxas-line bg-luxas-paper p-4">
@@ -868,6 +916,22 @@ function formatDateLabel(value: string) {
     month: "2-digit",
     day: "2-digit"
   }).format(date);
+}
+
+// 今日（ローカル）を "YYYY-MM-DD" で返す。
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// "YYYY-MM-DD" 同士の日数差（to − from）。不正な日付は 0 を返す。
+function daysBetween(from: string, to: string) {
+  const a = new Date(`${from}T00:00:00`).getTime();
+  const b = new Date(`${to}T00:00:00`).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) {
+    return 0;
+  }
+  return Math.round((b - a) / 86_400_000);
 }
 
 function SummaryCard({

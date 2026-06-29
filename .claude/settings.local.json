@@ -10,7 +10,27 @@
       "mcp__Claude_in_Chrome__tabs_context_mcp",
       "mcp__Claude_in_Chrome__javascript_tool",
       "mcp__Claude_in_Chrome__navigate",
-      "Bash(cd \"/Users/C.C/claude code/tokyo-rh-academy-ai-office/08_web_lp\" && ls -la && echo \"=== tree \\(dirs, 3 levels\\) ===\" && find . -maxdepth 3 -type d -not -path \"*/node_modules/*\" | sort)"
+      "Bash(cd \"/Users/C.C/claude code/tokyo-rh-academy-ai-office/08_web_lp\" && ls -la && echo \"=== tree \\(dirs, 3 levels\\) ===\" && find . -maxdepth 3 -type d -not -path \"*/node_modules/*\" | sort)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(open -a \"Google Chrome\" \"http://localhost:3000/dashboard/reservations\")",
+      "Bash(curl -s -m 5 http://localhost:3001/dashboard/reservations)",
+      "Bash(open -a \"Google Chrome\" \"http://localhost:3001/dashboard/reservations\")",
+      "Bash(curl -s -m 8 -o /dev/null -w \"HTTP %{http_code} time=%{time_total}s\\\\n\" http://localhost:3001/dashboard/reservations)",
+      "Bash(lsof -nP -iTCP:3001 -sTCP:LISTEN)",
+      "Bash(curl -s -m 60 -o /dev/null -w \"HTTP %{http_code} time=%{time_total}s\\\\n\" http://localhost:3001/dashboard/reservations)",
+      "Bash(sed -n '/export type MenuColorStyle/,/};/p' features/master-data/menu-colors.ts)",
+      "Bash(sed -n '/MENU_COLOR_STYLES: Record/,/};/p' features/master-data/menu-colors.ts)",
+      "Bash(git push *)",
+      "Bash(open \"http://localhost:3001/dashboard\")",
+      "Bash(echo \"=== ~/Desktop/pm_スクリーンショット/ ===\"; ls -la ~/Desktop/pm_スクリーンショット/ 2>/dev/null | head -40; echo; echo \"=== docs/reference/ ===\"; ls -la \"/Users/C.C/claude code/luxas-reservation-crm/docs/reference/\" 2>/dev/null)",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "mcp__Claude_in_Chrome__read_page",
+      "Bash(ls -lt ~/Downloads/ 2>/dev/null | head -10; echo \"=== search pm-courses anywhere recent ===\"; find ~/Downloads ~/Desktop \"/Users/C.C\" -maxdepth 3 -name \"pm-courses*.json\" -mmin -10 2>/dev/null | head)",
+      "Bash(find ~ -name \"pm-courses*.json\" -mmin -15 2>/dev/null | head; echo \"=== any .crdownload ===\"; ls -lt ~/Downloads/*.crdownload 2>/dev/null | head; echo \"=== recent json files in home \\(last 15 min\\) ===\"; find ~ -maxdepth 4 -name \"*.json\" -mmin -15 2>/dev/null | grep -v node_modules | grep -v Library | head)",
+      "Bash(node scripts/gen-pm-courses.mjs)",
+      "Bash(npx tsc *)",
+      "Bash(open \"http://localhost:3001/dashboard/services\")",
+      "Bash(git add *)"
     ]
   }
 }

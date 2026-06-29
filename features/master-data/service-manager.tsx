@@ -273,6 +273,15 @@ export function ServiceManager() {
     setMessage({ type: "success", text: "メニューを提供停止（無効）にしました。過去予約のメニュー名は引き続き表示されます。" });
   }
 
+  // 提供停止（無効）にしたメニューを再び有効化する。
+  function handleReactivate(id: string) {
+    setServices((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...stampUpdate({ ...item, isActive: true }, item) } : item))
+    );
+    setForm((current) => ({ ...current, isActive: true }));
+    setMessage({ type: "success", text: "メニューを再開（有効）にしました。" });
+  }
+
   // PM準拠の一覧列: ID / カテゴリ / 名前 / 施術料金（税込） / 表示順序 / オンライン予約 / 状態。
   const columns: MasterColumn<ServiceMenu>[] = [
     { key: "id", header: "ID", render: (s) => <span className="font-mono text-xs text-stone-400">{s.id.replace(/^service-?/, "")}</span> },
@@ -687,6 +696,16 @@ export function ServiceManager() {
               >
                 <Trash2 size={15} aria-hidden="true" />
                 提供停止
+              </button>
+            ) : null}
+            {editingId && !form.isActive ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-luxas-green px-3 py-3 text-sm font-medium text-luxas-green hover:bg-luxas-mist"
+                onClick={() => handleReactivate(editingId)}
+              >
+                <RotateCcw size={15} aria-hidden="true" />
+                再開（有効化）
               </button>
             ) : null}
           </div>

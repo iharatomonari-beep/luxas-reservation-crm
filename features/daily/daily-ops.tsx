@@ -172,6 +172,7 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
     [reports, date, currentStoreId]
   );
   const [reportMessage, setReportMessage] = useState<StatusMessageValue | null>(null);
+  const [registerMessage, setRegisterMessage] = useState<StatusMessageValue | null>(null);
   function updateReport(field: keyof DailyReport, value: string) {
     setReports((current) => {
       const existing = current.find((r) => r.date === date && isRecordInStore(r, currentStoreId));
@@ -280,7 +281,20 @@ export function DailyOps({ view = "all" }: { view?: DailyView }) {
           <span className="text-sm font-semibold text-luxas-ink">合計 ¥{sumCounts(counts).toLocaleString()}</span>
         </div>
         <CashDenominationTable counts={counts} onChange={(next) => updateReg(kind, next)} />
-        <p className="mt-2 text-[11px] text-stone-400">※ 入力は自動保存されます（実際の現金確定・締め処理は行いません）。</p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              updateReg(kind, counts);
+              setRegisterMessage({ type: "success", text: `${VIEW_META[kind].title}を登録しました（合計 ¥${sumCounts(counts).toLocaleString()}）。` });
+            }}
+            className="rounded-md bg-luxas-green px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#285f51]"
+          >
+            登録する
+          </button>
+          <StatusMessage message={registerMessage} />
+        </div>
+        <p className="mt-2 text-[11px] text-stone-400">※ 入力は自動保存されますが、「登録する」で保存を確定・確認できます（実際の現金確定・締め処理は行いません）。</p>
       </section>
     );
   }

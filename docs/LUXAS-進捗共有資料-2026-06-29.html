@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LUXAS 予約・顧客管理システム — 制作状況のご報告</title>
+<style>
+  :root{
+    --green:#2f7d63; --green-l:#eaf3ef; --gold:#c8922a; --gold-l:#fff7e9;
+    --ink:#1f2937; --sub:#5b6671; --line:#e4e4df; --paper:#faf9f6; --bg:#fff;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;color:var(--ink);background:var(--paper);line-height:1.75;}
+  .wrap{max-width:880px;margin:0 auto;padding:32px 28px 56px;}
+  header.top{border-bottom:3px solid var(--green);padding-bottom:14px;margin-bottom:24px;}
+  .brand{font-size:13px;color:var(--green);font-weight:700;letter-spacing:.08em;}
+  h1{font-size:23px;margin:6px 0 4px;}
+  .meta{font-size:13px;color:var(--sub);}
+  h2{font-size:18px;margin:34px 0 12px;padding-left:11px;border-left:5px solid var(--green);}
+  h2 .pill{font-size:12px;font-weight:700;color:#fff;background:var(--gold);border-radius:999px;padding:2px 10px;margin-left:8px;vertical-align:middle;}
+  p{margin:8px 0;}
+  .lead{background:var(--green-l);border-radius:12px;padding:16px 18px;font-size:15px;}
+  .lead b{color:var(--green);}
+  .page-break{page-break-before:always;}
+
+  /* 3-stage progress */
+  .stages{display:flex;gap:10px;margin:14px 0 4px;}
+  .stage{flex:1;border-radius:12px;border:1.5px solid var(--line);background:var(--bg);padding:14px 12px;text-align:center;}
+  .stage .num{display:inline-flex;width:26px;height:26px;border-radius:50%;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;margin-bottom:6px;}
+  .stage .t{font-size:13.5px;font-weight:700;}
+  .stage .s{font-size:12px;margin-top:5px;font-weight:700;}
+  .done{background:var(--green-l);border-color:var(--green);}
+  .done .num{background:var(--green);} .done .s{color:var(--green);}
+  .now{background:var(--gold-l);border-color:var(--gold);} .now .num{background:var(--gold);} .now .s{color:var(--gold);}
+  .arrow{display:flex;align-items:center;color:#b9bdc2;font-size:18px;}
+
+  .cols{display:flex;gap:16px;flex-wrap:wrap;}
+  .card{flex:1;min-width:280px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);padding:16px 18px;}
+  .card h3{margin:0 0 8px;font-size:15px;}
+  .card.ok h3{color:var(--green);}
+  ul.list{list-style:none;margin:6px 0 0;padding:0;}
+  ul.list li{position:relative;padding:4px 0 4px 24px;font-size:14px;}
+  ul.list li::before{content:"";position:absolute;left:2px;top:11px;width:9px;height:9px;border-radius:50%;background:var(--green);}
+  .note{font-size:12.5px;color:var(--sub);margin-top:8px;}
+
+  /* done-work block */
+  .work{border:1.5px solid var(--line);border-radius:14px;background:var(--bg);padding:6px 20px 16px;margin-top:6px;}
+  .work .lbl{display:inline-block;font-size:12px;font-weight:700;color:var(--green);background:var(--green-l);border-radius:999px;padding:3px 12px;margin:14px 0 4px;}
+  .step{display:flex;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line);}
+  .step:last-child{border-bottom:none;}
+  .chk{flex:none;width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  .step .body{font-size:14px;}
+  .step .body b{color:var(--ink);}
+  .step .body .x{color:var(--sub);font-size:12.5px;}
+
+  .remain{border-left:5px solid var(--gold);background:var(--gold-l);border-radius:0 10px 10px 0;padding:10px 16px;margin-top:14px;font-size:14px;}
+  .remain b{color:#9a6a14;}
+
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px;}
+  .tag{font-size:12.5px;background:var(--green-l);color:var(--green);border:1px solid #cfe1d9;border-radius:7px;padding:4px 9px;font-weight:600;}
+
+  .gate{background:var(--gold-l);border:1.5px solid var(--gold);border-radius:12px;padding:14px 18px;margin-top:12px;}
+  .gate b{color:#9a6a14;}
+
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px;}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;}
+  th{background:var(--green-l);color:var(--ink);font-size:13px;}
+  .badge{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:999px;}
+  .b-done{background:var(--green-l);color:var(--green);}
+  .b-now{background:var(--gold-l);color:#9a6a14;}
+  .b-wait{background:#eef0f2;color:#6b7280;}
+
+  .safe{border:1.5px solid var(--green);border-radius:12px;background:var(--green-l);padding:14px 18px;margin-top:8px;font-size:14px;}
+  footer{margin-top:30px;border-top:1px solid var(--line);padding-top:12px;font-size:12px;color:var(--sub);}
+  @media print{body{background:#fff;} .wrap{padding:0;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">LUXAS 予約・顧客管理システム</div>
+    <h1>制作状況のご報告（やさしい解説版）</h1>
+    <div class="meta">2026年6月29日時点 ／ 社長・担当者 共有用</div>
+  </header>
+
+  <div class="lead">
+    お店の<b>予約とお客さま情報を管理するシステム</b>を作り、いまは「<b>インターネット上の保管庫にデータを安全に共有・保存できる“本番の仕組み”</b>」へ切り替えている、その<b>最終準備の段階</b>です。
+  </div>
+
+  <h2>全体の進み具合</h2>
+  <div class="stages">
+    <div class="stage done">
+      <div class="num">1</div>
+      <div class="t">画面・機能をつくる</div>
+      <div class="s">✓ ほぼ完成</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stage done">
+      <div class="num">2</div>
+      <div class="t">クラウドで<br>共有・保存できるように</div>
+      <div class="s">✓ 大半 完了</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stage now">
+      <div class="num">3</div>
+      <div class="t">本物の情報で<br>本番運用</div>
+      <div class="s">◐ 最終準備中</div>
+    </div>
+  </div>
+  <p class="note">※ いまは「渋谷店のみ・テスト用データ」で動かして仕組みを確認済み。本物のデータ投入はステップ3の最後に行います。</p>
+
+  <p style="margin-top:14px;font-size:14px;color:var(--sub);">各ステップの中身を、もう少し詳しくご説明します。</p>
+
+  <div class="card ok" style="margin-top:8px;">
+    <h3>ステップ1：画面・機能をつくる　<span class="badge b-done">✓ ほぼ完成</span></h3>
+    <p style="font-size:14px;margin:6px 0 4px;">お店の業務に必要な画面を、ほぼ一通り作りました。見た目も操作もほぼ完成しており、実際に使っている既存ソフト（PeakManager）に近い作りにしています。</p>
+    <ul class="list">
+      <li><b>予約台帳</b> … 予約の登録・ドラッグでの移動・その場で会計まで</li>
+      <li><b>お客さま管理</b> … 来店履歴・カルテ・タグ・検索</li>
+      <li><b>スタッフ／メニュー／ブース／シフト</b> の各管理</li>
+      <li><b>会計・レジ・支払い</b>（現金・クレジット・電子マネー）</li>
+      <li><b>日次管理</b> … 出退勤・レジ金点検・売上日報・経費</li>
+      <li><b>経営の数字</b> … 売上・客単価・スタッフ別／商品別の集計</li>
+      <li>メール（案内文・配信履歴）、各種設定、CSVの入出力</li>
+    </ul>
+  </div>
+
+  <div class="card ok" style="margin-top:14px;">
+    <h3>ステップ2：クラウドで共有・保存できるように　<span class="badge b-done">✓ 大半 完了</span></h3>
+    <p style="font-size:14px;margin:6px 0 4px;">これまで“このパソコンの中だけ”に保存していたデータを、インターネット上の<b>共有の保管庫</b>へ移しました。これで複数の端末・スタッフが同じデータを扱えるようになります。</p>
+    <ul class="list">
+      <li>システムを<b>クラウドに接続</b>し、ログインを<b>本物のセキュリティ</b>に（誰でも入れる状態を解消）</li>
+      <li><b>約32種類のデータの置き場所をクラウドへ移設</b>（予約・スタッフ・メニュー・売上・会計・日次・各種設定 など）</li>
+      <li>「<b>複数の端末で同じデータが見える</b>」「<b>再読み込みしても消えない</b>」を1種類ずつ確認</li>
+      <li>お客さま情報を安全に扱う仕組み（操作の記録・権限・アクセス制限）も準備完了</li>
+    </ul>
+    <p class="note">→ “共有して保存できる仕組み”はほぼ完成しています。残るのは「<b>本物の既存データを実際に入れること</b>」で、これが次のステップ3にあたります。</p>
+  </div>
+
+  <!-- ===== ページ2：詳しい説明 ① ===== -->
+  <div class="page-break"></div>
+  <h2>① 本物のお客さま名簿の投入<span class="pill">準備ほぼ完了・最終関門のみ</span></h2>
+  <p>お客さまの情報は<b>個人情報</b>なので、いちばん慎重に扱う必要があります。そこで「本物の名簿を入れる前に、安全に扱える状態を作る」作業を、この間しっかり進めてきました。<b>必要な安全対策8項目のうち6項目が完了</b>しています。</p>
+
+  <div class="work">
+    <span class="lbl">これまでにやってきた作業（すべてテスト用の架空データで確認済み）</span>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>① クラウドに「お客さま情報の置き場所」を用意</b><br>
+      <span class="x">本物ではなく、架空のお客さま2件だけを入れて、正しく保存・表示できるか確認しました。</span>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>② 「誰がいつ見た・直した・書き出した」を記録するしくみを設置</b><br>
+      <span class="x">操作の記録（ログ）を残します。ただし記録の中に氏名・電話・カルテ内容などの個人情報そのものは残さない設計で、漏れないことも確認済みです。</span>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>③ お客さま名簿の「書き出し（CSV）」を責任者だけに制限</b><br>
+      <span class="x">オーナー以外は書き出せません。画面のボタンを隠すだけでなく、サーバー側でも止めるので、回り道してもデータを取り出せません。</span>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>④ アクセス制限を本番レベルに強化</b><br>
+      <span class="x">どのデータも「正しい権限を持つ人だけ」が扱える状態にしました。予約の二重登録を防ぐしくみも実際に効いていることを確認。</span>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>⑤ 名簿の「取り込み」を架空データでテスト</b><br>
+      <span class="x">取り込みの件数、重複チェック、項目の入り方まで、すべて正常に動くことを確認しました（本物の名簿はまだ入れていません）。</span>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>⑥ バックアップ（万一の復元）の手順書を作成</b><br>
+      <span class="x">もしもの時にデータを元に戻すための手順書を用意しました。</span>
+    </div></div>
+  </div>
+
+  <div class="remain">
+    <b>残っているのは、本物の名簿を入れる前の「2つの関門」だけ（社長・担当の作業）</b><br>
+    ⑦ バックアップを有効化して、復元テストを1回行う ／ ⑧ 個人情報の扱いを外部の専門家に確認してもらう<br>
+    <span class="note" style="display:block;margin-top:4px;">この2つが済んでから、本物のお客さま名簿を投入します。</span>
+  </div>
+
+  <!-- ===== お客さま情報の取り込み 詳細 ===== -->
+  <div class="page-break"></div>
+  <h2>お客さま情報の取り込み — 今後の進め方<span class="pill">関門クリア後に実施</span></h2>
+  <p>2つの関門（バックアップ・専門家確認）をクリアしたあと、本物のお客さま名簿は下の流れで取り込みます。<b>取り込みの仕組み自体はすでに完成・検証済み</b>なので、手順に沿って進めるだけです。</p>
+
+  <div class="work" style="margin-top:6px;">
+    <span class="lbl" style="color:#9a6a14;background:var(--gold-l);">本番の取り込み手順</span>
+
+    <div class="step"><div class="chk" style="background:var(--gold);">1</div><div class="body">
+      <b>既存ソフト（PeakManager）からお客さま名簿を書き出す（CSV）</b><br>
+      <span class="x">オーナーの作業。これまでの名簿を1つのファイルとして取り出します。</span>
+    </div></div>
+
+    <div class="step"><div class="chk" style="background:var(--gold);">2</div><div class="body">
+      <b>まず少量（数件〜数十件）で「試し取り込み」</b><br>
+      <span class="x">いきなり全件ではなく、少しだけ入れて中身を確認できます。問題があってもすぐ戻せる安全な進め方です。</span>
+    </div></div>
+
+    <div class="step"><div class="chk" style="background:var(--gold);">3</div><div class="body">
+      <b>問題なければ全件を取り込み → クラウドに保存</b><br>
+      <span class="x">取り込み画面からファイルを読み込むだけ。同じお客さまを二重に登録しないよう、重複は自動でチェックします。</span>
+    </div></div>
+
+    <div class="step"><div class="chk" style="background:var(--gold);">4</div><div class="body">
+      <b>取り込み後の確認</b><br>
+      <span class="x">件数・氏名・来店履歴・カルテなどが正しく入っているかを確認します。誰がいつ何件入れたかは記録されます（個人情報そのものは記録に残しません）。</span>
+    </div></div>
+
+    <div class="step"><div class="chk" style="background:var(--green);">✓</div><div class="body">
+      <b>日常運用へ</b><br>
+      <span class="x">複数の端末・スタッフで、同じお客さま情報を共有して使えるようになります。</span>
+    </div></div>
+  </div>
+
+  <div class="cols" style="margin-top:12px;">
+    <div class="card ok">
+      <h3 style="color:var(--ink);">取り込まれる主な項目</h3>
+      <ul class="list">
+        <li>氏名・フリガナ・電話・メール・住所・生年月日</li>
+        <li>会員番号・来店履歴（初回／最終来店・来店回数・売上）</li>
+        <li>カルテメモ・注意事項・タグ など</li>
+      </ul>
+      <p class="note">既存ソフト（PeakManager）独自の項目も、できる限り保持して取り込みます。</p>
+    </div>
+    <div class="card" style="border-color:var(--gold);background:var(--gold-l);">
+      <h3 style="color:#9a6a14;">⚠ パスワードについて（要・お客さま案内）</h3>
+      <p style="font-size:13.5px;margin:4px 0;">お客さまの<b>ログインパスワードは引き継げません</b>（どのシステムも暗号化して保存しており、元の文字を取り出せない仕様のため）。オンライン予約のログインを使う場合は、<b>お客さまが初回にご自身で設定し直す</b>形になります。これはどのシステムでも共通の一般的な仕様です。</p>
+    </div>
+  </div>
+
+  <div class="safe" style="margin-top:12px;">
+    <b>安心ポイント</b> … この取り込みの仕組みは、すでに<b>テスト用の架空データで「件数・重複チェック・項目の入り方」まで動作を確認済み</b>です。そのため本番の取り込みも、大きなつまずきなく進められる見込みです。
+  </div>
+
+  <!-- ===== ページ：詳しい説明 ② ===== -->
+  <div class="page-break"></div>
+  <h2>② 本物の既存データ（予約・スタッフ・メニュー等）の取り込み<span class="pill">受け皿は完成・取り込みはこれから</span></h2>
+  <p>こちらは、お客さま情報以外の<b>お店の業務データ全般</b>の話です。これまで“このパソコンの中だけ”に保存していたデータを、<b>みんなで共有できるクラウド</b>へ移す作業を、種類ごとに順番に進めてきました。</p>
+
+  <div class="work">
+    <span class="lbl">これまでにやってきた作業</span>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>システムをクラウドにつなぎ、ログインを本物のセキュリティに切替</b><br>
+      <span class="x">「誰でも入れる仮の状態」から、正しくログインした人だけが入れる状態にしました。</span>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>データの「置き場所」を、共有クラウドへ種類ごとに移設（約32種類）</b><br>
+      <span class="x">下記の各データについて、保存先をクラウドに切り替えました。</span>
+      <div class="tags">
+        <span class="tag">予約</span><span class="tag">スタッフ</span><span class="tag">メニュー</span><span class="tag">ブース</span>
+        <span class="tag">シフト</span><span class="tag">決済方法（クレカ・電子マネー）</span><span class="tag">会計・レジ</span>
+        <span class="tag">物販（商品・販売）</span><span class="tag">出退勤・経費・日報・目標</span><span class="tag">メニュー分類・オプション・セット</span>
+        <span class="tag">タグ</span><span class="tag">メール</span><span class="tag">シフトのパターン</span><span class="tag">各種設定</span>
+      </div>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>1種類ごとに、テスト用データで動作を確認</b><br>
+      <span class="x">「ちゃんとクラウドに保存され、再読み込みしても消えない」「複数の端末で同じデータが見える」ことを、ひとつずつ確認しました。</span>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>途中で見つかった大きな不具合も、原因を突き止めて修正</b><br>
+      <span class="x">「作った予約が再読み込みで消える」現象がありましたが、原因（通常予約に“部屋”を必須にしていた設定）を特定して解決しました。</span>
+    </div></div>
+
+    <div class="step"><div class="chk">✓</div><div class="body">
+      <b>無理に進めない判断も実施</b><br>
+      <span class="x">複数店舗の管理データは、いま移すと全体を壊すリスクが大きいため、安全のため「実際に多店舗化するタイミングで正式に移す」と判断・記録しました（今は渋谷店のみで運用）。</span>
+    </div></div>
+  </div>
+
+  <div class="remain">
+    <b>残っているのは「本物の既存データの取り込み」</b><br>
+    実際のスタッフ・メニュー（約375件）・過去の予約などを、完成した受け皿に取り込む作業です。<br>
+    <span class="note" style="display:block;margin-top:4px;">取り込みの“道すじ”はテスト用データで実証済みなので、本番の取り込みはスムーズに行える見込みです。</span>
+  </div>
+
+  <!-- ===== ページ4：次にやること ===== -->
+  <div class="page-break"></div>
+  <h2>次にやること（だれが・なにを）</h2>
+  <table>
+    <tr><th style="width:22%;">担当</th><th>やること</th><th style="width:18%;">状態</th></tr>
+    <tr><td>社長・担当者</td><td>バックアップの設定＋復元テスト（手順書あり）</td><td><span class="badge b-now">これから</span></td></tr>
+    <tr><td>社長・担当者</td><td>個人情報の扱いを専門家にチェックしてもらう</td><td><span class="badge b-now">これから</span></td></tr>
+    <tr><td>開発</td><td>上記の完了後、本物の既存データ・顧客名簿を取り込む</td><td><span class="badge b-wait">待機中</span></td></tr>
+    <tr><td>開発</td><td>（将来）複数店舗化のタイミングで店舗データを正式に移す</td><td><span class="badge b-wait">将来</span></td></tr>
+  </table>
+
+  <div class="gate">
+    <b>「2つの関門」をもう少しだけ詳しく</b>
+    <table style="margin-top:10px;">
+      <tr><th style="width:34%;">関門</th><th>何をする？</th><th style="width:24%;">なぜ必要？</th></tr>
+      <tr><td>① バックアップ設定＋復元テスト</td><td>自動バックアップを有効にし、実際に「元に戻せるか」を1回試す</td><td>万一の時にお客さまのデータを失わないため</td></tr>
+      <tr><td>② 個人情報の専門家チェック</td><td>個人情報保護の観点で、外部の専門家にレビューを依頼</td><td>個人情報を適切・合法に扱うため</td></tr>
+    </table>
+  </div>
+
+  <div class="safe">
+    <b>🔒 まとめ：安全への配慮</b><br>
+    お客さまの個人情報は、<b>「誰がいつ見たかを記録」「書き出しは責任者のみ」「アクセス制限」「専門家確認」</b>といった安全対策をそろえてから扱う設計です。これらは<b>すでにテスト用データで動作を確認済み</b>で、本物の情報はその上で慎重に入れていきます。「急がず、安全を固めてから本番へ」という方針で進めています。
+  </div>
+
+  <footer>
+    LUXAS 予約・顧客管理システム ／ 制作状況のご報告（2026-06-29）。本資料は社内共有用にやさしく要約したものです。技術的な詳細は別途「移行計画書」に記録しています。
+  </footer>
+
+</div>
+</body>
+</html>

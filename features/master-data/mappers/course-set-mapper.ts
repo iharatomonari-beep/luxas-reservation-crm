@@ -1,0 +1,37 @@
+import type { CourseSet } from "../types";
+import type { DbContext, TableMapper } from "./types";
+
+// セット商品（テナント共通・メニュー参照なしのフラット商品）。fee-master 同型。
+export const courseSetMapper: TableMapper<CourseSet> = {
+  table: "course_sets",
+
+  idOf: (item) => item.id,
+
+  fromRow(row) {
+    return {
+      id: (row.legacy_id as string | null) ?? (row.id as string),
+      name: (row.name as string) ?? "",
+      category: (row.category as string | null) ?? "",
+      price: Number(row.price ?? 0),
+      sortOrder: (row.sort_order as number) ?? 0,
+      onlineBooking: (row.online_booking as boolean | null) ?? undefined,
+      isActive: (row.is_active as boolean) ?? true,
+      createdAt: row.created_at as string | undefined,
+      updatedAt: row.updated_at as string | undefined
+    };
+  },
+
+  toRow(item, ctx: DbContext) {
+    return {
+      legacy_id: item.id,
+      tenant_id: ctx.tenantId,
+      store_id: null,
+      name: item.name,
+      category: item.category ?? null,
+      price: item.price ?? 0,
+      sort_order: item.sortOrder ?? 0,
+      online_booking: item.onlineBooking ?? null,
+      is_active: item.isActive ?? true
+    };
+  }
+};

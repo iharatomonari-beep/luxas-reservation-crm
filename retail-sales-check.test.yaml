@@ -1,0 +1,20 @@
+fileType: momentic/test/v2
+id: vegas-helpful-bay-saves-fitly
+version: 1.0.24
+url: http://localhost:3001
+description: フロー動作確認
+defaultEnv: web
+viewport: 1920, 1080
+browserType: Google Chrome
+steps:
+  - act: メールアドレス欄に ihara_tomonari@toho-massage.com を入力し、パスワード欄に toho1040
+      を入力して、ログインボタンをクリックする
+  - navigate: http://localhost:3001/dashboard/retail-categories
+  - assert: カテゴリが6件表示されている
+  - navigate: http://localhost:3001/dashboard/retail-items
+  - assert: 商品が63件表示されている
+  - navigate: http://localhost:3001/dashboard/retail
+  - act: 商品を任意に1つ選び、数量に2を入力して、登録ボタンを押す
+  - act: ヘッダーの「経営指標」を開き、「物販」タブを選択する
+  - assert: ヘッダーの「経営指標」を開き、「物販」タブを選択する
+  - assert: 「当月物販売上」の金額が表示されている
