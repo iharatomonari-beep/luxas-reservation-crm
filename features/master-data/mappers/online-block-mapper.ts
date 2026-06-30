@@ -13,6 +13,9 @@ export const onlineBlockMapper: TableMapper<OnlineBlock> = {
   idOf: (item) => item.id,
 
   fromRow(row) {
+    // アプリ側ID（storeId=店舗code / staffId=staffのlegacy_id）は profile から復元する
+    // （fromRow は ctx を持たず uuid→code/legacy 逆引きできないため）。
+    const profile = (row.profile as { storeId?: string | null; staffId?: string | null }) ?? {};
     return {
       id: (row.legacy_id as string | null) ?? (row.id as string),
       date: (row.block_date as string) ?? "",
@@ -20,8 +23,8 @@ export const onlineBlockMapper: TableMapper<OnlineBlock> = {
       blockId: (row.block_id as string | null) ?? "",
       startTime: (row.start_time as string | null) ?? "",
       endTime: (row.end_time as string | null) ?? "",
-      // 単一店舗pilotでは未設定=既定店舗扱いで表示OK（多店舗時は逆解決が要）。
-      storeId: undefined
+      storeId: (profile.storeId as string | undefined) ?? undefined,
+      staffId: (profile.staffId as string | undefined) ?? undefined
     };
   },
 
@@ -30,11 +33,14 @@ export const onlineBlockMapper: TableMapper<OnlineBlock> = {
       legacy_id: item.id,
       tenant_id: ctx.tenantId,
       store_id: resolveStoreId(item.storeId, ctx),
+      // staff_id(uuid) は RLS/解決用。JS側の staffId(legacy) は profile に保持。
+      staff_id: item.staffId ? (ctx.staffIdByLegacy[item.staffId] ?? null) : null,
       block_date: item.date,
       name: item.name || null,
       block_id: item.blockId || null,
       start_time: item.startTime || null,
-      end_time: item.endTime || null
+      end_time: item.endTime || null,
+      profile: { storeId: item.storeId ?? null, staffId: item.staffId ?? null }
     };
   }
 };

@@ -6,6 +6,7 @@ import { ExternalLink, LogOut, Menu, X } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { TopMenu } from "@/components/layout/top-menu";
 import { StoreSwitcher } from "@/components/layout/store-switcher";
+import { OnlineToggle } from "@/components/layout/online-toggle";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -56,6 +57,9 @@ export function DashboardShell({
           </div>
 
           <StoreSwitcher />
+
+          {/* ⑤ 店舗全体のオンライン予約オンオフ（PM地球儀同等）。 */}
+          <OnlineToggle />
 
           {/* 現在店舗の公開オンライン予約ページを新規タブで開く（管理画面からの導線）。 */}
           <a

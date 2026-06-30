@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Ban, BookMarked, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Plus, RotateCw, Save, Search, Trash2, Undo2, UserRound, Wallet, X } from "lucide-react";
+import { Ban, BookMarked, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Lock, LockOpen, Plus, RotateCw, Save, Search, Trash2, Undo2, UserRound, Wallet, X } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
 import { searchCustomers } from "@/features/customers/customer-search";
@@ -37,6 +37,7 @@ import { filterReservationsByStore } from "@/features/reservations/store-scope";
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import { filterMenusByStore } from "@/features/master-data/store-menu-scope";
 import { filterRoomsByStore } from "@/features/master-data/store-room-scope";
+import { type OnlineBlock, onlineBlocksStorageKey, initialOnlineBlocks } from "@/features/store-ops/online-blocks";
 import { menuColorStyle, reservationCardStyle } from "@/features/master-data/menu-colors";
 import { isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
@@ -409,8 +410,42 @@ export function ReservationLedger() {
   const routeTags = useMemo(() => allTags.filter((t) => t.kind === "route" && t.isActive), [allTags]);
   const activeOptions = useMemo(() => allOptions.filter((o) => o.isActive), [allOptions]);
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  // ⑤ オンライン予約ブロック（店舗/時間帯＋スタッフ別ロック）。台帳ではスタッフ別ロックの切替に使う。
+  const [onlineBlocks, setOnlineBlocks] = useLocalCollection<OnlineBlock>(onlineBlocksStorageKey, initialOnlineBlocks);
   // 現在店舗（T062）。新規予約への storeId 付与と表示の安全フィルタ（T063）に使う。
   const { currentStoreId, stores } = useCurrentStore();
+  // ⑤ 当日オンラインロック中のスタッフID集合＋トグル（当日×現在店舗単位）。オンライン受付のみ停止（内部予約は不変）。
+  const onlineLockedStaffIds = useMemo(
+    () =>
+      new Set(
+        onlineBlocks
+          .filter((b) => b.staffId && b.date === selectedDate && (!b.storeId || b.storeId === currentStoreId))
+          .map((b) => b.staffId as string)
+      ),
+    [onlineBlocks, selectedDate, currentStoreId]
+  );
+  function toggleStaffOnlineLock(staffId: string) {
+    const existing = onlineBlocks.find(
+      (b) => b.staffId === staffId && b.date === selectedDate && (!b.storeId || b.storeId === currentStoreId)
+    );
+    if (existing) {
+      setOnlineBlocks((cur) => cur.filter((b) => b.id !== existing.id));
+    } else {
+      setOnlineBlocks((cur) => [
+        {
+          id: makeLocalId("blk"),
+          date: selectedDate,
+          name: "オンライン停止（スタッフ）",
+          blockId: makeLocalId("B").toUpperCase().slice(0, 8),
+          startTime: "",
+          endTime: "",
+          storeId: currentStoreId,
+          staffId
+        },
+        ...cur
+      ]);
+    }
+  }
   // 日付バーの天気（Open-Meteo・現在店舗の所在地×選択日）。表示専用。
   const weather = useDailyWeather(currentStoreId, selectedDate);
   // 店舗設定（営業時間・時間きざみ）をランタイム参照する（T031）。設定画面の保存値が台帳に反映される。
@@ -2154,8 +2189,26 @@ export function ReservationLedger() {
                     className="sticky left-0 z-20 flex shrink-0 items-center border-r border-luxas-line bg-white px-3 shadow-[1px_0_0_0_#e7e5e4]"
                     style={{ width: staffColumnWidth, height: timelineRowHeight }}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
+                        {/* ⑤ スタッフ別オンラインロック（当日）。🔓=受付中／🔒=停止中。 */}
+                        {(() => {
+                          const locked = onlineLockedStaffIds.has(item.id);
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => toggleStaffOnlineLock(item.id)}
+                              title={locked ? `${item.displayName}: 本日オンライン停止中（クリックで再開）` : `${item.displayName}: 本日オンライン受付中（クリックで停止）`}
+                              aria-pressed={locked}
+                              className={[
+                                "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition",
+                                locked ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100" : "border-luxas-line bg-white text-stone-400 hover:text-luxas-green hover:bg-luxas-mist"
+                              ].join(" ")}
+                            >
+                              {locked ? <Lock size={13} aria-hidden="true" /> : <LockOpen size={13} aria-hidden="true" />}
+                            </button>
+                          );
+                        })()}
                         <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-luxas-mist text-xs font-semibold text-luxas-green">
                           {item.displayName.slice(0, 1)}
                         </span>

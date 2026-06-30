@@ -9,7 +9,8 @@ import { useCurrentStore } from "@/features/org/use-current-store";
 import { makeLocalId } from "@/features/master-data/utils";
 
 // storeId?: 店舗スコープ（非破壊・任意）。未設定の既存ブロックは全店共通として扱う。
-export type OnlineBlock = { id: string; date: string; name: string; blockId: string; startTime: string; endTime: string; storeId?: string };
+// staffId?: スタッフ別オンラインロック（当日単位）。未設定=従来の店舗/時間帯ブロック。
+export type OnlineBlock = { id: string; date: string; name: string; blockId: string; startTime: string; endTime: string; storeId?: string; staffId?: string };
 export const onlineBlocksStorageKey = "luxas-online-blocks";
 export const initialOnlineBlocks: OnlineBlock[] = [];
 

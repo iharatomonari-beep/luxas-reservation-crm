@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Check, ChevronLeft } from "lucide-react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
 import {
@@ -44,6 +45,28 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
   const [onlineBlocks] = useLocalCollection(onlineBlocksStorageKey, initialOnlineBlocks);
   const [settings] = useStoreSettings(storeId);
 
+  // ⑤-公開: 匿名(anon)モード。Supabase接続あり＆セッション無し（実顧客）のとき、生テーブル不可のため
+  // メニュー/スタッフ/空き枠/予約確定をすべて公開RPC経由にする（時間帯ブロック・スタッフロックを反映）。
+  // ローカル開発(未設定)やログイン中プレビューは false ＝従来のclient計算のまま（壊さない）。
+  const [rpcMode, setRpcMode] = useState(false);
+  const [rpcMenus, setRpcMenus] = useState<ServiceMenu[]>([]);
+  const [rpcStaff, setRpcStaff] = useState<StaffMember[]>([]);
+  const [rpcSlots, setRpcSlots] = useState<OpenSlot[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const sb = createSupabaseBrowserClient();
+      sb.auth.getSession().then(({ data }) => {
+        if (!cancelled) setRpcMode(!data.session);
+      });
+    } catch {
+      if (!cancelled) setRpcMode(false); // Supabase未設定（ローカル）＝client計算
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // ログイン中の会員（いれば、お客様情報入力をスキップしこの会員に予約を紐付ける）。
   const { memberId, login } = useMemberSession();
   const member = useMemo(() => customers.find((c) => c.id === memberId) ?? null, [customers, memberId]);
@@ -79,10 +102,36 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
     );
   }, [customers, member, info.phone, info.email]);
 
-  const onlineMenus = useMemo(
+  const onlineMenusClient = useMemo(
     () => onlineMenusForStore(services, storeId).sort(compareBySortOrder),
     [services, storeId]
   );
+  // 匿名: get_online_menus(店舗code) でオンライン対象メニューを取得。
+  useEffect(() => {
+    if (!rpcMode) return;
+    let cancelled = false;
+    createSupabaseBrowserClient()
+      .rpc("get_online_menus", { p_store_code: storeId })
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        setRpcMenus(
+          (data as Array<{ service_id: string; name: string; category: string | null; duration_minutes: number; price: number }>).map((r) => ({
+            id: r.service_id,
+            name: r.name,
+            category: r.category ?? "",
+            durationMinutes: r.duration_minutes,
+            price: r.price,
+            sortOrder: 0,
+            isActive: true,
+            onlineBooking: true
+          }))
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rpcMode, storeId]);
+  const onlineMenus = rpcMode ? rpcMenus : onlineMenusClient;
   const categories = useMemo(() => [...new Set(onlineMenus.map((m) => m.category))], [onlineMenus]);
   const visibleMenus = category ? onlineMenus.filter((m) => m.category === category) : onlineMenus;
   const menu = onlineMenus.find((m) => m.id === menuId) ?? null;
@@ -103,17 +152,42 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
 
   // 指名候補: 当該店舗所属・有効・このコース対応で、かつ選択日に出勤予定のスタッフのみ。
   // 出勤していないスタッフは指名候補に出さない。
-  const nominationStaff = useMemo(() => {
+  const nominationStaffClient = useMemo(() => {
     if (!menu) return [];
     return [...staff]
       .filter((s) => s.isActive && (s.homeStoreId ?? "store-shibuya") === storeId && staffCanDoMenu(s, menu.id))
       .filter((s) => isStaffWorkingOnDate(s.id, date, storeShifts))
       .sort(compareBySortOrder);
   }, [staff, storeId, menu, date, storeShifts]);
+  // 匿名: get_online_staff(店舗code,日付) で「出勤あり＆ロックなし」スタッフを取得（ロック中は構造的に除外）。
+  useEffect(() => {
+    if (!rpcMode) return;
+    let cancelled = false;
+    createSupabaseBrowserClient()
+      .rpc("get_online_staff", { p_store_code: storeId, p_date: date })
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        setRpcStaff(
+          (data as Array<{ staff_legacy_id: string; display_name: string }>).map((r) => ({
+            id: r.staff_legacy_id,
+            fullName: r.display_name,
+            displayName: r.display_name,
+            role: "therapist",
+            sortOrder: 0,
+            isActive: true,
+            serviceMenuIds: []
+          }))
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rpcMode, storeId, date]);
+  const nominationStaff = rpcMode ? rpcStaff : nominationStaffClient;
 
   // 指名（または指名なし）を選んでから時間を出す。
   // 指名なし=対応スタッフ全員 / 指名あり=その人 の空き枠を表示する。
-  const slots = useMemo(() => {
+  const slotsClient = useMemo(() => {
     if (!menu || !nominationPicked) return [];
     const staffForMenu = nominatedStaffId ? staff : nominationStaff;
     return getOpenStartTimes({
@@ -124,6 +198,28 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
       nominatedStaffId: nominatedStaffId || undefined
     });
   }, [menu, nominationPicked, nominatedStaffId, staff, nominationStaff, storeId, date, shifts, reservations, services, rooms, onlineBlocks, settings]);
+  // 匿名: get_open_slots(店舗code,日付,メニュー,任意指名) で空き時刻を取得（時間帯ブロック/スタッフロックを反映）。
+  useEffect(() => {
+    if (!rpcMode || !menu || !nominationPicked) {
+      setRpcSlots([]);
+      return;
+    }
+    let cancelled = false;
+    createSupabaseBrowserClient()
+      .rpc("get_open_slots", { p_store_code: storeId, p_date: date, p_service_id: menu.id, p_staff_legacy: nominatedStaffId || null })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data) {
+          setRpcSlots([]);
+          return;
+        }
+        setRpcSlots((data as string[]).map((t) => ({ time: String(t).slice(0, 5), staffIds: [] })));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rpcMode, menu, nominationPicked, nominatedStaffId, storeId, date]);
+  const slots = rpcMode ? rpcSlots : slotsClient;
 
   // 指名を選び直したら、選択中の時間は一旦クリア（その人の空き枠で取り直す）。
   function pickNomination(staffId: string) {
@@ -151,8 +247,31 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
     login(found.id);
   }
 
-  function confirm() {
+  async function confirm() {
     if (!menu || !slot) return;
+
+    // 匿名: 予約確定は create_online_booking_v2（サーバー側で空き再検証・指名なしは自動割当・room容量ベース）。
+    if (rpcMode) {
+      const { data, error } = await createSupabaseBrowserClient().rpc("create_online_booking_v2", {
+        p_store_code: storeId,
+        p_service_id: menu.id,
+        p_date: date,
+        p_start: slot.time,
+        p_customer_name: normalizeText(info.name) || "オンライン予約のお客様",
+        p_staff_legacy: nominatedStaffId || null,
+        p_customer_phone: normalizeText(info.phone) || null,
+        p_customer_email: normalizeText(info.email) || null
+      });
+      if (error || !data) {
+        window.alert("申し訳ありません。空き状況が変わったため予約できませんでした。お手数ですが時間を選び直してください。");
+        return;
+      }
+      setCompletedId(String(data));
+      setConfirmedEmail(normalizeText(info.email) || "");
+      setStep("done");
+      return;
+    }
+
     const assignedStaffId = nominatedStaffId || pickAutoStaff(nominationStaff, slot.staffIds);
     if (!assignedStaffId) return;
 
@@ -214,6 +333,10 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
 
   const assignedName = (() => {
     if (!slot) return "";
+    if (rpcMode) {
+      // 匿名: 指名ありはその名前、指名なしはサーバー自動割当（事前には未確定）。
+      return nominatedStaffId ? nominationStaff.find((s) => s.id === nominatedStaffId)?.displayName ?? "スタッフ" : "スタッフ（自動割当）";
+    }
     const id = nominatedStaffId || pickAutoStaff(nominationStaff, slot.staffIds);
     return staff.find((s) => s.id === id)?.displayName ?? "スタッフ";
   })();

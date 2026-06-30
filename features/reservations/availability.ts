@@ -105,10 +105,11 @@ function staffHasReservationConflict(staffId: string, date: string, start: numbe
   });
 }
 
-// オンライン予約停止枠（同日・時間重複）に当たるか。
+// オンライン予約停止枠（同日・時間重複）に当たるか。※スタッフ別ロック(staffId付き)は対象外（スロット全体は塞がない）。
 function isWithinOnlineBlock(date: string, start: number, end: number, blocks: OnlineBlock[], storeId: string): boolean {
   return blocks.some((b) => {
     if (b.date !== date) return false;
+    if (b.staffId) return false; // スタッフ別ロックは候補スタッフ除外で扱う（時間帯ブロックではない）
     // 店舗スコープ: storeId 一致のブロック、または未設定（レガシー=全店共通）のみ適用。
     if (b.storeId && b.storeId !== storeId) return false;
     const bs = timeToMinutes(b.startTime);
@@ -116,6 +117,13 @@ function isWithinOnlineBlock(date: string, start: number, end: number, blocks: O
     if (!Number.isFinite(bs) || !Number.isFinite(be)) return false;
     return start < be && bs < end;
   });
+}
+
+// スタッフ別オンラインロック（当日単位）に当たるか。当日そのスタッフのオンライン受付を停止する。
+export function isStaffOnlineBlocked(staffId: string, date: string, blocks: OnlineBlock[], storeId: string): boolean {
+  return blocks.some(
+    (b) => b.staffId === staffId && b.date === date && (!b.storeId || b.storeId === storeId)
+  );
 }
 
 export type OpenSlot = { time: string; staffIds: string[] };
@@ -161,9 +169,11 @@ export function getOpenStartTimes(params: {
   const storeShifts = filterShiftsByStore(shifts, storeId);
   const storeReservations = reservations.filter((r) => (r.storeId ?? "store-shibuya") === storeId);
   // 候補スタッフ: 指名ありはその人のみ。無指名は有効スタッフ全員（シフト判定で出勤者に絞られる）。
-  const candidateStaff = nominatedStaffId
+  // ★当日オンラインロック中のスタッフはオンライン受付の候補から除外する（内部台帳の予約には影響しない）。
+  const candidateStaff = (nominatedStaffId
     ? staff.filter((s) => s.id === nominatedStaffId)
-    : staff.filter((s) => s.isActive);
+    : staff.filter((s) => s.isActive)
+  ).filter((s) => !isStaffOnlineBlocked(s.id, normalizedDate, onlineBlocks, storeId));
 
   const slots: OpenSlot[] = [];
   for (let t = open; t + duration <= close; t += stepMinutes) {
