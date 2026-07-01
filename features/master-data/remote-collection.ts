@@ -202,6 +202,54 @@ export async function exportCustomersViaRpc(): Promise<Array<Record<string, unkn
   return (data ?? []) as Array<Record<string, unknown>>;
 }
 
+// ② 顧客マージ（★owner限定・サーバー強制）。重複顧客を主（primary）へソフト統合する。
+// merge_customers(p_primary_legacy, p_duplicate_legacys[], p_reason) RPC を呼ぶ。
+// non-owner はサーバーで拒否され throw する。監査は RPC 内部で記録（PIIなし）。
+// 破壊的削除はしない（duplicate に merged_into_legacy を付与＋ is_active=false）。復元は unmerge。
+export async function mergeCustomersViaRpc(
+  primaryLegacy: string,
+  duplicateLegacys: string[],
+  reason: string
+): Promise<number> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("merge_customers", {
+    p_primary_legacy: primaryLegacy,
+    p_duplicate_legacys: duplicateLegacys,
+    p_reason: reason
+  });
+  if (error) {
+    throw error;
+  }
+  return typeof data === "number" ? data : Number(data ?? 0);
+}
+
+// ② 顧客マージの復元（★owner限定）。merged_into_legacy を null へ戻し is_active を true に。
+export async function unmergeCustomersViaRpc(legacys: string[]): Promise<number> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("unmerge_customers", {
+    p_legacys: legacys
+  });
+  if (error) {
+    throw error;
+  }
+  return typeof data === "number" ? data : Number(data ?? 0);
+}
+
+// RPC未適用（owner用SQL未実行）を判定するための簡易ヘルパ。PostgREST はRPC不在を 404/PGRST202 で返す。
+export function isRpcMissingError(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  if (!e) {
+    return false;
+  }
+  const code = e.code ?? "";
+  const message = e.message ?? "";
+  return (
+    code === "PGRST202" ||
+    code === "42883" ||
+    /could not find the function|function .* does not exist/i.test(message)
+  );
+}
+
 // 1件を即時 INSERT して完了を待つ（作成ページのように直後にウィンドウを閉じる画面で、
 // 非同期の保存がabortされて消えるのを防ぐ。呼び出し側で await する）。
 export async function insertViaMapper<T>(mapper: TableMapper<T>, item: T): Promise<void> {

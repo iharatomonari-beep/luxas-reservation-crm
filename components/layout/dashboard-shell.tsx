@@ -2,26 +2,23 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, LogOut, Menu, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { TopMenu } from "@/components/layout/top-menu";
 import { StoreSwitcher } from "@/components/layout/store-switcher";
-import { OnlineToggle } from "@/components/layout/online-toggle";
-import { useCurrentStore } from "@/features/org/use-current-store";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function DashboardShell({
   children,
-  isPreviewMode,
-  userEmail
+  isPreviewMode
 }: {
   children: ReactNode;
   isPreviewMode: boolean;
-  userEmail: string;
+  // 受け取るが表示はしない（メールアドレスはヘッダーに出さない方針）。
+  userEmail?: string;
 }) {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { currentStoreId } = useCurrentStore();
 
   async function handleSignOut() {
     if (!isPreviewMode) {
@@ -58,22 +55,6 @@ export function DashboardShell({
 
           <StoreSwitcher />
 
-          {/* ⑤ 店舗全体のオンライン予約オンオフ（PM地球儀同等）。 */}
-          <OnlineToggle />
-
-          {/* 現在店舗の公開オンライン予約ページを新規タブで開く（管理画面からの導線）。 */}
-          <a
-            href={`/book/${currentStoreId}`}
-            target="_blank"
-            rel="noreferrer noopener"
-            title="公開オンライン予約ページを新規タブで開く"
-            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-luxas-ink transition hover:bg-luxas-mist"
-          >
-            <ExternalLink size={16} aria-hidden="true" />
-            <span className="hidden sm:inline">予約ページ</span>
-          </a>
-
-          <p className="hidden truncate text-xs text-stone-500 lg:block">{userEmail}</p>
           <button
             type="button"
             className="inline-flex shrink-0 items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-luxas-ink transition hover:bg-luxas-mist"

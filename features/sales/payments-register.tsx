@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { AUTO_REFRESH_MS } from "@/features/master-data/auto-refresh";
 import { initialStaff, staffStorageKey } from "@/features/master-data/mock-data";
 import type { StaffMember } from "@/features/master-data/types";
 import { customersStorageKey, initialCustomers } from "@/features/customers/mock-data";
@@ -25,7 +26,9 @@ function yen(value: number) {
 }
 
 export function PaymentsRegister() {
-  const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  const [reservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations, {
+    pollMs: AUTO_REFRESH_MS
+  });
   const [staff] = useLocalCollection<StaffMember>(staffStorageKey, initialStaff);
   const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const { currentStoreId } = useCurrentStore();

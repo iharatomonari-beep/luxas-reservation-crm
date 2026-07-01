@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Ban, BookMarked, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, Lock, LockOpen, Plus, RotateCw, Save, Search, Trash2, Undo2, UserRound, Wallet, X } from "lucide-react";
+import { Ban, BookMarked, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, CreditCard, DoorOpen, Edit3, ExternalLink, Lock, LockOpen, Plus, RotateCw, Save, Search, Trash2, Undo2, UserRound, Wallet, X } from "lucide-react";
 import { initialCustomers, customersStorageKey } from "@/features/customers/mock-data";
 import { customerGenderLabels, type Customer, type CustomerGender } from "@/features/customers/types";
 import { searchCustomers } from "@/features/customers/customer-search";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { AUTO_REFRESH_MS } from "@/features/master-data/auto-refresh";
+import { findDuplicateCustomers, type DuplicateMatch } from "@/features/customers/duplicate-detection";
+import { DuplicateCustomerPrompt } from "@/features/customers/duplicate-prompt";
+import { OnlineToggle } from "@/components/layout/online-toggle";
 import { backendFor } from "@/features/master-data/migration-config";
 import {
   hasBoothCapacity,
@@ -409,7 +413,17 @@ export function ReservationLedger() {
   const [dayPanelSearch, setDayPanelSearch] = useState("");
   const routeTags = useMemo(() => allTags.filter((t) => t.kind === "route" && t.isActive), [allTags]);
   const activeOptions = useMemo(() => allOptions.filter((o) => o.isActive), [allOptions]);
-  const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  // ① 自動更新（ポーリング・固定間隔・裏で常時）。ドラッグ操作中（dragState≠null）は一時停止して移動中の状態を守る。
+  const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations, {
+    pollMs: AUTO_REFRESH_MS,
+    pausePoll: dragState !== null
+  });
+  // ⑤ 受付の「＋新規顧客」で重複検出ポップを出すための保留状態。
+  const [dupPrompt, setDupPrompt] = useState<{
+    candidates: DuplicateMatch[];
+    reservationId: string;
+    draft: { name: string; phone: string; gender: CustomerGender };
+  } | null>(null);
   // ⑤ オンライン予約ブロック（店舗/時間帯＋スタッフ別ロック）。台帳ではスタッフ別ロックの切替に使う。
   const [onlineBlocks, setOnlineBlocks] = useLocalCollection<OnlineBlock>(onlineBlocksStorageKey, initialOnlineBlocks);
   // 現在店舗（T062）。新規予約への storeId 付与と表示の安全フィルタ（T063）に使う。
@@ -1376,8 +1390,21 @@ export function ReservationLedger() {
     setMessage({ type: "success", text: "顧客の紐づけを解除しました（ゲストに戻しました）。" });
   }
 
-  // 左パネルの「＋新規」から最小項目で新規顧客を作成し、その予約に紐づける（顧客マスタへ非破壊追加）。
+  // 左パネルの「＋新規」から新規顧客を作成。★作成前に重複検出し、同一人物候補があれば必ずポップで確認する（⑤）。
   function createCustomerAndLink(reservationId: string, draft: { name: string; phone: string; gender: CustomerGender }) {
+    const candidates = findDuplicateCustomers(customers, { name: draft.name, phone: draft.phone });
+    if (candidates.length > 0) {
+      setDupPrompt({ candidates, reservationId, draft });
+      return; // ポップの選択を待つ。
+    }
+    performCreateCustomerAndLink(reservationId, draft);
+  }
+
+  // 実際に新規顧客を作成して紐づける（ポップで「別人として新規」を選んだ場合もここを通す）。
+  function performCreateCustomerAndLink(
+    reservationId: string,
+    draft: { name: string; phone: string; gender: CustomerGender }
+  ) {
     const now = new Date().toISOString();
     const newCustomer: Customer = {
       id: makeLocalId("customer"),
@@ -1400,6 +1427,20 @@ export function ReservationLedger() {
     };
     setCustomers((current) => [newCustomer, ...current]);
     linkCustomerToReservation(reservationId, newCustomer);
+  }
+
+  // ⑤ ポップで「この顧客に紐付ける（既存を使う）」。新規は作らず既存顧客を予約に紐づける。
+  function handleDupUseExisting(customer: Customer) {
+    if (!dupPrompt) return;
+    linkCustomerToReservation(dupPrompt.reservationId, customer);
+    setDupPrompt(null);
+  }
+
+  // ⑤ ポップで「別人として新規登録」。
+  function handleDupCreateNew() {
+    if (!dupPrompt) return;
+    performCreateCustomerAndLink(dupPrompt.reservationId, dupPrompt.draft);
+    setDupPrompt(null);
   }
 
   function beginReservationDrag(event: ReactPointerEvent<HTMLButtonElement>, reservation: Reservation) {
@@ -1683,6 +1724,22 @@ export function ReservationLedger() {
             </button>
           </div>
         </div>
+
+        {/* オンライン受付トグル＋公開予約ページ導線。ツールバーの空きスペースに配置（PM地球儀同等）。 */}
+        <div className="flex flex-wrap items-center gap-2">
+          <OnlineToggle />
+          <a
+            href={`/book/${currentStoreId}`}
+            target="_blank"
+            rel="noreferrer noopener"
+            title="公開オンライン予約ページを新規タブで開く"
+            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-luxas-line bg-white px-3 py-2 text-sm font-medium text-luxas-ink transition hover:bg-luxas-mist"
+          >
+            <ExternalLink size={16} aria-hidden="true" />
+            予約ページ
+          </a>
+        </div>
+
         {/* 天気は実データ（Open-Meteo）。絞り込み／店舗はPM準拠の静的プレースホルダ。現在時刻は実値。 */}
         <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-stone-500">
           {weather.status === "ready" ? (
@@ -2526,6 +2583,17 @@ export function ReservationLedger() {
         onClose={closeForm}
         onSubmit={saveReservation}
       />
+
+      {dupPrompt && (
+        <DuplicateCustomerPrompt
+          candidates={dupPrompt.candidates}
+          enteredName={dupPrompt.draft.name}
+          useExistingLabel="この顧客に紐付ける"
+          onUseExisting={handleDupUseExisting}
+          onCreateNew={handleDupCreateNew}
+          onCancel={() => setDupPrompt(null)}
+        />
+      )}
     </div>
   );
 }

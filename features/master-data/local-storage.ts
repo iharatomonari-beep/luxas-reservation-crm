@@ -40,11 +40,27 @@ const SEED_RESET_TOKENS: Record<string, string> = {
   "luxas-master-options": "2026-06-21-options-pm"
 };
 
-export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
+// 自動更新（ポーリング）のオプション。
+// - pollMs: >0 かつ Supabase 管理テーブルのとき、その間隔(ms)でDBから取り直す。0/未指定で無効。
+// - pausePoll: true のあいだはポーリングをスキップ（例: 台帳のドラッグ操作中）。
+// 既存呼び出し（2引数）には影響しない後方互換の追加。
+export type UseLocalCollectionOptions = {
+  pollMs?: number;
+  pausePoll?: boolean;
+};
+
+export function useLocalCollection<T>(
+  storageKey: string,
+  initialItems: T[],
+  options?: UseLocalCollectionOptions
+) {
   const config = tableConfig(storageKey);
   const backend = config?.backend ?? "local";
   const mapper = (config?.mapper as unknown as TableMapper<T> | undefined) ?? undefined;
   const useSupabase = backend === "supabase" && Boolean(mapper);
+
+  const pollMs = options?.pollMs ?? 0;
+  const pausePoll = options?.pausePoll ?? false;
 
   const [items, setItems] = useState<T[]>(initialItems);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -52,6 +68,11 @@ export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
   const prevRef = useRef<T[]>(initialItems);
   // Supabaseの実行コンテキスト（テナント・店舗解決）。
   const ctxRef = useRef<DbContext | null>(null);
+  // ポーリングのtick内から最新の items / pausePoll を参照するための ref（再subscribe回避）。
+  const itemsRef = useRef<T[]>(initialItems);
+  itemsRef.current = items;
+  const pausePollRef = useRef(pausePoll);
+  pausePollRef.current = pausePoll;
 
   // ---- ハイドレート（初期読み込み）----
   useEffect(() => {
@@ -201,6 +222,56 @@ export function useLocalCollection<T>(storageKey: string, initialItems: T[]) {
       window.removeEventListener("pageshow", syncOnFocus);
     };
   }, [isHydrated, storageKey, backend, mapper, useSupabase]);
+
+  // ---- 自動更新（ポーリング）----
+  // Supabase 管理テーブルで pollMs>0 のとき、一定間隔でDBから取り直して画面を最新化する。
+  // 安全策: タブ非表示中・pausePoll中はスキップ。未同期のローカル変更があるあいだ
+  // （prevRef≠items）もスキップして、編集途中の状態を上書きしない。
+  useEffect(() => {
+    if (!isHydrated || !useSupabase || !mapper || pollMs <= 0) {
+      return () => undefined;
+    }
+
+    let cancelled = false;
+
+    const tick = () => {
+      if (cancelled) {
+        return;
+      }
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+      if (pausePollRef.current) {
+        return;
+      }
+      // 未同期のローカル変更があるあいだは取り直さない（編集の取りこぼし防止）。
+      if (prevRef.current !== itemsRef.current) {
+        return;
+      }
+
+      loadRows(mapper.table)
+        .then((rows) => {
+          if (cancelled) {
+            return;
+          }
+          // tick発火後に編集が入った場合は破棄（再度のずれ）。
+          if (prevRef.current !== itemsRef.current) {
+            return;
+          }
+          const mapped = rows.map((row) => mapper.fromRow(row));
+          prevRef.current = mapped;
+          setItems(mapped);
+        })
+        .catch(() => undefined);
+    };
+
+    const intervalId = window.setInterval(tick, pollMs);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [isHydrated, useSupabase, mapper, pollMs, storageKey]);
 
   return [items, setItems] as const satisfies readonly [T[], Dispatch<SetStateAction<T[]>>];
 }

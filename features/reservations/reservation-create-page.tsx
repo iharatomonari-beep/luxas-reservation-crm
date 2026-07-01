@@ -20,13 +20,15 @@ import {
   initialServices,
   initialShifts,
   initialStaff,
+  initialTags,
   shiftsStorageKey,
   roomsStorageKey,
   servicesStorageKey,
-  staffStorageKey
+  staffStorageKey,
+  tagsStorageKey
 } from "@/features/master-data/mock-data";
 import { initialStoreSettings } from "@/features/master-data/store-settings";
-import type { ServiceMenu, ServiceRoom, StaffMember, StaffShift } from "@/features/master-data/types";
+import type { MasterTag, ServiceMenu, ServiceRoom, StaffMember, StaffShift } from "@/features/master-data/types";
 import { isBlank, makeLocalId, normalizeText } from "@/features/master-data/utils";
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import {
@@ -60,6 +62,8 @@ type ReservationForm = {
   status: ReservationStatus;
   // --- T067.5-A ゲスト予約の本人性別（空＝未設定）。preference とは別物 ---
   guestGender: CustomerGender | "";
+  // ③ 予約ルートタグ（台帳の簡易フォームと同じ・複数選択）。
+  bookingTagIds: string[];
 };
 
 type ReservationCreatePrefill = {
@@ -97,7 +101,11 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
   const [shifts] = useLocalCollection<StaffShift>(shiftsStorageKey, initialShifts);
   const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const [reservations, setReservations] = useLocalCollection<Reservation>(reservationsStorageKey, initialReservations);
+  const [allTags] = useLocalCollection<MasterTag>(tagsStorageKey, initialTags);
   const { currentStoreId } = useCurrentStore();
+
+  // ③ 予約ルートタグの候補（有効・kind=route のみ）。台帳と同じ条件。
+  const routeTags = useMemo(() => allTags.filter((t) => t.kind === "route" && t.isActive), [allTags]);
 
   const activeStaff = useMemo(() => [...staff].sort(compareBySortOrder).filter((item) => item.isActive), [staff]);
   // メニュー選択候補＝有効かつ現在店舗で提供可能なメニューのみ（T065・非破壊）。lookup用 full services は絞らない。
@@ -583,6 +591,45 @@ export function ReservationCreatePage({ initialPrefill }: ReservationCreatePageP
             />
           </label>
 
+          <FormSectionTitle index={6} title="予約ルート" />
+          <div className="block">
+            <span className="flex items-center gap-2 text-sm font-medium text-stone-700">
+              予約ルートタグ
+              <span className="rounded-full bg-luxas-paper px-2 py-0.5 text-[11px] font-medium text-stone-500">任意</span>
+            </span>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {routeTags.length === 0 ? (
+                <span className="text-xs text-stone-400">予約ルートタグ未登録（タグ管理で追加）</span>
+              ) : (
+                routeTags.map((tag) => {
+                  const on = form.bookingTagIds.includes(tag.id);
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() =>
+                        update(
+                          "bookingTagIds",
+                          on
+                            ? form.bookingTagIds.filter((id) => id !== tag.id)
+                            : [...form.bookingTagIds, tag.id]
+                        )
+                      }
+                      className={[
+                        "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                        on
+                          ? "border-luxas-green bg-luxas-mist text-luxas-green"
+                          : "border-luxas-line bg-white text-stone-600 hover:bg-luxas-paper"
+                      ].join(" ")}
+                    >
+                      {tag.name}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
           <StatusMessage message={formMessage} />
 
           <div className="flex flex-col gap-2 border-t border-luxas-line pt-4 sm:flex-row sm:justify-end">
@@ -632,7 +679,8 @@ function createInitialForm(prefill: NormalizedReservationCreatePrefill, services
     endTime,
     memo: "",
     status: "booked",
-    guestGender: ""
+    guestGender: "",
+    bookingTagIds: []
   };
 }
 
@@ -780,7 +828,9 @@ function normalizeForm(form: ReservationForm): Omit<Reservation, "id"> {
     memo: normalizeText(form.memo),
     status: form.status,
     // --- T067.5-A ゲスト予約の本人性別（既存顧客紐づけ時は Customer.gender が優先される） ---
-    guestGender: form.guestGender || undefined
+    guestGender: form.guestGender || undefined,
+    // ③ 予約ルートタグ（未選択なら undefined で保存・台帳と同じ形）。
+    bookingTagIds: form.bookingTagIds.length ? form.bookingTagIds : undefined
   };
 }
 

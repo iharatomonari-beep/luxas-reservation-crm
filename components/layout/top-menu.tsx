@@ -66,6 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "顧客管理", href: "/dashboard/customers" },
       { label: "顧客フル検索", href: "/dashboard/customers/search" },
+      { label: "顧客マージ", href: "/dashboard/customers/merge" },
       { label: "顧客タグ", href: "/dashboard/customer-tags" },
       { label: "予約ルートタグ", href: "/dashboard/route-tags" },
       { label: "施術カルテタグ", href: "/dashboard/chart-tags" },
@@ -105,6 +106,7 @@ const NAV_GROUPS: NavGroup[] = [
     href: "/dashboard/analytics",
     items: [
       { label: "経営指標", href: "/dashboard/analytics" },
+      { label: "日次集計（店舗向け）", href: "/dashboard/analytics/daily-summary" },
       { label: "スタッフ成績", href: "/dashboard/analytics/staff" },
       { label: "詳細帳票", href: "/dashboard/analytics/reports" }
     ]

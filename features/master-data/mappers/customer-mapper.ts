@@ -43,7 +43,9 @@ export const customerMapper: TableMapper<Customer> = {
       addressLine1: (row.address_line1 as string | null) ?? undefined,
       addressLine2: (row.address_line2 as string | null) ?? undefined,
       membershipNumber: (row.membership_number as string | null) ?? undefined,
-      occupation: (row.occupation as string | null) ?? undefined
+      occupation: (row.occupation as string | null) ?? undefined,
+      // ② マージ: サーバー所有の統合先（主）legacy_id。読み取りのみ（toRowでは書かない）。
+      mergedInto: (row.merged_into_legacy as string | null) ?? undefined
     } as Customer;
   },
 
@@ -73,6 +75,9 @@ export const customerMapper: TableMapper<Customer> = {
     } = item;
 
     const profile: Record<string, unknown> = { ...rest };
+    // ② マージ: mergedInto はサーバー所有列（merged_into_legacy）。アプリ保存では書かない＝
+    //   profile にも実列にも出さない（owner限定RPCの設定を誤って上書きしないため）。
+    delete (profile as { mergedInto?: unknown }).mergedInto;
 
     return {
       legacy_id: id,

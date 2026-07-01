@@ -72,6 +72,12 @@ export type Customer = {
   createdById?: string;
   /** 更新者ID（将来：認証ユーザー） */
   updatedById?: string;
+  /**
+   * ② 顧客マージ: 統合先（主）顧客の legacy_id。値があれば「重複として主に統合済み」（一覧の非表示候補）。
+   * サーバー側 owner限定RPC（merge_customers / unmerge_customers）が設定する読み取り専用フィールド。
+   * アプリの保存（mapper.toRow）では書き込まない（サーバー所有・誤上書き防止）。復元可能（unmergeでnullへ）。
+   */
+  mergedInto?: string;
 };
 
 export const customerGenderLabels: Record<CustomerGender, string> = {

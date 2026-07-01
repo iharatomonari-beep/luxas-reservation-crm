@@ -31,6 +31,8 @@ import { formatCurrency, isBlank, makeLocalId, normalizeText } from "@/features/
 import { StatusMessage, type StatusMessageValue } from "@/features/master-data/status-message";
 import { customersStorageKey, initialCustomers } from "@/features/customers/mock-data";
 import type { Customer, CustomerGender } from "@/features/customers/types";
+import { findDuplicateCustomers, type DuplicateMatch } from "@/features/customers/duplicate-detection";
+import { DuplicateCustomerPrompt } from "@/features/customers/duplicate-prompt";
 import { customerGenderLabels } from "@/features/customers/types";
 import { formatTimestamp, stampCreate, stampUpdate } from "@/features/master-data/timestamps";
 import { useCurrentStore } from "@/features/org/use-current-store";
@@ -111,6 +113,11 @@ export function CustomerManager() {
     caution: "",
     chartMemo: ""
   });
+  // ⑤ 重複検出ポップ（新規作成時に同一人物候補が出たら確認）。
+  const [dupPrompt, setDupPrompt] = useState<{
+    candidates: DuplicateMatch[];
+    payload: ReturnType<typeof toCustomerPayload>;
+  } | null>(null);
 
   const filteredCustomers = useMemo(() => {
     return [...customers]
@@ -287,13 +294,46 @@ export function CustomerManager() {
       setMessage({ type: "success", text: "顧客情報を更新しました。" });
       void logAudit("update", "customer", editingCustomerId, { changedFields });
     } else {
-      const id = makeLocalId("customer");
-      setCustomers((current) => [{ id, ...stampCreate(payload) }, ...current]);
-      setSelectedCustomerId(id);
-      setMessage({ type: "success", text: "顧客を新規作成しました。" });
-      void logAudit("create", "customer", id);
+      // ⑤ 新規作成前に重複検出。同一人物候補があれば必ずポップで確認する。
+      const candidates = findDuplicateCustomers(customers, {
+        name: payload.name,
+        nameKana: payload.nameKana,
+        phone: payload.phone,
+        email: payload.email
+      });
+      if (candidates.length > 0) {
+        setDupPrompt({ candidates, payload });
+        return; // ポップの選択を待つ（ここでは作成しない）。
+      }
+      performCreate(payload);
     }
 
+    closeForm();
+  }
+
+  // 実際の新規作成（重複ポップで「別人として新規」を選んだ場合もここを通す）。
+  function performCreate(payload: ReturnType<typeof toCustomerPayload>) {
+    const id = makeLocalId("customer");
+    setCustomers((current) => [{ id, ...stampCreate(payload) }, ...current]);
+    setSelectedCustomerId(id);
+    setMessage({ type: "success", text: "顧客を新規作成しました。" });
+    void logAudit("create", "customer", id);
+  }
+
+  // ⑤ ポップで「この顧客を開く（既存を使う）」。新規は作らず既存顧客を表示する。
+  function handleUseExisting(customer: Customer) {
+    setDupPrompt(null);
+    closeForm();
+    setSelectedCustomerId(customer.id);
+    void logAudit("view", "customer", customer.id);
+    setMessage({ type: "success", text: `既存の顧客「${customer.name}」を開きました（新規は作成していません）。` });
+  }
+
+  // ⑤ ポップで「別人として新規登録」。
+  function handleCreateNewAnyway() {
+    if (!dupPrompt) return;
+    performCreate(dupPrompt.payload);
+    setDupPrompt(null);
     closeForm();
   }
 
@@ -717,6 +757,17 @@ export function CustomerManager() {
         onClose={closeForm}
         onSubmit={saveForm}
       />
+
+      {dupPrompt && (
+        <DuplicateCustomerPrompt
+          candidates={dupPrompt.candidates}
+          enteredName={dupPrompt.payload.name}
+          useExistingLabel="この顧客を開く"
+          onUseExisting={handleUseExisting}
+          onCreateNew={handleCreateNewAnyway}
+          onCancel={() => setDupPrompt(null)}
+        />
+      )}
     </div>
   );
 }
