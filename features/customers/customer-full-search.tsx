@@ -36,6 +36,8 @@ export function CustomerFullSearch() {
   const results = useMemo(() => {
     const q = (s: string) => s.trim().toLowerCase();
     return customers.filter((c) => {
+      // ② 統合済み（重複統合された）顧客は検索結果に出さない。
+      if (c.mergedInto) return false;
       if (name && !(`${c.name}${c.nameKana}`.toLowerCase().includes(q(name)))) return false;
       if (phone && !(c.phone ?? "").includes(phone.trim())) return false;
       if (email && !(c.email ?? "").toLowerCase().includes(q(email))) return false;

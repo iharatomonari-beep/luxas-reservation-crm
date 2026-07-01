@@ -121,6 +121,8 @@ export function CustomerManager() {
 
   const filteredCustomers = useMemo(() => {
     return [...customers]
+      // ② 統合済み（重複として主に統合された）顧客は一覧に出さない。復元は顧客マージ画面から。
+      .filter((customer) => !customer.mergedInto)
       .filter((customer) => matchesFilters(customer, filters))
       .sort((left, right) => {
         const visitOrder = (right.lastVisitDate || "").localeCompare(left.lastVisitDate || "");
