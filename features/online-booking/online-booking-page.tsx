@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Check, ChevronLeft } from "lucide-react";
 import { useLocalCollection } from "@/features/master-data/local-storage";
+import { isRpcMissingError } from "@/features/master-data/remote-collection";
 import {
   initialServices, initialStaff, initialRooms, servicesStorageKey, staffStorageKey, roomsStorageKey, shiftsStorageKey, initialShifts
 } from "@/features/master-data/mock-data";
@@ -33,6 +34,18 @@ type Step = "menu" | "datetime" | "info" | "done";
 function staffCanDoMenu(staff: StaffMember, menuId: string): boolean {
   const ids = staff.serviceMenuIds ?? [];
   return ids.length === 0 || ids.includes(menuId);
+}
+
+/**
+ * オンライン予約の端末種別をUA（ユーザーエージェント）で自動判定する。
+ * スマホ/タブレット＝"mobile"、それ以外＝"pc"。iPadOS はMac名乗りのためタッチ有無で補正。
+ * 日次集計「オンライン(PC)/(携帯)」の内訳に使う。判定不能時は "pc" に倒す。
+ */
+function detectOnlineDevice(): "pc" | "mobile" {
+  if (typeof navigator === "undefined") return "pc";
+  const ua = navigator.userAgent;
+  const iPadOs = ua.includes("Macintosh") && typeof document !== "undefined" && "ontouchend" in document;
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(ua) || iPadOs ? "mobile" : "pc";
 }
 
 export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string; initialMenuId?: string }) {
@@ -252,7 +265,8 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
 
     // 匿名: 予約確定は create_online_booking_v2（サーバー側で空き再検証・指名なしは自動割当・room容量ベース）。
     if (rpcMode) {
-      const { data, error } = await createSupabaseBrowserClient().rpc("create_online_booking_v2", {
+      const sb = createSupabaseBrowserClient();
+      const baseParams = {
         p_store_code: storeId,
         p_service_id: menu.id,
         p_date: date,
@@ -261,7 +275,12 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
         p_staff_legacy: nominatedStaffId || null,
         p_customer_phone: normalizeText(info.phone) || null,
         p_customer_email: normalizeText(info.email) || null
-      });
+      };
+      // p_device 付き（phaseC2 SQL 適用後）を先に試し、未適用（関数シグネチャ不一致）なら従来引数で再試行。
+      let { data, error } = await sb.rpc("create_online_booking_v2", { ...baseParams, p_device: detectOnlineDevice() });
+      if (error && isRpcMissingError(error)) {
+        ({ data, error } = await sb.rpc("create_online_booking_v2", baseParams));
+      }
       if (error || !data) {
         window.alert("申し訳ありません。空き状況が変わったため予約できませんでした。お手数ですが時間を選び直してください。");
         return;
@@ -320,7 +339,7 @@ export function OnlineBookingPage({ storeId, initialMenuId }: { storeId: string;
       id: reservationId, date, startTime, endTime,
       customerName: name, phone,
       serviceMenuId: menu.id, staffId: assignedStaffId, roomId: "", status: "booked",
-      memo: "", storeId, source: "online", customerId,
+      memo: "", storeId, source: "online", onlineDevice: detectOnlineDevice(), customerId,
       nominatedStaffId: nominatedStaffId || undefined, guestGender: gender
     };
     setReservations((cur) => [reservation, ...cur]);

@@ -24,6 +24,7 @@ import { filterRecordsByStore } from "@/features/master-data/store-record-scope"
 import { filterShiftsByStore } from "@/features/master-data/store-staff-scope";
 import { customersStorageKey, initialCustomers } from "@/features/customers/mock-data";
 import type { Customer } from "@/features/customers/types";
+import { dailyReportsStorageKey, type DailyReport } from "@/features/daily/daily-ops";
 import { useCurrentStore } from "@/features/org/use-current-store";
 import { timeToMinutes } from "@/features/reservations/date-utils";
 import { serializeCsv } from "@/features/import-export/csv-utils";
@@ -33,6 +34,28 @@ type DailyTarget = { date: string; amount: number; comment: string; storeId?: st
 // 安定参照の空配列（useLocalCollection の initialItems に毎回 [] を渡すと再ハイドレートが暴走するため）。
 const EMPTY_TARGETS: DailyTarget[] = [];
 const EMPTY_TURNAWAYS: TurnawayRecord[] = [];
+const EMPTY_REPORTS: DailyReport[] = [];
+
+/** 消費税率（v2: 固定10%）。税抜＝税込÷1.1（円未満四捨五入）、消費税＝税込−税抜。 */
+const TAX_RATE = 0.1;
+function exTax(incTax: number): number {
+  return Math.round(incTax / (1 + TAX_RATE));
+}
+
+/**
+ * オンライン予約判定。source="online" に加え、profile未設定のRPC作成予約（memo="online" のみ・
+ * phaseC2 SQL適用前の既存データ）も拾う。
+ */
+function isOnlineReservation(r: Reservation): boolean {
+  return r.source === "online" || (!r.source && r.memo === "online");
+}
+
+/** 売上日報「スタッフ提案数」（自由記述）を数値として解釈。数字以外は無視し、数値にならなければ0。 */
+function parseProposals(text: string | undefined): number {
+  const digits = (text ?? "").replace(/[^\d]/g, "");
+  const n = Number(digits);
+  return digits && Number.isFinite(n) ? n : 0;
+}
 
 // 集計1日分。CSV列とテーブル列の両方に使う。
 type DailyRow = {
@@ -46,6 +69,8 @@ type DailyRow = {
   施術売上: number;
   物販売上: number;
   売上合計: number;
+  税抜売上: number;
+  消費税: number;
   進捗率: number;
   客単価: number;
   時間単価: number;
@@ -65,7 +90,11 @@ type DailyRow = {
   女性顧客数: number;
   指名顧客数: number;
   オンライン予約数: number;
+  オンラインPC: number;
+  オンライン携帯: number;
   返客数: number;
+  機会損失率: number;
+  追加提案数: number;
 };
 
 function normPhone(value: string | undefined) {
@@ -116,6 +145,7 @@ export function DailySummary() {
   const [allRetail] = useLocalCollection<RetailSale>(retailSalesStorageKey, initialRetailSales);
   const [allTargets] = useLocalCollection<DailyTarget>(dailyTargetsStorageKey, EMPTY_TARGETS);
   const [allTurnaways] = useLocalCollection<TurnawayRecord>(turnawaysStorageKey, EMPTY_TURNAWAYS);
+  const [allReports] = useLocalCollection<DailyReport>(dailyReportsStorageKey, EMPTY_REPORTS);
   const [customers] = useLocalCollection<Customer>(customersStorageKey, initialCustomers);
   const { currentStoreId, stores } = useCurrentStore();
   const [settings] = useStoreSettings(currentStoreId);
@@ -132,6 +162,7 @@ export function DailySummary() {
   const retailSales = useMemo(() => filterRecordsByStore(allRetail, currentStoreId), [allRetail, currentStoreId]);
   const targets = useMemo(() => filterRecordsByStore(allTargets, currentStoreId), [allTargets, currentStoreId]);
   const turnaways = useMemo(() => filterRecordsByStore(allTurnaways, currentStoreId), [allTurnaways, currentStoreId]);
+  const reports = useMemo(() => filterRecordsByStore(allReports, currentStoreId), [allReports, currentStoreId]);
 
   // 顧客解決（customerId → 電話 の順）。性別の集計に使う。
   const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
@@ -177,6 +208,7 @@ export function DailySummary() {
       const dayRetail = retailSales.filter((s) => s.saleDate === date);
       const target = targets.find((t) => t.date === date)?.amount ?? 0;
       const dayTurnaways = turnaways.filter((t) => t.date === date);
+      const dayReport = reports.find((t) => t.date === date);
 
       const shiftMin = dayShifts.reduce((sum, s) => sum + durationMin(s.startTime, s.endTime), 0);
       const breakMin = dayShifts.reduce((sum, s) => sum + durationMin(s.breakStart, s.breakEnd), 0);
@@ -220,6 +252,8 @@ export function DailySummary() {
         施術売上: treatmentSales,
         物販売上: retailTotal,
         売上合計: totalSales,
+        税抜売上: exTax(totalSales),
+        消費税: totalSales - exTax(totalSales),
         進捗率: pct(totalSales, target),
         客単価: visits > 0 ? Math.round(treatmentSales / visits) : 0,
         時間単価: shiftMin > 0 ? Math.round(treatmentSales / (shiftMin / 60)) : 0,
@@ -238,12 +272,16 @@ export function DailySummary() {
         男性顧客数: male,
         女性顧客数: female,
         指名顧客数: nominatedKeys.size,
-        オンライン予約数: dayVisits.filter((r) => r.source === "online").length,
-        返客数: dayTurnaways.length
+        オンライン予約数: dayVisits.filter(isOnlineReservation).length,
+        オンラインPC: dayVisits.filter((r) => isOnlineReservation(r) && r.onlineDevice === "pc").length,
+        オンライン携帯: dayVisits.filter((r) => isOnlineReservation(r) && r.onlineDevice === "mobile").length,
+        返客数: dayTurnaways.length,
+        機会損失率: pct(dayTurnaways.length, visits + dayTurnaways.length),
+        追加提案数: parseProposals(dayReport?.staffProposals)
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dates, reservations, shifts, retailSales, targets, turnaways, businessHours, firstVisitByKey]);
+  }, [dates, reservations, shifts, retailSales, targets, turnaways, reports, businessHours, firstVisitByKey]);
 
   // 合計行（金額・件数・時間は単純合算、率は合計から再計算）。
   const total = useMemo(() => {
@@ -256,6 +294,7 @@ export function DailySummary() {
     const visits = sum((r) => r.総来店数);
     const repeat = sum((r) => r.リピーター数);
     const newc = sum((r) => r.新規数);
+    const turnaway = sum((r) => r.返客数);
     return {
       総シフト分: shiftMin,
       総施術分: serviceMin,
@@ -265,6 +304,8 @@ export function DailySummary() {
       施術売上: treatment,
       物販売上: sum((r) => r.物販売上),
       売上合計: totalSales,
+      税抜売上: exTax(totalSales),
+      消費税: totalSales - exTax(totalSales),
       進捗率: pct(totalSales, budget),
       客単価: visits > 0 ? Math.round(treatment / visits) : 0,
       時間単価: shiftMin > 0 ? Math.round(treatment / (shiftMin / 60)) : 0,
@@ -284,7 +325,11 @@ export function DailySummary() {
       女性顧客数: sum((r) => r.女性顧客数),
       指名顧客数: sum((r) => r.指名顧客数),
       オンライン予約数: sum((r) => r.オンライン予約数),
-      返客数: sum((r) => r.返客数)
+      オンラインPC: sum((r) => r.オンラインPC),
+      オンライン携帯: sum((r) => r.オンライン携帯),
+      返客数: turnaway,
+      機会損失率: pct(turnaway, visits + turnaway),
+      追加提案数: sum((r) => r.追加提案数)
     };
   }, [rows]);
 
@@ -303,7 +348,9 @@ export function DailySummary() {
     { key: "予算", label: "予算", kind: "yen" },
     { key: "施術売上", label: "施術売上", kind: "yen" },
     { key: "物販売上", label: "物販売上", kind: "yen" },
-    { key: "売上合計", label: "売上合計", kind: "yen" },
+    { key: "売上合計", label: "売上合計(税込)", kind: "yen" },
+    { key: "税抜売上", label: "売上合計(税抜)", kind: "yen" },
+    { key: "消費税", label: "消費税", kind: "yen" },
     { key: "進捗率", label: "進捗率(%)", kind: "pct" },
     { key: "客単価", label: "客単価", kind: "yen" },
     { key: "時間単価", label: "時間単価", kind: "yen" },
@@ -323,7 +370,11 @@ export function DailySummary() {
     { key: "女性顧客数", label: "女性顧客数", kind: "num" },
     { key: "指名顧客数", label: "指名顧客数", kind: "num" },
     { key: "オンライン予約数", label: "オンライン予約数", kind: "num" },
-    { key: "返客数", label: "返客数", kind: "num" }
+    { key: "オンラインPC", label: "オンライン(PC)", kind: "num" },
+    { key: "オンライン携帯", label: "オンライン(携帯)", kind: "num" },
+    { key: "返客数", label: "返客数", kind: "num" },
+    { key: "機会損失率", label: "機会損失率(%)", kind: "pct" },
+    { key: "追加提案数", label: "追加提案数", kind: "num" }
   ];
 
   function cell(value: number | string, kind: "yen" | "num" | "pct" | "text") {
@@ -433,7 +484,9 @@ export function DailySummary() {
         <p className="text-[11px] leading-5 text-stone-400">
           ※ 売上・決済内訳・客単価は会計（予約詳細→会計）確定分のみ。施術時間＝予約の所要時間合計、シフト/休憩時間＝当日シフト、稼働率＝施術時間÷シフト時間、時間単価＝施術売上÷シフト時間。
           新規/リピート・男女・指名は当日来店した顧客（重複は1人）単位。返客数は返客記録。すべて現在店舗のみ集計。
-          税抜/税込の内訳、オンラインのPC/携帯内訳、機会損失・追加提案・健康アドバイス・RUU は定義/データ整備後に追加予定。
+          税抜＝税込÷1.1（円未満四捨五入・税率10%固定）、消費税＝税込−税抜。オンライン(PC)/(携帯)は予約時の端末自動判定分のみ（判定前の過去予約は総数にのみ含む）。
+          機会損失率＝返客数÷(総来店数＋返客数)。追加提案数＝売上日報「スタッフ提案数」の数値解釈（未記入・数値以外は0）。
+          健康アドバイス・RUU は定義確定後に追加予定。
         </p>
       </div>
     </MasterPage>

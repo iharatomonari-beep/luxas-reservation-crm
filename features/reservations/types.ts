@@ -18,6 +18,8 @@ export type Reservation = {
   storeId?: string;
   /** 予約の発生元。"online"=公開オンライン予約ページ経由 / "manual"=スタッフが台帳・作成画面で作成。未設定＝manual扱い。 */
   source?: "online" | "manual";
+  /** オンライン予約時の端末種別（UA自動判定・任意）。source="online" のときのみ意味を持つ。未設定＝内訳不明（日次集計では内訳に数えない）。 */
+  onlineDevice?: "pc" | "mobile";
   /** 指名スタッフID（顧客が担当を指定）。未設定＝指名なし。指名時は担当スタッフ変更不可（T017） */
   nominatedStaffId?: string;
   /** 会計状況（T022）。未設定＝未会計扱い */

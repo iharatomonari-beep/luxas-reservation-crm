@@ -31,7 +31,8 @@ type DailyTarget = { date: string; amount: number; comment: string; storeId?: st
 // 独立画面の表示種別（T055）。"all"=旧/dashboard/daily の統合4タブ（後方互換）。
 export type DailyView = "all" | "attendance" | "register" | "open" | "check" | "close" | "close-history" | "report" | "expenses";
 
-type DailyReport = {
+// 日次集計（daily-summary）が「追加提案数」の集計に参照するため export（T：日次集計v2）。
+export type DailyReport = {
   date: string;
   storeId?: string;
   result: string;
@@ -44,7 +45,7 @@ type DailyReport = {
   weather: string;
   submitted?: boolean;
 };
-const dailyReportsStorageKey = "luxas-daily-reports";
+export const dailyReportsStorageKey = "luxas-daily-reports";
 const emptyReport = (date: string): DailyReport => ({
   date,
   result: "",
